@@ -1,0 +1,50 @@
+{
+  "preset": "frost",
+  "language": "zh-CN",
+  "layout": "chips",
+  "numberFormat": "exact",
+  "monitorScope": "latest",
+  "activeWindowMinutes": 30,
+  "separator": "dot",
+  "position": "top-right",
+  "customLeft": null,
+  "customTop": null,
+  "fontSize": 14,
+  "cornerRadius": 22,
+  "opacity": 0.97,
+  "scale": 1.0,
+  "alwaysOnTop": true,
+  "showStatusDot": true,
+  "animateUpdates": true,
+  "statusColors": {
+    "active": "#FF34C759",
+    "listening": "#FF0A84FF",
+    "idle": "#FFFF9F0A",
+    "paused": "#FF8E8E93",
+    "error": "#FFFF453A"
+  },
+  "statusTiming": {
+    "activeSeconds": 12,
+    "idleSeconds": 90,
+    "errorHoldSeconds": 30
+  },
+  "background": "#EAF7F8FA",
+  "foreground": "#FF111827",
+  "muted": "#FF667085",
+  "accent": "#FF0A84FF",
+  "border": "#33FFFFFF",
+  "fields": {
+    "input": false,
+    "cached": true,
+    "uncached": true,
+    "output": true,
+    "reasoning": false,
+    "callTotal": true,
+    "taskTotal": true,
+    "context": false,
+    "model": false,
+    "updated": false,
+    "activeTasks": true,
+    "weeklyRemaining": true
+  }
+}
