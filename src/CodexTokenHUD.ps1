@@ -7,8 +7,10 @@ param(
     [string]$RenderPreview,
     [string]$RenderSettingsPreview,
     [string]$RenderColorPickerPreview,
+    [switch]$PreviewSettingsAdvanced,
     [ValidateSet('zh-CN','en','symbols')][string]$PreviewLanguage = 'zh-CN',
-    [ValidateSet('chips','compact','inline','outline','cards','stacked')][string]$PreviewLayout = 'chips'
+    [ValidateSet('chips','compact','inline','outline','cards','stacked')][string]$PreviewLayout = 'chips',
+    [double]$PreviewFontSize = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,6 +18,20 @@ Set-StrictMode -Version Latest
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+if (-not ('HudNativeMethods' -as [type])) {
+    Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class HudNativeMethods {
+    [DllImport("user32.dll", EntryPoint="GetWindowLongW", SetLastError=true)]
+    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll", EntryPoint="SetWindowLongW", SetLastError=true)]
+    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+}
+'@
+}
 
 $pluginRoot = Split-Path -Parent $PSScriptRoot
 Import-Module (Join-Path $PSScriptRoot 'TokenHud.Core.psm1') -Force
@@ -32,6 +48,7 @@ $openSignal = Join-Path $paths.StateRoot 'open-settings.signal'
 $showSignal = Join-Path $paths.StateRoot 'show.signal'
 $hideSignal = Join-Path $paths.StateRoot 'hide.signal'
 $pauseSignal = Join-Path $paths.StateRoot 'pause.signal'
+$passthroughOffSignal = Join-Path $paths.StateRoot 'passthrough-off.signal'
 $exitSignal = Join-Path $paths.StateRoot 'exit.signal'
 $hostsRoot = Join-Path $paths.StateRoot 'hosts'
 $hudHeartbeat = Join-Path $paths.StateRoot 'hud.heartbeat'
@@ -141,6 +158,14 @@ $syncingControls = $false
 $interactivePreview = $false
 $currentStatus = 'idle'
 $themes = @(Get-HudThemes $pluginRoot)
+$hudHandle = [IntPtr]::Zero
+$hudBaseExtendedStyle = $null
+$statusPalettes = [ordered]@{
+    default = [ordered]@{ active='#FF34C759'; listening='#FF0A84FF'; idle='#FFFF9F0A'; paused='#FF8E8E93'; error='#FFFF453A' }
+    intuitive = [ordered]@{ active='#FF30D158'; listening='#FF0A84FF'; idle='#FF8E8E93'; paused='#FFFF9F0A'; error='#FFFF453A' }
+    colorblind = [ordered]@{ active='#FF009E73'; listening='#FF56B4E9'; idle='#FF8A8A8A'; paused='#FFE69F00'; error='#FFD55E00' }
+    calm = [ordered]@{ active='#FF5AC8A8'; listening='#FF6FA8DC'; idle='#FF9AA0A6'; paused='#FFD4A95B'; error='#FFD97070' }
+}
 
 $hud = Load-XamlWindow (Join-Path $PSScriptRoot 'HudWindow.xaml')
 Write-HudDebug 'HUD XAML loaded.'
@@ -166,6 +191,8 @@ $fontSizeValue = Find-Control $settings 'FontSizeValue'
 $radiusValue = Find-Control $settings 'RadiusValue'
 $opacityValue = Find-Control $settings 'OpacityValue'
 $alwaysOnTopCheck = Find-Control $settings 'AlwaysOnTopCheck'
+$mousePassthroughCheck = Find-Control $settings 'MousePassthroughCheck'
+$mousePassthroughHint = Find-Control $settings 'MousePassthroughHint'
 $statusDotCheck = Find-Control $settings 'StatusDotCheck'
 $animateCheck = Find-Control $settings 'AnimateCheck'
 $backgroundText = Find-Control $settings 'BackgroundText'
@@ -175,6 +202,12 @@ $backgroundColorButton = Find-Control $settings 'BackgroundColorButton'
 $foregroundColorButton = Find-Control $settings 'ForegroundColorButton'
 $accentColorButton = Find-Control $settings 'AccentColorButton'
 $advancedStatusExpander = Find-Control $settings 'AdvancedStatusExpander'
+$statusPaletteButtons = [ordered]@{
+    default = Find-Control $settings 'StatusPaletteDefault'
+    intuitive = Find-Control $settings 'StatusPaletteIntuitive'
+    colorblind = Find-Control $settings 'StatusPaletteColorblind'
+    calm = Find-Control $settings 'StatusPaletteCalm'
+}
 $statusTextControls = [ordered]@{
     active = Find-Control $settings 'StatusActiveText'
     listening = Find-Control $settings 'StatusListeningText'
@@ -207,7 +240,8 @@ $settingsTextControls = @{}
 foreach ($name in @(
     'SettingsSubtitle','PresetsTitle','PresetsHint','LanguageLayoutTitle','DisplayLanguageLabel','BubbleStyleLabel',
     'NumberFormatLabel','PositionLabel','MonitorScopeLabel','ActiveWindowLabel','MetricsTitle','MetricsHint',
-    'AppearanceTitle','FontSizeLabel','RadiusLabel','OpacityLabel','BackgroundColorLabel','ForegroundColorLabel','AccentColorLabel'
+    'AppearanceTitle','FontSizeLabel','RadiusLabel','OpacityLabel','BackgroundColorLabel','ForegroundColorLabel','AccentColorLabel',
+    'MousePassthroughHint','StatusPalettesTitle','StatusPalettesHint'
 )) { $settingsTextControls[$name] = Find-Control $settings $name }
 
 $settingsContentControls = @{}
@@ -216,7 +250,8 @@ foreach ($name in @(
         'LanguageZhItem','LanguageEnItem','LanguageSymbolsItem','LayoutChipsItem','LayoutCompactItem','LayoutInlineItem','LayoutOutlineItem','LayoutCardsItem','LayoutStackedItem',
     'NumberExactItem','NumberCompactItem','NumberAutoItem','PositionTopRightItem','PositionTopCenterItem','PositionTopLeftItem',
     'PositionBottomRightItem','PositionBottomCenterItem','PositionBottomLeftItem','MonitorLatestItem','MonitorAggregateItem',
-    'ActiveWindow5Item','ActiveWindow15Item','ActiveWindow30Item','ActiveWindow60Item'
+    'ActiveWindow5Item','ActiveWindow15Item','ActiveWindow30Item','ActiveWindow60Item',
+    'StatusPaletteDefault','StatusPaletteIntuitive','StatusPaletteColorblind','StatusPaletteCalm'
 )) { $settingsContentControls[$name] = Find-Control $settings $name }
 
 $presetPanel = $settingsContentControls['PresetFrost'].Parent
@@ -224,6 +259,7 @@ $themeButtons = @{}
 
 $colorPicker = Load-XamlWindow (Join-Path $PSScriptRoot 'ColorPickerWindow.xaml')
 $colorPickerTitleBar = Find-Control $colorPicker 'ColorPickerTitleBar'
+$colorPickerTitle = Find-Control $colorPicker 'ColorPickerTitle'
 $colorPickerClose = Find-Control $colorPicker 'ColorPickerClose'
 $colorWheelCanvas = Find-Control $colorPicker 'ColorWheelCanvas'
 $colorWheelImage = Find-Control $colorPicker 'ColorWheelImage'
@@ -232,6 +268,8 @@ $pickerValueSlider = Find-Control $colorPicker 'PickerValueSlider'
 $pickerAlphaSlider = Find-Control $colorPicker 'PickerAlphaSlider'
 $pickerValueText = Find-Control $colorPicker 'PickerValueText'
 $pickerAlphaText = Find-Control $colorPicker 'PickerAlphaText'
+$pickerValueLabel = Find-Control $colorPicker 'PickerValueLabel'
+$pickerAlphaLabel = Find-Control $colorPicker 'PickerAlphaLabel'
 $pickerHexText = Find-Control $colorPicker 'PickerHexText'
 $pickerPreview = Find-Control $colorPicker 'PickerPreview'
 $pickerCancelButton = Find-Control $colorPicker 'PickerCancelButton'
@@ -288,7 +326,8 @@ function Apply-SettingsLanguage {
         NumberFormatLabel='numberFormat'; PositionLabel='position'; MonitorScopeLabel='monitorScope'; ActiveWindowLabel='activeWindow';
         MetricsTitle='metricsTitle'; MetricsHint='metricsHint'; AppearanceTitle='appearanceTitle'; FontSizeLabel='fontSize';
         RadiusLabel='cornerRadius'; OpacityLabel='opacity'; BackgroundColorLabel='backgroundColor';
-        ForegroundColorLabel='foregroundColor'; AccentColorLabel='accentColor'
+        ForegroundColorLabel='foregroundColor'; AccentColorLabel='accentColor'; MousePassthroughHint='mousePassthroughHint';
+        StatusPalettesTitle='statusPalettesTitle'; StatusPalettesHint='statusPalettesHint'
     }
     foreach ($name in $map.Keys) { $settingsTextControls[$name].Text = [string]$settingsLocale.($map[$name]) }
     foreach ($name in @('PresetsHint','MetricsHint')) {
@@ -305,7 +344,9 @@ function Apply-SettingsLanguage {
         PositionTopRightItem='positionTopRight'; PositionTopCenterItem='positionTopCenter'; PositionTopLeftItem='positionTopLeft';
         PositionBottomRightItem='positionBottomRight'; PositionBottomCenterItem='positionBottomCenter'; PositionBottomLeftItem='positionBottomLeft';
         MonitorLatestItem='monitorLatest'; MonitorAggregateItem='monitorAggregate';
-        ActiveWindow5Item='minutes5'; ActiveWindow15Item='minutes15'; ActiveWindow30Item='minutes30'; ActiveWindow60Item='minutes60'
+        ActiveWindow5Item='minutes5'; ActiveWindow15Item='minutes15'; ActiveWindow30Item='minutes30'; ActiveWindow60Item='minutes60';
+        StatusPaletteDefault='statusPaletteDefault'; StatusPaletteIntuitive='statusPaletteIntuitive';
+        StatusPaletteColorblind='statusPaletteColorblind'; StatusPaletteCalm='statusPaletteCalm'
     }
     foreach ($name in $contentMap.Keys) { $settingsContentControls[$name].Content = [string]$settingsLocale.($contentMap[$name]) }
     $zhLocale = Get-HudLocale $paths 'zh-CN'
@@ -323,14 +364,27 @@ function Apply-SettingsLanguage {
         } else { [string]$settingsLocale.$key }
     }
     $alwaysOnTopCheck.Content = [string]$settingsLocale.alwaysOnTop
+    $mousePassthroughCheck.Content = [string]$settingsLocale.mousePassthrough
     $statusDotCheck.Content = [string]$settingsLocale.statusDot
     $animateCheck.Content = [string]$settingsLocale.animateUpdates
     $resetButton.Content = [string]$settingsLocale.resetDefaults
     $saveButton.Content = [string]$settingsLocale.saveAndClose
     $saveStatus.Text = [string]$settingsLocale.livePreview
     $settings.Title = ('{0} - {1}' -f [string]$settingsLocale.appName, [string]$settingsLocale.settings)
+    Set-ColorPickerLanguage ([string]$config.language)
 
     Update-ContextMenuText
+}
+
+function Set-ColorPickerLanguage {
+    param([string]$Language)
+    $pickerLocale = if ($Language -eq 'en') { Get-HudLocale $paths 'en' } else { Get-HudLocale $paths 'zh-CN' }
+    $colorPicker.Title = ('{0} - {1}' -f [string]$pickerLocale.appName, [string]$pickerLocale.colorPickerTitle)
+    $colorPickerTitle.Text = [string]$pickerLocale.colorPickerTitle
+    $pickerValueLabel.Text = [string]$pickerLocale.colorPickerValue
+    $pickerAlphaLabel.Text = [string]$pickerLocale.colorPickerAlpha
+    $pickerCancelButton.Content = [string]$pickerLocale.cancel
+    $pickerApplyButton.Content = [string]$pickerLocale.apply
 }
 
 function Convert-HsvToColor {
@@ -448,6 +502,7 @@ $colorPicker.Add_Closing({if(-not $closingApp){$_.Cancel=$true;$colorPicker.Hide
 
 function Export-ColorPickerPreview {
     param([Parameter(Mandatory = $true)][string]$Path)
+    Set-ColorPickerLanguage $PreviewLanguage
     $script:pickerHue = 208.0
     $script:pickerSaturation = 0.82
     $script:pickerSyncing = $true
@@ -610,6 +665,7 @@ function Get-StatusBilingual {
 function Update-ContextMenuText {
     foreach($pair in @(
         @('settingsItem','openSettings'),
+        @('passthroughItem',$(if([bool]$config.mousePassthrough){'disableMousePassthrough'}else{'enableMousePassthrough'})),
         @('pauseItem',$(if($paused){'resume'}else{'pause'})),
         @('positionItem','resetPosition'),
         @('exitItem','exit')
@@ -623,11 +679,52 @@ function Update-ContextMenuText {
         $en = Get-HudLocale $paths 'en'
         $statusVariable.Value.Header = ('{0} / {1}: {2}' -f [string]$zh.statusLabel, [string]$en.statusLabel, (Get-StatusBilingual (Get-HudStatus)))
     }
+    Update-HudTrayMenu
+}
+
+function Update-HudTrayMenu {
+    if ($null -eq $trayIcon) { return }
+    $trayZh = Get-HudLocale $paths 'zh-CN'
+    $trayEn = Get-HudLocale $paths 'en'
+    $trayStatusItem.Text = ('{0} / {1}: {2}' -f [string]$trayZh.statusLabel, [string]$trayEn.statusLabel, (Get-StatusBilingual (Get-HudStatus)))
+    $trayOpenSettingsItem.Text = ('{0} / {1}' -f [string]$trayZh.openSettings, [string]$trayEn.openSettings)
+    $trayDisablePassthroughItem.Text = ('{0} / {1}' -f [string]$trayZh.disableMousePassthrough, [string]$trayEn.disableMousePassthrough)
+    $trayDisablePassthroughItem.Enabled = [bool]$config.mousePassthrough
+    $trayExitItem.Text = ('{0} HUD / {1} HUD' -f [string]$trayZh.exit, [string]$trayEn.exit)
+    $trayIcon.Text = if ([bool]$config.mousePassthrough) { 'Codex Token HUD - click-through ON' } else { 'Codex Token HUD - monitoring' }
+}
+
+function Disable-HudMousePassthrough {
+    if (-not [bool]$config.mousePassthrough) { return }
+    $config.mousePassthrough = $false
+    Save-HudConfig $paths $config
+    Sync-ControlsFromConfig
+    Apply-HudAppearance
+    Update-ContextMenuText
+}
+
+function Set-HudMousePassthrough {
+    param([bool]$Enabled)
+    if ($hudHandle -eq [IntPtr]::Zero) { return }
+    $gwlExStyle = -20
+    $wsExTransparent = 0x00000020
+    $wsExNoActivate = 0x08000000
+    $current = [HudNativeMethods]::GetWindowLong($hudHandle, $gwlExStyle)
+    if ($null -eq $hudBaseExtendedStyle) { $script:hudBaseExtendedStyle = $current }
+    if ($Enabled) {
+        $next = $current -bor $wsExTransparent -bor $wsExNoActivate
+    } else {
+        $next = $current
+        if (($hudBaseExtendedStyle -band $wsExTransparent) -eq 0) { $next = $next -band (-bnot $wsExTransparent) }
+        if (($hudBaseExtendedStyle -band $wsExNoActivate) -eq 0) { $next = $next -band (-bnot $wsExNoActivate) }
+    }
+    if ($next -ne $current) { [void][HudNativeMethods]::SetWindowLong($hudHandle, $gwlExStyle, $next) }
 }
 
 function Apply-HudAppearance {
     $script:locale = Get-HudLocale $paths ([string]$config.language)
     $hud.Topmost = [bool]$config.alwaysOnTop
+    Set-HudMousePassthrough ([bool]$config.mousePassthrough)
     $hud.Opacity = [double]$config.opacity
     $hudShell.CornerRadius = New-Object Windows.CornerRadius([double]$config.cornerRadius)
     $hudShell.BorderBrush = New-HudBrush ([string]$config.border) '#22FFFFFF'
@@ -665,6 +762,7 @@ function Export-HudPreview {
     $script:config = Get-Content -Raw -Encoding UTF8 -LiteralPath $paths.DefaultConfigPath | ConvertFrom-Json
     $script:config.language = $PreviewLanguage
     $script:config.layout = $PreviewLayout
+    if ($PreviewFontSize -gt 0) { $script:config.fontSize = [Math]::Round($PreviewFontSize, 1) }
     $script:config.fields.weeklyRemaining = $true
     $script:locale = Get-HudLocale $paths ([string]$config.language)
     $script:snapshot = [pscustomobject]@{
@@ -718,6 +816,17 @@ function Set-Preset {
     Update-DisplaySnapshot
 }
 
+function Set-StatusPalette {
+    param([string]$Name)
+    if (-not $statusPalettes.Contains($Name)) { return }
+    $palette = $statusPalettes[$Name]
+    foreach ($key in $statusTextControls.Keys) { $config.statusColors.$key = [string]$palette[$key] }
+    $config.statusPalette = $Name
+    Sync-ControlsFromConfig
+    Save-HudConfig $paths $config
+    Update-DisplaySnapshot
+}
+
 function Sync-ControlsFromConfig {
     $script:syncingControls = $true
     try {
@@ -733,6 +842,7 @@ function Sync-ControlsFromConfig {
         $radiusSlider.Value = [double]$config.cornerRadius
         $opacitySlider.Value = [double]$config.opacity
         $alwaysOnTopCheck.IsChecked = [bool]$config.alwaysOnTop
+        $mousePassthroughCheck.IsChecked = [bool]$config.mousePassthrough
         $statusDotCheck.IsChecked = [bool]$config.showStatusDot
         $animateCheck.IsChecked = [bool]$config.animateUpdates
         $backgroundText.Text = [string]$config.background
@@ -742,7 +852,7 @@ function Sync-ControlsFromConfig {
         $activeSecondsText.Text=[string][int]$config.statusTiming.activeSeconds
         $idleSecondsText.Text=[string][int]$config.statusTiming.idleSeconds
         $errorHoldSecondsText.Text=[string][int]$config.statusTiming.errorHoldSeconds
-        $fontSizeValue.Text = [string][int]$config.fontSize
+        $fontSizeValue.Text = ('{0:0.0}' -f [double]$config.fontSize)
         $radiusValue.Text = [string][int]$config.cornerRadius
         $opacityValue.Text = ('{0:P0}' -f [double]$config.opacity)
         Update-ColorSwatches
@@ -761,7 +871,10 @@ function Export-SettingsPreview {
     $content.Arrange((New-Object Windows.Rect(0, 0, 720, 790)))
     $content.UpdateLayout()
     $settingsScrollViewer.ScrollToHome()
-    $settingsScrollViewer.ScrollToTop()
+    if ($PreviewSettingsAdvanced) {
+        $advancedStatusExpander.IsExpanded = $true
+        $settingsScrollViewer.ScrollToEnd()
+    } else { $settingsScrollViewer.ScrollToTop() }
     $settingsScrollViewer.ScrollToLeftEnd()
     $content.UpdateLayout()
     [void]$content.Dispatcher.Invoke([Action]{}, [Windows.Threading.DispatcherPriority]::Render)
@@ -780,6 +893,7 @@ if (-not [string]::IsNullOrWhiteSpace($RenderSettingsPreview)) {
 }
 
 function Apply-ControlsToConfig {
+    param([switch]$StatusColorsChanged)
     if ($syncingControls) { return }
     $language = Get-ComboTag $languageCombo
     $layout = Get-ComboTag $layoutCombo
@@ -795,10 +909,11 @@ function Apply-ControlsToConfig {
     if ($activeWindow) { $config.activeWindowMinutes = [int]$activeWindow }
     Apply-SettingsLanguage
     foreach ($key in $fieldControls.Keys) { $config.fields.$key = [bool]$fieldControls[$key].IsChecked }
-    $config.fontSize = [int]$fontSizeSlider.Value
+    $config.fontSize = [Math]::Round([double]$fontSizeSlider.Value, 1)
     $config.cornerRadius = [int]$radiusSlider.Value
     $config.opacity = [Math]::Round([double]$opacitySlider.Value, 2)
     $config.alwaysOnTop = [bool]$alwaysOnTopCheck.IsChecked
+    $config.mousePassthrough = [bool]$mousePassthroughCheck.IsChecked
     $config.showStatusDot = [bool]$statusDotCheck.IsChecked
     $config.animateUpdates = [bool]$animateCheck.IsChecked
     foreach ($pair in @(@('background',$backgroundText.Text), @('foreground',$foregroundText.Text), @('accent',$accentText.Text))) {
@@ -807,11 +922,12 @@ function Apply-ControlsToConfig {
     foreach($key in $statusTextControls.Keys){
         try{[void][Windows.Media.ColorConverter]::ConvertFromString([string]$statusTextControls[$key].Text);$config.statusColors.$key=[string]$statusTextControls[$key].Text}catch{}
     }
+    if ($StatusColorsChanged) { $config.statusPalette = 'custom' }
     foreach($pair in @(@('activeSeconds',$activeSecondsText.Text,1,60),@('idleSeconds',$idleSecondsText.Text,10,3600),@('errorHoldSeconds',$errorHoldSecondsText.Text,1,300))){
         $value=0
         if([int]::TryParse([string]$pair[1],[ref]$value)){$config.statusTiming.($pair[0])=[Math]::Max([int]$pair[2],[Math]::Min([int]$pair[3],$value))}
     }
-    $fontSizeValue.Text = [string][int]$config.fontSize
+    $fontSizeValue.Text = ('{0:0.0}' -f [double]$config.fontSize)
     $radiusValue.Text = [string][int]$config.cornerRadius
     $opacityValue.Text = ('{0:P0}' -f [double]$config.opacity)
     Update-ColorSwatches
@@ -837,6 +953,9 @@ function Initialize-SessionFile {
         PendingText = ''
         Model = if ($null -ne $initialSnapshot) { [string]$initialSnapshot.Model } else { '' }
         Snapshot = $initialSnapshot
+        AllowanceTimestamp = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['AllowanceTimestamp']) { $initialSnapshot.AllowanceTimestamp } else { $null }
+        WeeklyRemainingPercent = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['WeeklyRemainingPercent']) { $initialSnapshot.WeeklyRemainingPercent } else { $null }
+        FiveHourRemainingPercent = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['FiveHourRemainingPercent']) { $initialSnapshot.FiveHourRemainingPercent } else { $null }
         LastWriteTimeUtc = $File.LastWriteTimeUtc
     }
     return $true
@@ -862,15 +981,39 @@ function Read-AppendedSessionData {
             $State.Offset = [Int64]$stream.Position
         } finally { $stream.Dispose() }
 
-        $combined = [string]$State.PendingText + $text
-        $parts = $combined -split "`n", -1
-        if ($combined.EndsWith("`n")) { $State.PendingText = ''; $limit = $parts.Count } else { $State.PendingText = $parts[-1]; $limit = $parts.Count - 1 }
+        $split = Split-HudJsonLines ([string]$State.PendingText) $text
+        $State.PendingText = [string]$split.PendingText
         $updated = $false
-        for ($i = 0; $i -lt $limit; $i++) {
-            $item = Convert-HudRecord $parts[$i].TrimEnd("`r")
+        foreach ($line in @($split.CompleteLines)) {
+            $item = Convert-HudRecord $line
             if ($null -eq $item) { continue }
             if ($item.Kind -eq 'context') { $State.Model = [string]$item.Model }
-            if ($item.Kind -eq 'usage') { $item.Model = [string]$State.Model; $State.Snapshot = $item; $script:lastUsageAt = [DateTimeOffset]::Now; $updated = $true }
+            if ($item.Kind -eq 'usage' -or $item.Kind -eq 'allowance') {
+                $hasAllowance = ($null -ne $item.PSObject.Properties['WeeklyRemainingPercent'] -and $null -ne $item.WeeklyRemainingPercent) -or
+                    ($null -ne $item.PSObject.Properties['FiveHourRemainingPercent'] -and $null -ne $item.FiveHourRemainingPercent)
+                if ($hasAllowance) {
+                    $State.AllowanceTimestamp = $item.AllowanceTimestamp
+                    $State.WeeklyRemainingPercent = $item.WeeklyRemainingPercent
+                    $State.FiveHourRemainingPercent = $item.FiveHourRemainingPercent
+                    if ($null -ne $State.Snapshot) {
+                        $State.Snapshot.AllowanceTimestamp = $State.AllowanceTimestamp
+                        $State.Snapshot.WeeklyRemainingPercent = $State.WeeklyRemainingPercent
+                        $State.Snapshot.FiveHourRemainingPercent = $State.FiveHourRemainingPercent
+                    }
+                    $updated = $true
+                }
+            }
+            if ($item.Kind -eq 'usage') {
+                $item.Model = [string]$State.Model
+                if ($null -ne $State.AllowanceTimestamp) {
+                    $item.AllowanceTimestamp = $State.AllowanceTimestamp
+                    $item.WeeklyRemainingPercent = $State.WeeklyRemainingPercent
+                    $item.FiveHourRemainingPercent = $State.FiveHourRemainingPercent
+                }
+                $State.Snapshot = $item
+                $script:lastUsageAt = [DateTimeOffset]::Now
+                $updated = $true
+            }
         }
         return $updated
     } catch { $script:lastReadErrorAt = [DateTimeOffset]::Now; return $false }
@@ -884,6 +1027,12 @@ function Update-DisplaySnapshot {
     } else {
         $latest = $snapshots | Sort-Object Timestamp -Descending | Select-Object -First 1
         $script:snapshot = $latest.PSObject.Copy()
+        $rateSource = Get-LatestHudAllowanceSnapshot $snapshots
+        if ($null -ne $rateSource) {
+            $snapshot.AllowanceTimestamp = $rateSource.AllowanceTimestamp
+            $snapshot.WeeklyRemainingPercent = $rateSource.WeeklyRemainingPercent
+            $snapshot.FiveHourRemainingPercent = $rateSource.FiveHourRemainingPercent
+        }
         if ($null -eq $snapshot.PSObject.Properties['ActiveTasks']) { $snapshot | Add-Member -NotePropertyName ActiveTasks -NotePropertyValue $snapshots.Count }
         else { $snapshot.ActiveTasks = $snapshots.Count }
     }
@@ -926,8 +1075,8 @@ function Apply-SliderPreview {
     if($syncingControls){return}
     switch($Property){
         'fontSize' {
-            $config.fontSize=[int][Math]::Round([double]$fontSizeSlider.Value)
-            $fontSizeValue.Text=[string][int]$config.fontSize
+            $config.fontSize=[Math]::Round([double]$fontSizeSlider.Value,1)
+            $fontSizeValue.Text=('{0:0.0}' -f [double]$config.fontSize)
         }
         'cornerRadius' {
             $config.cornerRadius=[int][Math]::Round([double]$radiusSlider.Value)
@@ -943,7 +1092,7 @@ function Apply-SliderPreview {
     $sliderSaveTimer.Stop();$sliderSaveTimer.Start()
 }
 
-$liveControls = @($languageCombo,$layoutCombo,$numberCombo,$positionCombo,$monitorScopeCombo,$activeWindowCombo,$alwaysOnTopCheck,$statusDotCheck,$animateCheck) + @($fieldControls.Values)
+$liveControls = @($languageCombo,$layoutCombo,$numberCombo,$positionCombo,$monitorScopeCombo,$activeWindowCombo,$alwaysOnTopCheck,$mousePassthroughCheck,$statusDotCheck,$animateCheck) + @($fieldControls.Values)
 foreach ($control in $liveControls) {
     if ($control -is [Windows.Controls.ComboBox]) { $control.Add_SelectionChanged({ Apply-ControlsToConfig }) }
     else { $control.Add_Click({ Apply-ControlsToConfig }) }
@@ -951,7 +1100,8 @@ foreach ($control in $liveControls) {
 $fontSizeSlider.Add_ValueChanged({ Apply-SliderPreview 'fontSize' })
 $radiusSlider.Add_ValueChanged({ Apply-SliderPreview 'cornerRadius' })
 $opacitySlider.Add_ValueChanged({ Apply-SliderPreview 'opacity' })
-foreach ($textBox in @($backgroundText,$foregroundText,$accentText)+@($statusTextControls.Values)+@($activeSecondsText,$idleSecondsText,$errorHoldSecondsText)) { $textBox.Add_LostFocus({ Apply-ControlsToConfig }) }
+foreach ($textBox in @($backgroundText,$foregroundText,$accentText,$activeSecondsText,$idleSecondsText,$errorHoldSecondsText)) { $textBox.Add_LostFocus({ Apply-ControlsToConfig }) }
+foreach ($textBox in @($statusTextControls.Values)) { $textBox.Add_LostFocus({ Apply-ControlsToConfig -StatusColorsChanged }) }
 
 foreach($pair in @(@($backgroundColorButton,$backgroundText),@($foregroundColorButton,$foregroundText),@($accentColorButton,$accentText))){
     $pair[0].Tag=$pair[1]
@@ -960,6 +1110,10 @@ foreach($pair in @(@($backgroundColorButton,$backgroundText),@($foregroundColorB
 foreach($key in $statusColorButtons.Keys){
     $statusColorButtons[$key].Tag=$statusTextControls[$key]
     $statusColorButtons[$key].Add_Click([Windows.RoutedEventHandler]{param($sender,$eventArgs);Show-ColorPicker $sender.Tag $sender})
+}
+foreach($key in $statusPaletteButtons.Keys){
+    $statusPaletteButtons[$key].Tag = $key
+    $statusPaletteButtons[$key].Add_Click([Windows.RoutedEventHandler]{param($sender,$eventArgs);Set-StatusPalette ([string]$sender.Tag)})
 }
 
 $titleBar.Add_MouseLeftButtonDown({ if ($_.ButtonState -eq [Windows.Input.MouseButtonState]::Pressed) { $settings.DragMove() } })
@@ -991,13 +1145,36 @@ $hud.Add_MouseLeftButtonDown({
 $contextMenu = New-Object Windows.Controls.ContextMenu
 $statusItem = New-Object Windows.Controls.MenuItem
 $settingsItem = New-Object Windows.Controls.MenuItem
+$passthroughItem = New-Object Windows.Controls.MenuItem
 $pauseItem = New-Object Windows.Controls.MenuItem
 $positionItem = New-Object Windows.Controls.MenuItem
 $exitItem = New-Object Windows.Controls.MenuItem
+
+$trayIcon = New-Object System.Windows.Forms.NotifyIcon
+$trayIcon.Icon = [System.Drawing.SystemIcons]::Information
+$trayIcon.Visible = $true
+$trayMenu = New-Object System.Windows.Forms.ContextMenuStrip
+$trayStatusItem = New-Object System.Windows.Forms.ToolStripMenuItem
+$trayStatusItem.Enabled = $false
+$trayOpenSettingsItem = New-Object System.Windows.Forms.ToolStripMenuItem
+$trayDisablePassthroughItem = New-Object System.Windows.Forms.ToolStripMenuItem
+$trayExitItem = New-Object System.Windows.Forms.ToolStripMenuItem
+[void]$trayMenu.Items.Add($trayStatusItem)
+[void]$trayMenu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+[void]$trayMenu.Items.Add($trayOpenSettingsItem)
+[void]$trayMenu.Items.Add($trayDisablePassthroughItem)
+[void]$trayMenu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+[void]$trayMenu.Items.Add($trayExitItem)
+$trayIcon.ContextMenuStrip = $trayMenu
+$trayOpenSettingsItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Show-HudSettings }) })
+$trayDisablePassthroughItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Disable-HudMousePassthrough }) })
+$trayExitItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ $script:closingApp = $true; $settings.Close(); $hud.Close() }) })
+$trayIcon.Add_DoubleClick({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Show-HudSettings }) })
 $statusItem.IsEnabled = $false
 [void]$contextMenu.Items.Add($statusItem)
 [void]$contextMenu.Items.Add((New-Object Windows.Controls.Separator))
 [void]$contextMenu.Items.Add($settingsItem)
+[void]$contextMenu.Items.Add($passthroughItem)
 [void]$contextMenu.Items.Add($pauseItem)
 [void]$contextMenu.Items.Add($positionItem)
 [void]$contextMenu.Items.Add((New-Object Windows.Controls.Separator))
@@ -1005,6 +1182,23 @@ $statusItem.IsEnabled = $false
 $hud.ContextMenu = $contextMenu
 Update-ContextMenuText
 $settingsItem.Add_Click({ Show-HudSettings })
+$passthroughItem.Add_Click({
+    $enablingPassthrough = $false
+    if ([bool]$config.mousePassthrough) {
+        Disable-HudMousePassthrough
+        return
+    } else {
+        $answer = [Windows.MessageBox]::Show([string]$settingsLocale.mousePassthroughConfirm, [string]$settingsLocale.mousePassthroughTitle, [Windows.MessageBoxButton]::YesNo, [Windows.MessageBoxImage]::Warning)
+        if ($answer -ne [Windows.MessageBoxResult]::Yes) { return }
+        $config.mousePassthrough = $true
+        $enablingPassthrough = $true
+    }
+    Save-HudConfig $paths $config
+    Sync-ControlsFromConfig
+    if ($enablingPassthrough) { Show-HudSettings }
+    Apply-HudAppearance
+    Update-ContextMenuText
+})
 $pauseItem.Add_Click({
     $script:paused = -not $paused
     Update-ContextMenuText
@@ -1043,6 +1237,10 @@ $timer.Add_Tick({
         Update-ContextMenuText
         Render-Hud
     }
+    if (Test-Path -LiteralPath $passthroughOffSignal) {
+        Remove-Item -LiteralPath $passthroughOffSignal -Force -ErrorAction SilentlyContinue
+        Disable-HudMousePassthrough
+    }
     if (Test-Path -LiteralPath $exitSignal) { Remove-Item -LiteralPath $exitSignal -Force -ErrorAction SilentlyContinue; $script:closingApp = $true; $settings.Close(); $hud.Close(); return }
     $nextStatus = Get-HudStatus
     if($nextStatus -ne $currentStatus){Render-Hud;Update-ContextMenuText}
@@ -1056,6 +1254,14 @@ $timer.Add_Tick({
         if (Read-AppendedSessionData $state) { $changed = $true }
     }
     if ($changed) { Update-DisplaySnapshot }
+})
+
+$hud.Add_SourceInitialized({
+    $script:hudHandle = (New-Object Windows.Interop.WindowInteropHelper($hud)).Handle
+    if ($hudHandle -ne [IntPtr]::Zero) {
+        $script:hudBaseExtendedStyle = [HudNativeMethods]::GetWindowLong($hudHandle, -20)
+        Set-HudMousePassthrough ([bool]$config.mousePassthrough)
+    }
 })
 
 $hud.Add_Loaded({
@@ -1077,6 +1283,7 @@ $hud.Add_Loaded({
 $hud.Add_Closed({
     $timer.Stop()
     $script:closingApp = $true
+    try { $trayIcon.Visible = $false; $trayIcon.Dispose() } catch { }
     Remove-Item -LiteralPath $hudHeartbeat -Force -ErrorAction SilentlyContinue
     try { $colorPicker.Close() } catch { }
     try { $settings.Close() } catch { }

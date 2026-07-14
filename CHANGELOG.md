@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.1 - 2026-07-14
+
+- Add a permanent Windows notification-area icon with bilingual actions to open settings, disable mouse click-through and exit the HUD. The disable action stays available even when the HUD cannot receive pointer input.
+- Load notification-area Chinese labels from the UTF-8 locale file instead of embedding them in the Windows PowerShell script, preventing mojibake on PowerShell 5.1.
+
+## 1.3.0 - 2026-07-14
+
+- Add an opt-in mouse click-through mode that leaves HUD rendering and live updates active while pointer input reaches the application underneath.
+- Keep click-through disabled by default and provide recovery through the tray icon, settings window, installed settings shortcuts and the `token_hud_disable_click_through` MCP tool.
+- Consume complete JSONL records immediately even when the writer has not appended the final newline yet, fixing new tasks that remained on the waiting state until HUD restart.
+- Track account allowance timestamps independently from Token usage timestamps, so a newer weekly observation cannot remain hidden behind an older task snapshot.
+- Change font-size editing from whole-point jumps to 0.1-point live increments.
+- Add default, intuitive-semantics, color-vision-friendly and low-distraction status color schemes while retaining individual ARGB customization.
+
 ## 1.2.1 - 2026-07-13
 
 - Keep bubble layout, number format and selected metrics unchanged when applying a visual preset.

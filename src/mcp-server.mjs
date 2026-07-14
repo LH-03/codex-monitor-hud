@@ -80,6 +80,11 @@ const tools = [
     description: "Pause live updates in the local Codex Token HUD.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
+  {
+    name: "token_hud_disable_click_through",
+    description: "Emergency recovery: disable mouse click-through so the local Codex Token HUD can be clicked again.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
 
 function handle(request) {
@@ -91,7 +96,7 @@ function handle(request) {
       result: {
         protocolVersion: params.protocolVersion || "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "codex-token-hud", version: "1.2.1" },
+        serverInfo: { name: "codex-token-hud", version: "1.3.1" },
       },
     };
   }
@@ -118,6 +123,11 @@ function handle(request) {
     if (name === "token_hud_pause") {
       signal("pause");
       return { jsonrpc: "2.0", id, result: textResult("Codex Token HUD pause toggled.") };
+    }
+    if (name === "token_hud_disable_click_through") {
+      startHud(false);
+      signal("passthrough-off");
+      return { jsonrpc: "2.0", id, result: textResult("Codex Token HUD mouse click-through disabled.") };
     }
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown tool: ${name}` } };
   }

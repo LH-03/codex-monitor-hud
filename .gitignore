@@ -1,0 +1,9 @@
+.DS_Store
+Thumbs.db
+*.log
+*.zip
+artifacts/
+.test-output/
+settings.json
+*.user.json
+node_modules/

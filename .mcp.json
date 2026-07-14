@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codex-token-hud": {
+      "command": "node",
+      "args": [
+        "./src/mcp-server.mjs"
+      ],
+      "cwd": "."
+    }
+  }
+}

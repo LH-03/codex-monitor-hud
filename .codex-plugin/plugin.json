@@ -1,0 +1,42 @@
+{
+  "name": "codex-token-strip",
+  "version": "1.3.1+codex.20260714170852",
+  "description": "A polished, configurable token HUD for Codex Desktop on Windows.",
+  "author": {
+    "name": "Codex Token HUD Contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "token-usage",
+    "hud",
+    "windows",
+    "local-first"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex Token HUD",
+    "shortDescription": "A beautiful, configurable live Token HUD for Codex.",
+    "longDescription": "Shows Token counters, optional observed remaining allowance, model and context information in a customizable local overlay with six independent bubble layouts and concurrent task monitoring.",
+    "developerName": "Codex Token HUD Contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Open Codex Token HUD settings",
+      "Explain the Token HUD accounting",
+      "Repair or restart Codex Token HUD"
+    ],
+    "brandColor": "#0A84FF",
+    "composerIcon": "./assets/icon.svg",
+    "screenshots": [
+      "./assets/hud-frost.png",
+      "./assets/settings.png",
+      "./assets/color-picker.png",
+      "./assets/hud-cards.png",
+      "./assets/settings-en.png"
+    ]
+  }
+}

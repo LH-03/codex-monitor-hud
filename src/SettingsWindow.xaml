@@ -267,7 +267,7 @@
                 <RowDefinition Height="38" />
               </Grid.RowDefinitions>
               <TextBlock x:Name="FontSizeLabel" Grid.Row="0" Text="字号" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
-              <Slider x:Name="FontSizeSlider" Grid.Row="0" Grid.Column="1" Minimum="11" Maximum="22" TickFrequency="1" IsSnapToTickEnabled="False" IsMoveToPointEnabled="True" VerticalAlignment="Center" />
+              <Slider x:Name="FontSizeSlider" Grid.Row="0" Grid.Column="1" Minimum="11" Maximum="22" TickFrequency="0.1" IsSnapToTickEnabled="False" IsMoveToPointEnabled="True" VerticalAlignment="Center" />
               <TextBlock x:Name="FontSizeValue" Grid.Row="0" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" />
               <TextBlock x:Name="RadiusLabel" Grid.Row="1" Text="圆角" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
               <Slider x:Name="RadiusSlider" Grid.Row="1" Grid.Column="1" Minimum="8" Maximum="36" TickFrequency="1" IsSnapToTickEnabled="False" IsMoveToPointEnabled="True" VerticalAlignment="Center" />
@@ -278,9 +278,13 @@
             </Grid>
             <WrapPanel Margin="0,12,0,0">
               <CheckBox x:Name="AlwaysOnTopCheck" Content="始终置顶" />
+              <CheckBox x:Name="MousePassthroughCheck" Content="鼠标穿透" />
               <CheckBox x:Name="StatusDotCheck" Content="状态指示点" />
               <CheckBox x:Name="AnimateCheck" Content="更新动效" />
             </WrapPanel>
+            <Border x:Name="MousePassthroughNotice" Width="620" HorizontalAlignment="Left" Background="#10FF9F0A" BorderBrush="#30FF9F0A" BorderThickness="1" CornerRadius="10" Padding="10,7" Margin="0,6,0,0">
+              <TextBlock x:Name="MousePassthroughHint" MaxWidth="598" Text="开启后 HUD 不再接收鼠标。可用桌面/开始菜单设置快捷方式，或让 Codex 关闭鼠标穿透。" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource Muted}" />
+            </Border>
             <WrapPanel Margin="0,4,0,0">
               <StackPanel>
                 <TextBlock x:Name="BackgroundColorLabel" Text="背景 ARGB" FontSize="12" Foreground="{StaticResource Muted}" />
@@ -295,9 +299,17 @@
                 <StackPanel Orientation="Horizontal"><TextBox x:Name="AccentText" /><Button x:Name="AccentColorButton" Content="●" Width="38" Height="34" Padding="0" Margin="-8,6,12,0" /></StackPanel>
               </StackPanel>
             </WrapPanel>
-            <Expander x:Name="AdvancedStatusExpander" Header="高级状态颜色（Advanced status colors）" Margin="0,16,0,0" FontWeight="SemiBold">
+            <Expander x:Name="AdvancedStatusExpander" Header="高级状态颜色（Advanced status colors）" Width="620" HorizontalAlignment="Left" Margin="0,16,0,0" FontWeight="SemiBold">
               <StackPanel Margin="0,10,0,0">
-                <TextBlock Text="状态点会根据 Codex 的实时活动自动变色；可直接输入 ARGB，或点击色点打开色环。 / The status dot changes with live Codex activity." TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,0,10" />
+                <TextBlock MaxWidth="620" HorizontalAlignment="Left" Text="状态点会根据 Codex 的实时活动自动变色；可直接输入 ARGB，或点击色点打开色环。 / The status dot changes with live Codex activity." TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,0,10" />
+                <TextBlock x:Name="StatusPalettesTitle" Text="状态颜色方案" FontWeight="SemiBold" />
+                <TextBlock x:Name="StatusPalettesHint" Text="预设只修改五种状态颜色，仍可继续单独自定义。" TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,6" />
+                <WrapPanel Width="620" HorizontalAlignment="Left" Margin="0,0,0,8">
+                  <Button x:Name="StatusPaletteDefault" Content="当前默认" />
+                  <Button x:Name="StatusPaletteIntuitive" Content="直觉语义" />
+                  <Button x:Name="StatusPaletteColorblind" Content="色觉友好" />
+                  <Button x:Name="StatusPaletteCalm" Content="低干扰" />
+                </WrapPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="180"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
                   <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/></Grid.RowDefinitions>

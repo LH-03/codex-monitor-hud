@@ -13,7 +13,7 @@ When enabled, the HUD also reads numeric `token_count.rate_limits` observations 
 
 ## Data stored
 
-Only user interface preferences are stored, under `%LOCALAPPDATA%\CodexTokenHUD\settings.json`.
+Only user interface preferences, including the optional mouse click-through choice, are stored under `%LOCALAPPDATA%\CodexTokenHUD\settings.json`.
 
 The project does not copy or store prompts, assistant messages, tool output, raw transcript text, session logs, SQLite databases or account credentials.
 

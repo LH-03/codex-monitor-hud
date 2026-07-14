@@ -6,19 +6,19 @@
 
 ## Repository description
 
-`A polished local Token and weekly allowance HUD for Codex Desktop on Windows.`
+`A lightweight real-time monitoring bubble for background Codex tasks on Windows.`
 
 ## First commit message
 
-`Release Codex Token HUD 1.2.1`
+`Release Codex Token HUD 1.3.1`
 
 ## Release tag
 
-`v1.2.1`
+`v1.3.1`
 
 ## Release title
 
-`Codex Token HUD v1.2.1`
+`Codex Token HUD v1.3.1`
 
 ## Release body
 
@@ -27,15 +27,15 @@ Copy the contents of `GITHUB_RELEASE_NOTES.md`.
 ## Suggested Chinese announcement
 
 ```text
-Codex Token HUD v1.2.1 已发布。
+Codex Token HUD v1.3.1 已发布。
 
-这是一个面向 Windows 版 Codex Desktop 的本地 Token 悬浮条，可显示缓存输入、未缓存输入、输出、本次合计、任务累计和最近观测到的周额度剩余。支持多个 Codex 任务、6 种气泡布局、10 套主题、中英文界面、色环调色和状态指示。所有数据都在本机读取和处理，不上传日志或会话内容。
+这是一个面向 Windows 版 Codex Desktop 的轻量本地 Token 悬浮条。本次增加可切换鼠标穿透、三重恢复入口、4 套状态颜色方案和 0.1 级字号调节，并修复新任务偶尔一直等待、周额度必须重启才刷新的问题。支持多任务、6 种布局、10 套主题和中英文界面；所有数据仍在本机处理，不上传日志或会话内容。
 ```
 
 ## Suggested English announcement
 
 ```text
-Codex Token HUD v1.2.1 is available: a local Windows overlay for Token counters and latest-observed weekly remaining allowance, with concurrent-task monitoring, six bubble layouts, ten themes, bilingual settings and no telemetry.
+Codex Token HUD v1.3.1 adds a permanent notification-area recovery menu for mouse click-through, alongside smoother font sizing, status color schemes, immediate first-task refresh and fresh weekly-allowance monitoring. It remains a lightweight local Windows overlay with concurrent-task monitoring and no telemetry.
 ```
 
 ## Screenshot order

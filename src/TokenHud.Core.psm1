@@ -120,15 +120,7 @@ function Convert-HudRecord {
         }
     }
     if ($record.type -ne 'event_msg' -or $record.payload.type -ne 'token_count') { return $null }
-    $last = $record.payload.info.last_token_usage
-    $total = $record.payload.info.total_token_usage
-    if ($null -eq $last -or $null -eq $total) { return $null }
-    $input = [Int64]$last.input_tokens
-    $cached = [Int64]$last.cached_input_tokens
-    $output = [Int64]$last.output_tokens
-    if ($input -eq 0 -and $output -eq 0) { return $null }
-    $window = [Int64]$record.payload.info.model_context_window
-    $contextPercent = if ($window -gt 0) { [Math]::Min(100, [Math]::Round(($input * 100.0) / $window, 1)) } else { 0 }
+    try { $timestamp = [DateTimeOffset]::Parse($record.timestamp).ToLocalTime() } catch { return $null }
     $weeklyRemaining = $null
     $fiveHourRemaining = $null
     if ($null -ne $record.payload.PSObject.Properties['rate_limits']) {
@@ -146,9 +138,37 @@ function Convert-HudRecord {
             } catch { }
         }
     }
+    $hasAllowance = $null -ne $weeklyRemaining -or $null -ne $fiveHourRemaining
+    $last = $record.payload.info.last_token_usage
+    $total = $record.payload.info.total_token_usage
+    if ($null -eq $last -or $null -eq $total) {
+        if (-not $hasAllowance) { return $null }
+        return [pscustomobject]@{
+            Kind = 'allowance'
+            Timestamp = $timestamp
+            AllowanceTimestamp = $timestamp
+            WeeklyRemainingPercent = $weeklyRemaining
+            FiveHourRemainingPercent = $fiveHourRemaining
+        }
+    }
+    $input = [Int64]$last.input_tokens
+    $cached = [Int64]$last.cached_input_tokens
+    $output = [Int64]$last.output_tokens
+    if ($input -eq 0 -and $output -eq 0) {
+        if (-not $hasAllowance) { return $null }
+        return [pscustomobject]@{
+            Kind = 'allowance'
+            Timestamp = $timestamp
+            AllowanceTimestamp = $timestamp
+            WeeklyRemainingPercent = $weeklyRemaining
+            FiveHourRemainingPercent = $fiveHourRemaining
+        }
+    }
+    $window = [Int64]$record.payload.info.model_context_window
+    $contextPercent = if ($window -gt 0) { [Math]::Min(100, [Math]::Round(($input * 100.0) / $window, 1)) } else { 0 }
     [pscustomobject]@{
         Kind = 'usage'
-        Timestamp = [DateTimeOffset]::Parse($record.timestamp).ToLocalTime()
+        Timestamp = $timestamp
         Input = $input
         Cached = $cached
         Uncached = [Math]::Max([Int64]0, $input - $cached)
@@ -159,25 +179,71 @@ function Convert-HudRecord {
         ContextPercent = $contextPercent
         ContextWindow = $window
         Model = ''
+        AllowanceTimestamp = if ($hasAllowance) { $timestamp } else { $null }
         WeeklyRemainingPercent = $weeklyRemaining
         FiveHourRemainingPercent = $fiveHourRemaining
     }
+}
+
+function Split-HudJsonLines {
+    param([string]$PendingText = '', [string]$Text = '')
+    $combined = [string]$PendingText + [string]$Text
+    if ([string]::IsNullOrEmpty($combined)) {
+        return [pscustomobject]@{ CompleteLines = @(); PendingText = '' }
+    }
+    $parts = $combined -split "`n", -1
+    $complete = New-Object System.Collections.ArrayList
+    for ($i = 0; $i -lt ($parts.Count - 1); $i++) { [void]$complete.Add($parts[$i].TrimEnd("`r")) }
+    $pending = ''
+    if (-not $combined.EndsWith("`n")) {
+        $candidate = $parts[-1].TrimEnd("`r")
+        try {
+            $parsed = $candidate | ConvertFrom-Json -ErrorAction Stop
+            if ($null -ne $parsed) { [void]$complete.Add($candidate) } else { $pending = $parts[-1] }
+        } catch { $pending = $parts[-1] }
+    }
+    return [pscustomobject]@{ CompleteLines = @($complete); PendingText = $pending }
 }
 
 function Get-LatestHudSnapshot {
     param([Parameter(Mandatory = $true)][System.IO.FileInfo]$File, [int]$Tail = 2000)
     $lines = @(Get-Content -LiteralPath $File.FullName -Tail $Tail -ErrorAction Stop)
     $usage = $null
+    $allowance = $null
     $model = ''
     for ($i = $lines.Count - 1; $i -ge 0; $i--) {
         $item = Convert-HudRecord $lines[$i]
         if ($null -eq $item) { continue }
+        if (($item.Kind -eq 'usage' -or $item.Kind -eq 'allowance') -and $null -eq $allowance) {
+            if (($null -ne $item.PSObject.Properties['WeeklyRemainingPercent'] -and $null -ne $item.WeeklyRemainingPercent) -or
+                ($null -ne $item.PSObject.Properties['FiveHourRemainingPercent'] -and $null -ne $item.FiveHourRemainingPercent)) {
+                $allowance = $item
+            }
+        }
         if ($item.Kind -eq 'usage' -and $null -eq $usage) { $usage = $item }
         if ($item.Kind -eq 'context' -and [string]::IsNullOrWhiteSpace($model)) { $model = $item.Model }
-        if ($null -ne $usage -and -not [string]::IsNullOrWhiteSpace($model)) { break }
+        if ($null -ne $usage -and $null -ne $allowance -and -not [string]::IsNullOrWhiteSpace($model)) { break }
     }
-    if ($null -ne $usage) { $usage.Model = $model }
+    if ($null -ne $usage) {
+        $usage.Model = $model
+        if ($null -ne $allowance) {
+            $usage.AllowanceTimestamp = $allowance.AllowanceTimestamp
+            $usage.WeeklyRemainingPercent = $allowance.WeeklyRemainingPercent
+            $usage.FiveHourRemainingPercent = $allowance.FiveHourRemainingPercent
+        }
+    }
     return $usage
+}
+
+function Get-LatestHudAllowanceSnapshot {
+    param([Parameter(Mandatory = $true)][object[]]$Snapshots)
+    return $Snapshots | Where-Object {
+        ($null -ne $_ -and $null -ne $_.PSObject.Properties['WeeklyRemainingPercent'] -and $null -ne $_.WeeklyRemainingPercent) -or
+        ($null -ne $_ -and $null -ne $_.PSObject.Properties['FiveHourRemainingPercent'] -and $null -ne $_.FiveHourRemainingPercent)
+    } | Sort-Object @{ Expression = {
+        if ($null -ne $_.PSObject.Properties['AllowanceTimestamp'] -and $null -ne $_.AllowanceTimestamp) { $_.AllowanceTimestamp }
+        else { $_.Timestamp }
+    }; Descending = $true } | Select-Object -First 1
 }
 
 function Format-HudNumber {
@@ -233,10 +299,7 @@ function Merge-HudSnapshots {
     $models = @($valid | ForEach-Object { [string]$_.Model } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
     $summary = [string]$Locale.multiTaskSummary
     $summary = $summary.Replace('{tasks}', [string]$valid.Count).Replace('{models}', [string]$models.Count)
-    $rateSource = $valid | Where-Object {
-        ($null -ne $_.PSObject.Properties['WeeklyRemainingPercent'] -and $null -ne $_.WeeklyRemainingPercent) -or
-        ($null -ne $_.PSObject.Properties['FiveHourRemainingPercent'] -and $null -ne $_.FiveHourRemainingPercent)
-    } | Sort-Object Timestamp -Descending | Select-Object -First 1
+    $rateSource = Get-LatestHudAllowanceSnapshot $valid
     [pscustomobject]@{
         Timestamp = ($valid | Sort-Object Timestamp -Descending | Select-Object -First 1).Timestamp
         Input = [Int64](($valid | Measure-Object Input -Sum).Sum)
@@ -250,6 +313,7 @@ function Merge-HudSnapshots {
         ContextWindow = [Int64](($valid | Measure-Object ContextWindow -Sum).Sum)
         Model = $summary
         ActiveTasks = $valid.Count
+        AllowanceTimestamp = if ($null -ne $rateSource -and $null -ne $rateSource.PSObject.Properties['AllowanceTimestamp']) { $rateSource.AllowanceTimestamp } else { $null }
         WeeklyRemainingPercent = if ($null -ne $rateSource -and $null -ne $rateSource.PSObject.Properties['WeeklyRemainingPercent']) { $rateSource.WeeklyRemainingPercent } else { $null }
         FiveHourRemainingPercent = if ($null -ne $rateSource -and $null -ne $rateSource.PSObject.Properties['FiveHourRemainingPercent']) { $rateSource.FiveHourRemainingPercent } else { $null }
     }
@@ -260,4 +324,4 @@ function Test-HudAccounting {
     (($Snapshot.Cached + $Snapshot.Uncached) -eq $Snapshot.Input) -and (($Snapshot.Input + $Snapshot.Output) -eq $Snapshot.CallTotal)
 }
 
-Export-ModuleMember -Function Get-HudPaths, Get-HudConfig, Save-HudConfig, Get-HudLocale, Get-HudThemes, Get-LatestHudSessionFile, Get-ActiveHudSessionFiles, Convert-HudRecord, Get-LatestHudSnapshot, Format-HudNumber, Get-HudMetrics, Merge-HudSnapshots, Test-HudAccounting
+Export-ModuleMember -Function Get-HudPaths, Get-HudConfig, Save-HudConfig, Get-HudLocale, Get-HudThemes, Get-LatestHudSessionFile, Get-ActiveHudSessionFiles, Convert-HudRecord, Split-HudJsonLines, Get-LatestHudSnapshot, Get-LatestHudAllowanceSnapshot, Format-HudNumber, Get-HudMetrics, Merge-HudSnapshots, Test-HudAccounting

@@ -1,15 +1,26 @@
 # Project status
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
-## Current release target
+## Current release
 
-Version `1.2.1` is the GitHub publication candidate.
+Version `1.2.1` is the current public GitHub release.
 
 - Visual presets and bubble layouts are independent.
 - Six bubble layouts are public: `chips`, `compact`, `inline`, `outline`, `cards`, and `stacked`.
 - Weekly remaining allowance is a public opt-in metric sourced from local `token_count.rate_limits` observations.
 - Concurrent tasks use the newest account-wide allowance observation; percentages are never summed or averaged.
+
+## Local v1.3.1 acceptance build
+
+- Optional mouse click-through is implemented in the maintenance source and defaults to off.
+- Recovery remains available through settings, installed settings shortcuts and a dedicated MCP disable tool. An uninstalled maintenance fix additionally adds a permanent notification-area recovery menu.
+- Complete final JSONL records are parsed before a trailing newline arrives.
+- Weekly allowance observations are ordered by their own timestamps instead of inheriting task-usage freshness.
+- Font size previews and persists at 0.1-point precision.
+- Four status color schemes are available without removing per-state ARGB editing.
+
+Build `1.3.1+codex.20260714170852` fixes Windows PowerShell 5.1 notification-area label encoding by loading Chinese and English text from UTF-8 locale JSON. It is installed locally, the formal HUD script matches the maintenance source and a fresh heartbeat was observed. The public GitHub release remains `1.2.1`; no GitHub publishing has occurred.
 
 ## Dormant 5-hour allowance support
 

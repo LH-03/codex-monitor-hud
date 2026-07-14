@@ -8,4 +8,10 @@
 - [ ] Verify `.gitignore` excludes settings, logs, archives and test output.
 - [ ] Check `INSTALL_WITH_CODEX.md` from a clean copy.
 - [ ] Test install, restart/new-task discovery and uninstall on Windows.
+- [ ] Confirm a new task leaves the waiting state without restarting the HUD.
+- [ ] Confirm weekly allowance updates without restarting the HUD.
+- [ ] Test real click and wheel pass-through on Windows 10/11 where available.
+- [ ] Test disabling click-through from the notification-area menu, settings shortcut and `token_hud_disable_click_through`.
+- [ ] Test multiple monitors and mixed DPI before calling click-through fully validated.
+- [ ] Confirm font size persists with 0.1 precision and all four status color schemes remain editable.
 - [ ] Do not commit `~/.codex/sessions`, SQLite files or `%LOCALAPPDATA%\CodexTokenHUD`.

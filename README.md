@@ -1,22 +1,26 @@
 # Codex Token HUD
 
-A local Windows HUD for Codex token usage, with concurrent-task tracking, ten data-driven themes, a bilingual-safe settings entry, HSV/ARGB color editing, and five monitored status states.
+> **English guide** · [简体中文说明 / Simplified Chinese guide](README.zh-CN.md)
 
-The installer creates desktop and Start menu settings shortcuts but does not enable Windows login startup. See [README.zh-CN.md](README.zh-CN.md) for the full Chinese guide and [docs/THEMING_AND_UI_EXTENSIONS.md](docs/THEMING_AND_UI_EXTENSIONS.md) for theme and UI extension points.
+Codex Token HUD is a lightweight real-time monitoring bubble for Codex Desktop on Windows. It is deliberately not a full historical analytics dashboard: leave Codex working in the background while you watch a video, play a game or use another app, and keep one small always-current bubble visible for task activity, Token counters and the latest locally observed allowance.
+
+Its priority is low overhead, fast refresh and dependable state awareness. It follows concurrent active tasks without building a separate usage database, indexing conversation history or adding telemetry.
+
+The installer creates desktop and Start menu settings shortcuts but does not enable Windows login startup. See the [Simplified Chinese guide](README.zh-CN.md) or [theme and UI extension points](docs/THEMING_AND_UI_EXTENSIONS.md).
 
 A polished, local-first Token overlay for Codex Desktop on Windows.
 
-![Frost preset](assets/hud-frost.png)
+![Frost preset](assets/hud-frost-en.png)
 
 ## Screenshots
 
 | Grouped chips | Metric cards |
 |---|---|
-| ![Grouped chips with synthetic data](assets/hud-frost.png) | ![Metric cards with synthetic data](assets/hud-cards.png) |
+| ![Grouped chips with synthetic data](assets/hud-frost-en.png) | ![Metric cards with synthetic data](assets/hud-cards-en.png) |
 
 | Settings | HSV / ARGB color picker |
 |---|---|
-| ![Simplified Chinese settings](assets/settings.png) | ![Color picker](assets/color-picker.png) |
+| ![English settings](assets/settings-en.png) | ![English color picker](assets/color-picker-en.png) |
 
 All screenshots use synthetic Token and weekly allowance values. They contain no real tasks, logs or account data.
 
@@ -34,6 +38,8 @@ Codex Token HUD reads the counters that Codex already writes to local session lo
 - Latest-observed weekly remaining allowance from local `token_count.rate_limits` snapshots, enabled by default and configurable.
 - Exact, compact and automatic number formatting.
 - Custom fields, HSV/ARGB colors, five-state status palette, opacity, radius, font size, position and animation.
+- Optional mouse click-through, disabled by default, with notification-area, settings-shortcut and Codex recovery paths.
+- Four status color schemes plus individual ARGB editing; font size adjusts in 0.1-point increments.
 - Independent monitoring for multiple concurrent Codex tasks.
 - Desktop and Start menu settings shortcuts, without Windows login startup.
 - Visual presets never overwrite layout, number format or selected metrics.
@@ -71,6 +77,7 @@ Then enable `codex-token-strip` from your personal plugin marketplace and restar
 - Drag the HUD to place it anywhere.
 - Double-click the HUD to open settings.
 - Right-click to pause, reposition, open settings, or exit.
+- Mouse click-through can be enabled from settings or the context menu. While enabled, right-click the persistent Codex Token HUD notification-area icon and choose **Disable click-through**. The icon also opens settings; desktop/Start settings shortcuts and the Codex recovery request remain available.
 - Ask Codex to “open Token HUD settings” after the plugin is loaded.
 - Choose **Follow latest activity** to display whichever task updated most recently, or **Aggregate active tasks** to combine all tasks updated within the configured time window.
 
