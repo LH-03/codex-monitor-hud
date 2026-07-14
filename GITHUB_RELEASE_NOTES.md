@@ -1,38 +1,49 @@
-# Codex Token HUD v1.3.1
+# Codex Monitor HUD v2.0.0
 
-Codex Token HUD is not a full after-the-fact analytics dashboard. It is a lightweight real-time monitoring bubble: leave Codex working in the background while you watch, play or use another app, and keep a small view of task state, Token counters and the latest locally observed allowance. This release focuses on the part that workflow must get right: staying visible, current and out of the way.
+Codex Monitor HUD is a lightweight real-time task monitor for Codex Desktop on Windows. It stays visible while Codex works in the background and tells you when a task needs attention. It is deliberately not a retrospective analytics suite.
 
-## New
+## A complete product rename
 
-- Optional mouse click-through keeps the HUD visible while clicks and wheel input reach the app underneath.
-- Click-through is off by default. It can be enabled from settings or the HUD context menu.
-- A persistent Windows notification-area icon provides a direct **Disable click-through** action even if the HUD itself can no longer receive pointer input. It also opens settings and exits the HUD.
-- Settings, installed desktop/Start shortcuts and the `token_hud_disable_click_through` Codex tool remain independent recovery paths.
-- Four status color schemes: current default, intuitive semantics, color-vision friendly and low distraction. Every state color still supports custom ARGB input and the HSV picker.
-- Font size now adjusts and persists in 0.1-point increments for smoother visual scaling.
+- Codex Token HUD is now Codex Monitor HUD.
+- The plugin, MCP server, Skill, runtime paths, settings directory, mutex, shortcuts, icon filename and repository identity use the new name.
+- v2 is a fresh installation identity. It does not import v1 settings or silently remove the legacy plugin.
+- If `codex-token-strip` is still installed, uninstall it first, then install `codex-monitor-hud`.
 
-## Fixed
+## Preserved monitoring model
 
-- Notification-area Chinese labels now render correctly on Windows PowerShell 5.1 because menu text is loaded from the UTF-8 locale files instead of embedded script literals.
+- Summary, task-list and split-bubble modes remain available for concurrent background tasks.
+- Broad all-date discovery finds reopened conversations without turning every recently touched log into a visible row. Internal subagents, silent stops, and expired completions are filtered from the user task set.
+- Stable numbers survive rapid churn, while `project · Codex thread title` keeps conversations inside the same workspace distinguishable using the official local session index rather than prompt text.
+- Finished items can be dismissed per row or bubble without touching Codex data, and externally deleted conversations now leave the HUD cleanly instead of stranding it in the first-use waiting state.
+- High-frequency Token updates no longer make the HUD repeatedly disappear and pop back. The optional update animation now runs only for meaningful task or status-phase changes and is deliberately subtle.
+- A subtle × on each row and independent bubble lets users clear completed work without deleting the Codex conversation; the item returns if that conversation runs again.
+- Status-dot reminders and whole-surface reminders remain independent, stackable channels.
+- The status dot offers soft pulse, double-heartbeat and beacon rhythms; subtle, balanced and bright glow; slow, normal and fast timing; plus an independently toggleable scale-breathing layer.
+- Summary, relevant list item and independent task bubble can each use Off, Soft halo, Bubble breathing, Pulse light flow or Focus pulse.
+- The four surface effects provide a clear strength range from restrained ambient emphasis to a strong return-to-work signal.
+- Completion, abort/error and natural-settling triggers remain separately configurable.
 
-- New tasks no longer remain on “Waiting for Codex usage” when a complete JSONL record has been written without its final newline.
-- Weekly remaining allowance now follows the newest allowance observation independently of Token-counter timestamps, avoiding stale values that previously corrected only after restarting the HUD.
-- Zero-usage maintenance snapshots can refresh allowance data without replacing the visible Token counters.
+## New visual identity
 
-## Unchanged by default
+- The generic Windows information and PowerShell marks are replaced by a dark HUD-frame, live-wave and mint-status icon designed to stay recognizable at notification-area size.
+- The same multi-resolution icon is wired through the notification area, desktop shortcut, Start menu, WPF windows, native taskbar handles and plugin branding.
 
-- Existing users keep normal HUD dragging, double-click settings and right-click actions until they explicitly enable click-through.
-- Token accounting, six layouts, ten themes, concurrent-task monitoring and local-only privacy behavior remain intact.
-- The HUD makes no network requests and stores only UI preferences.
+## New opt-in capabilities
 
-## Install or update
+- Proactive Codex notices are separately authorized and off by default. Text notices are visibly CODEX-labeled; expressive permission accepts only bounded declarative glow, pulse, breathe and flow layers and never executes model-supplied code.
+- API-equivalent cost estimates are optional, local and clearly not billing or exact subscription credits. Cached input is priced separately, unknown models stay unpriced, and shared Work usage remains outside this Codex-only view.
+- Theme Workshop accepts declarative JSON/`.cmhud-theme` files and safe ZIP packs with local PNG/JPG artwork. The bundled Skill helps users create shareable skins without granting scripts or network access.
+- The AI adaptation guide documents lifecycle semantics and how to reuse the monitoring model for macOS, Linux, Claude Code or another agent runtime without promising parity.
 
-Give the repository URL to Codex and ask it to follow `INSTALL_WITH_CODEX.md`, or run `scripts/install.ps1` on Windows. Restart Codex or open a new task if plugin discovery does not refresh immediately.
+## Preserved
 
-## Important click-through recovery
-
-While click-through is active, the HUD itself cannot be dragged, double-clicked or right-clicked. Open the installed desktop/Start settings shortcut, or ask Codex to “disable Token HUD mouse click-through.”
+- Mouse click-through remains opt-in with notification-area, shortcut and MCP recovery paths.
+- Density controls, separately configurable list/bubble fields, independently resizable task bubbles, six layouts, ten built-in themes, layered transparency, bilingual settings and local-first processing remain intact.
 
 ## Validation
 
-PowerShell, XAML, JSON, locale parity, Token accounting, immediate final-record parsing, allowance-only refresh, newest-allowance selection, concurrent aggregation, settings previews and MCP tool discovery were checked before release. Real click and wheel pass-through, recovery, multiple-monitor and mixed-DPI behavior must pass final interactive acceptance before publishing.
+PowerShell, XAML, JSON, locale parity, accounting, fresh-identity installer guards, stackable animation paths and icon wiring passed the source suite. Stable numbering passed 10,000 churn cycles with 64 visible tasks. Isolated list and split runs also mix active user tasks with internal subagents and expired completions to verify that only the intended user rows and bubbles survive. Screenshots use synthetic values only.
+
+## Install or update
+
+Give the renamed repository URL to Codex and ask it to follow `INSTALL_WITH_CODEX.md`, or run `scripts/install.ps1` on Windows. Restart Codex or open a new task if plugin discovery does not refresh immediately.

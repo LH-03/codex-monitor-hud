@@ -1,7 +1,7 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Name="SettingsWindow"
-        Title="Codex Token HUD Settings"
+        Title="Codex Monitor HUD Settings"
         Width="720"
         Height="790"
         MinWidth="680"
@@ -19,6 +19,33 @@
     <Style TargetType="TextBlock">
       <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI" />
       <Setter Property="Foreground" Value="{StaticResource Ink}" />
+    </Style>
+    <Style TargetType="{x:Type ToolTip}">
+      <Setter Property="OverridesDefaultStyle" Value="True" />
+      <Setter Property="Placement" Value="Mouse" />
+      <Setter Property="HorizontalOffset" Value="14" />
+      <Setter Property="VerticalOffset" Value="10" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="{x:Type ToolTip}">
+            <Border MaxWidth="390"
+                    Padding="13,10"
+                    CornerRadius="11"
+                    Background="#F20B1524"
+                    BorderBrush="#4224D3FF"
+                    BorderThickness="1">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="22" ShadowDepth="8" Direction="270" Opacity="0.34" Color="#50000000" />
+              </Border.Effect>
+              <TextBlock Text="{TemplateBinding Content}"
+                         Foreground="#FFF5FAFF"
+                         FontSize="12"
+                         LineHeight="19"
+                         TextWrapping="Wrap" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
     <Style TargetType="Button">
       <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI" />
@@ -52,6 +79,27 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <Style x:Key="ColorSwatchButton" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="BorderBrush" Value="#22000000" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="SwatchChrome" CornerRadius="10" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+              <Border Margin="5" CornerRadius="6" BorderBrush="#48FFFFFF" BorderThickness="1" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="SwatchChrome" Property="BorderBrush" Value="#B80A84FF" />
+                <Setter TargetName="SwatchChrome" Property="Opacity" Value="0.88" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True"><Setter TargetName="SwatchChrome" Property="Opacity" Value="0.68" /></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style TargetType="CheckBox">
       <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI" />
       <Setter Property="FontSize" Value="13" />
@@ -60,6 +108,8 @@
       <Setter Property="BorderBrush" Value="#10000000" />
       <Setter Property="Margin" Value="0,0,8,8" />
       <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="ToolTipService.InitialShowDelay" Value="360" />
+      <Setter Property="ToolTipService.ShowDuration" Value="30000" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="CheckBox">
@@ -112,9 +162,119 @@
     <Style TargetType="ComboBox">
       <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI" />
       <Setter Property="FontSize" Value="13" />
-      <Setter Property="Padding" Value="10,7" />
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Background" Value="#FFF7F9FC" />
+      <Setter Property="BorderBrush" Value="#180A84FF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="12,8" />
       <Setter Property="Margin" Value="0,6,12,0" />
       <Setter Property="MinWidth" Value="160" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="ToolTipService.InitialShowDelay" Value="360" />
+      <Setter Property="ToolTipService.ShowDuration" Value="30000" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton x:Name="ComboToggle"
+                            Focusable="False"
+                            FocusVisualStyle="{x:Null}"
+                            ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                            Background="Transparent"
+                            BorderThickness="0">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <ContentPresenter />
+                  </ControlTemplate>
+                </ToggleButton.Template>
+                <Border x:Name="ComboChrome"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="10"
+                        Padding="{TemplateBinding Padding}">
+                  <Grid>
+                    <ContentPresenter Margin="0,0,26,0"
+                                      VerticalAlignment="Center"
+                                      Content="{TemplateBinding SelectionBoxItem}"
+                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                      ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                      SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                    <Path HorizontalAlignment="Right"
+                          VerticalAlignment="Center"
+                          Data="M0,0 L4,4 L8,0"
+                          Stroke="{StaticResource Muted}"
+                          StrokeThickness="1.5"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          StrokeLineJoin="Round" />
+                  </Grid>
+                </Border>
+              </ToggleButton>
+              <Popup x:Name="PART_Popup"
+                     AllowsTransparency="True"
+                     Placement="Bottom"
+                     PopupAnimation="Fade"
+                     IsOpen="{TemplateBinding IsDropDownOpen}">
+                <Border Width="{Binding ActualWidth, ElementName=ComboToggle}"
+                        Margin="0,5,0,0"
+                        Padding="4"
+                        Background="#FEFFFFFF"
+                        BorderBrush="#260A84FF"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                  <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="5" Direction="270" Opacity="0.16" Color="#30000000" />
+                  </Border.Effect>
+                  <ScrollViewer MaxHeight="260" CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel IsItemsHost="True" />
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="ComboChrome" Property="Background" Value="#FFF1F6FF" />
+                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="#550A84FF" />
+              </Trigger>
+              <Trigger Property="IsDropDownOpen" Value="True">
+                <Setter TargetName="ComboChrome" Property="Background" Value="#FFEAF4FF" />
+                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="#800A84FF" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="ComboChrome" Property="Opacity" Value="0.5" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="Padding" Value="11,8" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="ItemChrome" Background="Transparent" CornerRadius="8" Padding="{TemplateBinding Padding}">
+              <ContentPresenter />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="ItemChrome" Property="Background" Value="#FFEAF4FF" />
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="ItemChrome" Property="Background" Value="#1A0A84FF" />
+                <Setter Property="Foreground" Value="#FF0A84FF" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
     <Style TargetType="TextBox">
       <Setter Property="FontFamily" Value="Cascadia Code, Consolas" />
@@ -124,6 +284,33 @@
       <Setter Property="MinWidth" Value="150" />
       <Setter Property="BorderBrush" Value="#18000000" />
       <Setter Property="Background" Value="#FFF7F8FA" />
+    </Style>
+    <Style TargetType="TabItem">
+      <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Padding" Value="16,8" />
+      <Setter Property="Margin" Value="0,0,6,8" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border x:Name="TabPill" Background="#FFF2F4F7" BorderBrush="#10000000" BorderThickness="1" CornerRadius="10" Padding="{TemplateBinding Padding}">
+              <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="TabPill" Property="Background" Value="#FF0A84FF" />
+                <Setter TargetName="TabPill" Property="BorderBrush" Value="#FF0A84FF" />
+                <Setter Property="Foreground" Value="White" />
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="TabPill" Property="BorderBrush" Value="#550A84FF" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
   </Window.Resources>
 
@@ -145,7 +332,7 @@
 
         <Grid x:Name="TitleBar" Grid.Row="0" Margin="26,0,20,0" Background="Transparent">
           <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="Codex Token HUD" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="Codex Monitor HUD" FontSize="20" FontWeight="SemiBold" />
             <TextBlock x:Name="SettingsSubtitle" Text="外观与显示设置 · Appearance &amp; display" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0" />
           </StackPanel>
           <Button x:Name="CloseSettingsButton"
@@ -161,8 +348,10 @@
                   BorderBrush="#00FFFFFF" />
         </Grid>
 
-        <ScrollViewer x:Name="SettingsScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Margin="26,4,26,22">
+        <TabControl x:Name="SettingsTabs" Grid.Row="1" Margin="18,0,18,0" Background="Transparent" BorderThickness="0">
+          <TabItem x:Name="GeneralTab" Header="General">
+            <ScrollViewer x:Name="SettingsScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Margin="8,14,8,22">
             <TextBlock x:Name="PresetsTitle" Text="精选预设  Presets" FontSize="15" FontWeight="SemiBold" />
             <TextBlock x:Name="PresetsHint" Text="先选一个好看的起点，再按自己的习惯微调。" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,4,0,12" />
             <WrapPanel Width="620" HorizontalAlignment="Left">
@@ -172,6 +361,26 @@
               <Button x:Name="PresetGraphite" Content="Graphite  石墨" />
               <Button x:Name="PresetMinimal" Content="Minimal  极简" />
             </WrapPanel>
+
+            <Border x:Name="ThemeWorkshopDropZone"
+                    Width="620"
+                    HorizontalAlignment="Left"
+                    AllowDrop="True"
+                    Background="#080A84FF"
+                    BorderBrush="#280A84FF"
+                    BorderThickness="1"
+                    CornerRadius="13"
+                    Padding="12,9"
+                    Margin="0,7,0,0">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock x:Name="ThemeWorkshopTitle" Text="主题工坊" FontSize="13" FontWeight="SemiBold" />
+                  <TextBlock x:Name="ThemeWorkshopHint" Text="把主题 JSON 拖到这里即可校验并安装；升级不会覆盖。" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,2,12,0" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button x:Name="ThemeImportButton" Grid.Column="1" Content="导入主题…" Margin="0" VerticalAlignment="Center" />
+              </Grid>
+            </Border>
 
             <Border Height="1" Background="#10000000" Margin="0,14,0,20" />
 
@@ -207,6 +416,7 @@
               <StackPanel>
                 <TextBlock x:Name="PositionLabel" Text="预设位置" FontSize="12" Foreground="{StaticResource Muted}" />
                 <ComboBox x:Name="PositionCombo">
+                  <ComboBoxItem x:Name="PositionCustomItem" Content="当前位置（已拖动）" Tag="custom" />
                   <ComboBoxItem x:Name="PositionTopRightItem" Content="右上" Tag="top-right" />
                   <ComboBoxItem x:Name="PositionTopCenterItem" Content="顶部居中" Tag="top-center" />
                   <ComboBoxItem x:Name="PositionTopLeftItem" Content="左上" Tag="top-left" />
@@ -233,8 +443,253 @@
               </StackPanel>
             </WrapPanel>
 
-            <Border Height="1" Background="#10000000" Margin="0,20,0,20" />
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
 
+          <TabItem x:Name="MultiTaskTab" Header="Multi-task">
+            <ScrollViewer x:Name="MultiTaskScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Margin="8,14,8,22">
+                <TextBlock x:Name="MultiTaskTitle" Text="多任务与多气泡" FontSize="15" FontWeight="SemiBold" />
+                <Border Background="#0E0A84FF" BorderBrush="#280A84FF" BorderThickness="1" CornerRadius="14" Padding="14" Margin="0,8,0,18">
+                  <TextBlock x:Name="MultiTaskExplanation" Text="汇总模式只看全局；列表模式用稳定编号查看各任务；分裂模式把任务拆成独立气泡。周额度始终只显示在汇总气泡，避免误解为单任务额度。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" />
+                </Border>
+                <WrapPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="DisplayModeLabel" Text="显示模式" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="DisplayModeCombo">
+                      <ComboBoxItem x:Name="ModeSummaryItem" Content="汇总气泡" Tag="summary" />
+                      <ComboBoxItem x:Name="ModeListItem" Content="任务列表" Tag="list" />
+                      <ComboBoxItem x:Name="ModeSplitItem" Content="独立气泡" Tag="split" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="ListStyleLabel" Text="列表风格" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="ListStyleCombo">
+                      <ComboBoxItem x:Name="ListRowsItem" Content="紧凑行" Tag="rows" />
+                      <ComboBoxItem x:Name="ListCardsItem" Content="信息卡片" Tag="cards" />
+                      <ComboBoxItem x:Name="ListRailItem" Content="状态轨道" Tag="rail" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="ListDensityLabel" Text="列表紧凑度" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="ListDensityCombo">
+                      <ComboBoxItem x:Name="ListDensityCompactItem" Content="紧凑" Tag="compact" />
+                      <ComboBoxItem x:Name="ListDensityBalancedItem" Content="标准" Tag="balanced" />
+                      <ComboBoxItem x:Name="ListDensityRelaxedItem" Content="舒展" Tag="relaxed" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="TaskNameModeLabel" Text="列表任务标识" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="TaskNameModeCombo">
+                      <ComboBoxItem x:Name="NameHoverItem" Content="项目 + 对话；悬停时间" Tag="hover" />
+                      <ComboBoxItem x:Name="NameAlwaysItem" Content="项目 + 对话 + 时间" Tag="always" />
+                      <ComboBoxItem x:Name="NameHiddenItem" Content="仅项目" Tag="hidden" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="MaxSplitLabel" Text="最多独立气泡" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="MaxSplitCombo">
+                      <ComboBoxItem Content="3" Tag="3" />
+                      <ComboBoxItem Content="6" Tag="6" />
+                      <ComboBoxItem Content="9" Tag="9" />
+                      <ComboBoxItem Content="12" Tag="12" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="NumberCooldownLabel" Text="编号冷却" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="NumberCooldownCombo">
+                      <ComboBoxItem x:Name="Cooldown30Item" Content="30 秒" Tag="30" />
+                      <ComboBoxItem x:Name="Cooldown120Item" Content="2 分钟" Tag="120" />
+                      <ComboBoxItem x:Name="Cooldown300Item" Content="5 分钟" Tag="300" />
+                      <ComboBoxItem x:Name="Cooldown600Item" Content="10 分钟" Tag="600" />
+                    </ComboBox>
+                  </StackPanel>
+                </WrapPanel>
+                <CheckBox x:Name="AutoSplitCheck" Content="分裂模式下自动拆出新任务" Margin="0,10,0,14" />
+                <TextBlock x:Name="ListFieldsTitle" Text="列表每项信息" FontSize="15" FontWeight="SemiBold" Margin="0,6,0,10" />
+                <WrapPanel>
+                  <CheckBox x:Name="ListFieldModel" Content="模型" />
+                  <CheckBox x:Name="ListFieldCallTotal" Content="本次合计" />
+                  <CheckBox x:Name="ListFieldTaskTotal" Content="任务累计" />
+                  <CheckBox x:Name="ListFieldEstimatedCost" Content="API 成本估算" />
+                  <CheckBox x:Name="ListFieldUpdated" Content="更新时间" />
+                </WrapPanel>
+                <TextBlock x:Name="TaskBubbleFieldsTitle" Text="独立小气泡信息" FontSize="15" FontWeight="SemiBold" Margin="0,10,0,4" />
+                <TextBlock x:Name="TaskBubbleResizeHint" Text="每个独立气泡都可拖动右下角调整大小；字段选择与列表互不影响。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8" />
+                <WrapPanel>
+                  <CheckBox x:Name="BubbleFieldModel" Content="模型" />
+                  <CheckBox x:Name="BubbleFieldCallTotal" Content="本次合计" />
+                  <CheckBox x:Name="BubbleFieldTaskTotal" Content="任务累计" />
+                  <CheckBox x:Name="BubbleFieldEstimatedCost" Content="API 成本估算" />
+                  <CheckBox x:Name="BubbleFieldUpdated" Content="更新时间" />
+                </WrapPanel>
+                <Border Height="1" Background="#10000000" Margin="0,14,0,18" />
+                <TextBlock x:Name="AgentNotificationTitle" Text="Codex 主动通知" FontSize="15" FontWeight="SemiBold" />
+                <TextBlock x:Name="AgentNotificationHint" Text="允许 Codex 在确实需要你返回时显示一条纯文本短通知；默认关闭，并与自动状态提醒分开。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,4,0,8" />
+                <CheckBox x:Name="AgentNotificationEnabledCheck" Content="允许 Codex 主动通知" Margin="0,0,0,6" />
+                <WrapPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="AgentNotificationPermissionLabel" Text="Codex 控制权限" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="AgentNotificationPermissionCombo">
+                      <ComboBoxItem x:Name="AgentNotificationTextPermissionItem" Content="只允许文字与默认样式" Tag="text" />
+                      <ComboBoxItem x:Name="AgentNotificationExpressivePermissionItem" Content="允许安全动态编排" Tag="expressive" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="AgentNotificationModeLabel" Text="通知动效" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="AgentNotificationModeCombo">
+                      <ComboBoxItem x:Name="AgentNotificationHaloItem" Content="克制光晕" Tag="halo" />
+                      <ComboBoxItem x:Name="AgentNotificationBreatheItem" Content="柔和呼吸" Tag="breathe" />
+                      <ComboBoxItem x:Name="AgentNotificationFlowItem" Content="通知光流" Tag="flow" />
+                      <ComboBoxItem x:Name="AgentNotificationFocusItem" Content="聚焦通知" Tag="focus" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="AgentNotificationGlowPresetLabel" Text="光晕预设" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="AgentNotificationGlowPresetCombo">
+                      <ComboBoxItem x:Name="AgentNotificationVioletItem" Content="Codex 紫" Tag="violet" />
+                      <ComboBoxItem x:Name="AgentNotificationAquaItem" Content="智能青" Tag="aqua" />
+                      <ComboBoxItem x:Name="AgentNotificationAmberItem" Content="注意琥珀" Tag="amber" />
+                      <ComboBoxItem x:Name="AgentNotificationCustomItem" Content="自定义" Tag="custom" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="AgentNotificationIntensityLabel" Text="光晕强度" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="AgentNotificationIntensityCombo">
+                      <ComboBoxItem x:Name="AgentNotificationSubtleItem" Content="克制" Tag="subtle" />
+                      <ComboBoxItem x:Name="AgentNotificationBalancedItem" Content="均衡" Tag="balanced" />
+                      <ComboBoxItem x:Name="AgentNotificationStrongItem" Content="强提醒" Tag="strong" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="AgentNotificationDurationLabel" Text="文字停留" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="AgentNotificationDurationCombo">
+                      <ComboBoxItem x:Name="AgentNotification8Item" Content="8 秒" Tag="8" />
+                      <ComboBoxItem x:Name="AgentNotification12Item" Content="12 秒" Tag="12" />
+                      <ComboBoxItem x:Name="AgentNotification20Item" Content="20 秒" Tag="20" />
+                      <ComboBoxItem x:Name="AgentNotification30Item" Content="30 秒" Tag="30" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="AgentNotificationColorLabel" Text="通知强调色 ARGB" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <StackPanel Orientation="Horizontal">
+                      <TextBox x:Name="AgentNotificationColorText" Width="132" Text="#FF7C3AED" />
+                      <Button x:Name="AgentNotificationColorButton" Style="{StaticResource ColorSwatchButton}" Content="" Width="36" Height="36" MinWidth="0" Margin="6,6,0,0" Padding="0" />
+                    </StackPanel>
+                  </StackPanel>
+                </WrapPanel>
+                <Border Height="1" Background="#10000000" Margin="0,16,0,18" />
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock x:Name="AttentionTitle" Text="返回提醒" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  <Border x:Name="AttentionHelp"
+                          Width="20"
+                          Height="20"
+                          CornerRadius="10"
+                          Background="#100A84FF"
+                          BorderBrush="#280A84FF"
+                          BorderThickness="1"
+                          Margin="8,0,0,0"
+                          Cursor="Help"
+                          ToolTipService.InitialShowDelay="220"
+                          ToolTipService.ShowDuration="30000">
+                    <TextBlock Text="?" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Blue}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                </StackPanel>
+                <TextBlock x:Name="AttentionHint" Text="只在真正需要你回来看时，把动静留在对应任务上。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,4,0,10" />
+                <TextBlock x:Name="AttentionTriggersTitle" Text="何时提醒" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="0,0,0,6" />
+                <WrapPanel Margin="0,0,0,8">
+                  <CheckBox x:Name="AttentionCompletedCheck" Content="本轮工作结束" />
+                  <CheckBox x:Name="AttentionErrorCheck" Content="中止或读取错误" />
+                  <CheckBox x:Name="AttentionSettledCheck" Content="持续安静（可选）" />
+                </WrapPanel>
+                <TextBlock x:Name="AttentionSurfacesTitle" Text="提醒落点与强度" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="0,2,0,0" />
+                <WrapPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="SummaryAttentionModeLabel" Text="汇总气泡" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="SummaryAttentionModeCombo">
+                      <ComboBoxItem x:Name="SummaryAttentionOffItem" Content="关闭" Tag="off" />
+                      <ComboBoxItem x:Name="SummaryAttentionHaloItem" Content="柔和光晕" Tag="halo" />
+                      <ComboBoxItem x:Name="SummaryAttentionBubbleItem" Content="整只气泡呼吸" Tag="breathe" />
+                      <ComboBoxItem x:Name="SummaryAttentionFlowItem" Content="脉冲光流" Tag="flow" />
+                      <ComboBoxItem x:Name="SummaryAttentionFocusItem" Content="聚焦脉冲" Tag="focus" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="ListAttentionModeLabel" Text="列表任务项" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="ListAttentionModeCombo">
+                      <ComboBoxItem x:Name="ListAttentionOffItem" Content="关闭" Tag="off" />
+                      <ComboBoxItem x:Name="ListAttentionHaloItem" Content="柔和光晕" Tag="halo" />
+                      <ComboBoxItem x:Name="ListAttentionBubbleItem" Content="整项呼吸" Tag="breathe" />
+                      <ComboBoxItem x:Name="ListAttentionFlowItem" Content="脉冲光流" Tag="flow" />
+                      <ComboBoxItem x:Name="ListAttentionFocusItem" Content="聚焦脉冲" Tag="focus" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="TaskBubbleAttentionModeLabel" Text="独立任务气泡" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="TaskBubbleAttentionModeCombo">
+                      <ComboBoxItem x:Name="TaskBubbleAttentionOffItem" Content="关闭" Tag="off" />
+                      <ComboBoxItem x:Name="TaskBubbleAttentionHaloItem" Content="柔和光晕" Tag="halo" />
+                      <ComboBoxItem x:Name="TaskBubbleAttentionBubbleItem" Content="整只气泡呼吸" Tag="breathe" />
+                      <ComboBoxItem x:Name="TaskBubbleAttentionFlowItem" Content="脉冲光流" Tag="flow" />
+                      <ComboBoxItem x:Name="TaskBubbleAttentionFocusItem" Content="聚焦脉冲" Tag="focus" />
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock x:Name="AttentionDurationLabel" Text="提醒时长" FontSize="12" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="AttentionDurationCombo">
+                      <ComboBoxItem x:Name="Attention4Item" Content="4 秒" Tag="4" />
+                      <ComboBoxItem x:Name="Attention6Item" Content="6 秒" Tag="6" />
+                      <ComboBoxItem x:Name="Attention10Item" Content="10 秒" Tag="10" />
+                      <ComboBoxItem x:Name="Attention15Item" Content="15 秒" Tag="15" />
+                    </ComboBox>
+                  </StackPanel>
+                </WrapPanel>
+                <Expander Margin="0,12,0,2" Width="620" HorizontalAlignment="Left">
+                  <Expander.Header>
+                    <TextBlock x:Name="DotAttentionTitle" Text="状态点提醒（可与气泡叠加）" FontSize="14" FontWeight="SemiBold" />
+                  </Expander.Header>
+                  <Border Background="#080A84FF" BorderBrush="#180A84FF" BorderThickness="1" CornerRadius="14" Padding="12,10" Margin="0,8,0,0">
+                  <StackPanel>
+                    <TextBlock x:Name="DotAttentionHint" Text="闪烁节奏、亮度与轻微缩放呼吸互不冲突。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,3,0,8" />
+                    <CheckBox x:Name="DotAttentionEnabledCheck" Content="启用状态点提醒" Margin="0,0,0,8" />
+                    <WrapPanel>
+                      <StackPanel>
+                        <TextBlock x:Name="DotPatternLabel" Text="闪烁方式" FontSize="12" Foreground="{StaticResource Muted}" />
+                        <ComboBox x:Name="DotPatternCombo">
+                          <ComboBoxItem x:Name="DotPatternSoftItem" Content="柔和单闪" Tag="soft" />
+                          <ComboBoxItem x:Name="DotPatternHeartbeatItem" Content="双拍心跳" Tag="heartbeat" />
+                          <ComboBoxItem x:Name="DotPatternBeaconItem" Content="信标渐亮" Tag="beacon" />
+                        </ComboBox>
+                      </StackPanel>
+                      <StackPanel>
+                        <TextBlock x:Name="DotBrightnessLabel" Text="提醒亮度" FontSize="12" Foreground="{StaticResource Muted}" />
+                        <ComboBox x:Name="DotBrightnessCombo">
+                          <ComboBoxItem x:Name="DotBrightnessSubtleItem" Content="克制" Tag="subtle" />
+                          <ComboBoxItem x:Name="DotBrightnessBalancedItem" Content="均衡" Tag="balanced" />
+                          <ComboBoxItem x:Name="DotBrightnessBrightItem" Content="高亮" Tag="bright" />
+                        </ComboBox>
+                      </StackPanel>
+                      <StackPanel>
+                        <TextBlock x:Name="DotSpeedLabel" Text="提醒速度" FontSize="12" Foreground="{StaticResource Muted}" />
+                        <ComboBox x:Name="DotSpeedCombo">
+                          <ComboBoxItem x:Name="DotSpeedSlowItem" Content="慢" Tag="slow" />
+                          <ComboBoxItem x:Name="DotSpeedNormalItem" Content="正常" Tag="normal" />
+                          <ComboBoxItem x:Name="DotSpeedFastItem" Content="快" Tag="fast" />
+                        </ComboBox>
+                      </StackPanel>
+                    </WrapPanel>
+                    <CheckBox x:Name="DotBreathingCheck" Content="叠加轻微放大/缩小呼吸" Margin="0,8,0,0" />
+                  </StackPanel>
+                  </Border>
+                </Expander>
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+
+          <TabItem x:Name="MetricsTab" Header="Metrics">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Margin="8,14,8,22">
             <TextBlock x:Name="MetricsTitle" Text="显示内容  Metrics" FontSize="15" FontWeight="SemiBold" />
             <TextBlock x:Name="MetricsHint" Text="缓存输入属于输入的一部分，不会重复计入合计。" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,4,0,12" />
             <WrapPanel>
@@ -250,10 +705,23 @@
               <CheckBox x:Name="FieldUpdated" Content="更新时间" Tag="updated" />
               <CheckBox x:Name="FieldActiveTasks" Content="活跃任务" Tag="activeTasks" />
               <CheckBox x:Name="FieldWeeklyRemaining" Content="周额度剩余" Tag="weeklyRemaining" />
+              <CheckBox x:Name="FieldEstimatedCost" Content="API 成本估算" Tag="estimatedCost" />
             </WrapPanel>
 
-            <Border Height="1" Background="#10000000" Margin="0,10,0,20" />
+            <Border Height="1" Background="#10000000" Margin="0,16,0,14" />
+            <TextBlock x:Name="PricingSourceTitle" Text="估算价格来源" FontSize="15" FontWeight="SemiBold" />
+            <TextBlock x:Name="PricingSourceHint" Text="仅按公开 API 文本价格换算，不是订阅账单。留空会优先使用 usage tracker 的价格文件，再回退到内置快照。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,4,0,10" />
+            <TextBlock x:Name="PricingPathLabel" Text="自定义 pricing.json（可留空）" Foreground="{StaticResource Muted}" Margin="0,0,0,5" />
+            <TextBox x:Name="PricingPathText" MinHeight="36" Padding="10,7" />
+            <TextBlock x:Name="PricingStatusText" Text="" FontSize="11" Foreground="{StaticResource Muted}" Margin="2,6,0,0" TextTrimming="CharacterEllipsis" />
 
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+
+          <TabItem x:Name="AppearanceTab" Header="Appearance">
+            <ScrollViewer x:Name="AppearanceScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Margin="8,14,8,22">
             <TextBlock x:Name="AppearanceTitle" Text="外观微调  Appearance" FontSize="15" FontWeight="SemiBold" />
             <Grid Margin="0,12,0,0">
               <Grid.ColumnDefinitions>
@@ -273,9 +741,18 @@
               <Slider x:Name="RadiusSlider" Grid.Row="1" Grid.Column="1" Minimum="8" Maximum="36" TickFrequency="1" IsSnapToTickEnabled="False" IsMoveToPointEnabled="True" VerticalAlignment="Center" />
               <TextBlock x:Name="RadiusValue" Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" />
               <TextBlock x:Name="OpacityLabel" Grid.Row="2" Text="透明度" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
-              <Slider x:Name="OpacitySlider" Grid.Row="2" Grid.Column="1" Minimum="0.55" Maximum="1" TickFrequency="0.01" IsMoveToPointEnabled="True" VerticalAlignment="Center" />
+              <Slider x:Name="OpacitySlider" Grid.Row="2" Grid.Column="1" Minimum="0.15" Maximum="1" TickFrequency="0.01" IsMoveToPointEnabled="True" VerticalAlignment="Center" />
               <TextBlock x:Name="OpacityValue" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" />
             </Grid>
+            <StackPanel Margin="0,10,0,8">
+              <TextBlock x:Name="TransparencyModeLabel" Text="透明方式" FontSize="12" Foreground="{StaticResource Muted}" />
+              <ComboBox x:Name="TransparencyModeCombo" HorizontalAlignment="Left">
+                <ComboBoxItem x:Name="TransparencyUniformItem" Content="整体透明" Tag="uniform" />
+                <ComboBoxItem x:Name="TransparencyLayeredItem" Content="分层清晰" Tag="layered" />
+                <ComboBoxItem x:Name="TransparencyFocusItem" Content="智能聚焦" Tag="focus" />
+              </ComboBox>
+              <TextBlock x:Name="TransparencyHint" Text="分层模式会让背景和次要信息更透明，同时保留数字与状态；智能聚焦会在活动或提醒时自动提高可见度。" MaxWidth="620" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,4,0,0" />
+            </StackPanel>
             <WrapPanel Margin="0,12,0,0">
               <CheckBox x:Name="AlwaysOnTopCheck" Content="始终置顶" />
               <CheckBox x:Name="MousePassthroughCheck" Content="鼠标穿透" />
@@ -288,15 +765,15 @@
             <WrapPanel Margin="0,4,0,0">
               <StackPanel>
                 <TextBlock x:Name="BackgroundColorLabel" Text="背景 ARGB" FontSize="12" Foreground="{StaticResource Muted}" />
-                <StackPanel Orientation="Horizontal"><TextBox x:Name="BackgroundText" /><Button x:Name="BackgroundColorButton" Content="●" Width="38" Height="34" Padding="0" Margin="-8,6,12,0" /></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBox x:Name="BackgroundText" /><Button x:Name="BackgroundColorButton" Style="{StaticResource ColorSwatchButton}" Content="" Width="38" Height="34" Padding="0" Margin="-8,6,12,0" /></StackPanel>
               </StackPanel>
               <StackPanel>
                 <TextBlock x:Name="ForegroundColorLabel" Text="文字 ARGB" FontSize="12" Foreground="{StaticResource Muted}" />
-                <StackPanel Orientation="Horizontal"><TextBox x:Name="ForegroundText" /><Button x:Name="ForegroundColorButton" Content="●" Width="38" Height="34" Padding="0" Margin="-8,6,12,0" /></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBox x:Name="ForegroundText" /><Button x:Name="ForegroundColorButton" Style="{StaticResource ColorSwatchButton}" Content="" Width="38" Height="34" Padding="0" Margin="-8,6,12,0" /></StackPanel>
               </StackPanel>
               <StackPanel>
                 <TextBlock x:Name="AccentColorLabel" Text="强调色 ARGB" FontSize="12" Foreground="{StaticResource Muted}" />
-                <StackPanel Orientation="Horizontal"><TextBox x:Name="AccentText" /><Button x:Name="AccentColorButton" Content="●" Width="38" Height="34" Padding="0" Margin="-8,6,12,0" /></StackPanel>
+                <StackPanel Orientation="Horizontal"><TextBox x:Name="AccentText" /><Button x:Name="AccentColorButton" Style="{StaticResource ColorSwatchButton}" Content="" Width="38" Height="34" Padding="0" Margin="-8,6,12,0" /></StackPanel>
               </StackPanel>
             </WrapPanel>
             <Expander x:Name="AdvancedStatusExpander" Header="高级状态颜色（Advanced status colors）" Width="620" HorizontalAlignment="Left" Margin="0,16,0,0" FontWeight="SemiBold">
@@ -312,20 +789,24 @@
                 </WrapPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="180"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/></Grid.RowDefinitions>
-                  <TextBlock Grid.Row="0" Text="活动（Active）" VerticalAlignment="Center"/><TextBox x:Name="StatusActiveText" Grid.Row="0" Grid.Column="1"/><Button x:Name="StatusActiveButton" Grid.Row="0" Grid.Column="2" Content="●" Padding="0" Margin="0,6,0,4"/>
-                  <TextBlock Grid.Row="1" Text="监听（Listening）" VerticalAlignment="Center"/><TextBox x:Name="StatusListeningText" Grid.Row="1" Grid.Column="1"/><Button x:Name="StatusListeningButton" Grid.Row="1" Grid.Column="2" Content="●" Padding="0" Margin="0,6,0,4"/>
-                  <TextBlock Grid.Row="2" Text="空闲（Idle）" VerticalAlignment="Center"/><TextBox x:Name="StatusIdleText" Grid.Row="2" Grid.Column="1"/><Button x:Name="StatusIdleButton" Grid.Row="2" Grid.Column="2" Content="●" Padding="0" Margin="0,6,0,4"/>
-                  <TextBlock Grid.Row="3" Text="暂停（Paused）" VerticalAlignment="Center"/><TextBox x:Name="StatusPausedText" Grid.Row="3" Grid.Column="1"/><Button x:Name="StatusPausedButton" Grid.Row="3" Grid.Column="2" Content="●" Padding="0" Margin="0,6,0,4"/>
-                  <TextBlock Grid.Row="4" Text="读取错误（Error）" VerticalAlignment="Center"/><TextBox x:Name="StatusErrorText" Grid.Row="4" Grid.Column="1"/><Button x:Name="StatusErrorButton" Grid.Row="4" Grid.Column="2" Content="●" Padding="0" Margin="0,6,0,4"/>
-                  <TextBlock Grid.Row="5" Text="活动阈值秒数（Active seconds）" VerticalAlignment="Center"/><TextBox x:Name="ActiveSecondsText" Grid.Row="5" Grid.Column="1"/>
-                  <TextBlock Grid.Row="6" Text="空闲阈值秒数（Idle seconds）" VerticalAlignment="Center"/><TextBox x:Name="IdleSecondsText" Grid.Row="6" Grid.Column="1"/>
-                  <TextBlock Grid.Row="7" Text="错误保持秒数（Error hold）" VerticalAlignment="Center"/><TextBox x:Name="ErrorHoldSecondsText" Grid.Row="7" Grid.Column="1"/>
+                  <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/></Grid.RowDefinitions>
+                  <TextBlock Grid.Row="0" Text="活动（Active）" VerticalAlignment="Center"/><TextBox x:Name="StatusActiveText" Grid.Row="0" Grid.Column="1"/><Button x:Name="StatusActiveButton" Style="{StaticResource ColorSwatchButton}" Grid.Row="0" Grid.Column="2" Content="" Padding="0" Margin="0,6,0,4"/>
+                  <TextBlock Grid.Row="1" Text="监听（Listening）" VerticalAlignment="Center"/><TextBox x:Name="StatusListeningText" Grid.Row="1" Grid.Column="1"/><Button x:Name="StatusListeningButton" Style="{StaticResource ColorSwatchButton}" Grid.Row="1" Grid.Column="2" Content="" Padding="0" Margin="0,6,0,4"/>
+                  <TextBlock Grid.Row="2" Text="空闲（Idle）" VerticalAlignment="Center"/><TextBox x:Name="StatusIdleText" Grid.Row="2" Grid.Column="1"/><Button x:Name="StatusIdleButton" Style="{StaticResource ColorSwatchButton}" Grid.Row="2" Grid.Column="2" Content="" Padding="0" Margin="0,6,0,4"/>
+                  <TextBlock Grid.Row="3" Text="暂停（Paused）" VerticalAlignment="Center"/><TextBox x:Name="StatusPausedText" Grid.Row="3" Grid.Column="1"/><Button x:Name="StatusPausedButton" Style="{StaticResource ColorSwatchButton}" Grid.Row="3" Grid.Column="2" Content="" Padding="0" Margin="0,6,0,4"/>
+                  <TextBlock Grid.Row="4" Text="读取错误（Error）" VerticalAlignment="Center"/><TextBox x:Name="StatusErrorText" Grid.Row="4" Grid.Column="1"/><Button x:Name="StatusErrorButton" Style="{StaticResource ColorSwatchButton}" Grid.Row="4" Grid.Column="2" Content="" Padding="0" Margin="0,6,0,4"/>
+                  <TextBlock Grid.Row="5" Text="已完成（Completed）" VerticalAlignment="Center"/><TextBox x:Name="StatusCompletedText" Grid.Row="5" Grid.Column="1"/><Button x:Name="StatusCompletedButton" Style="{StaticResource ColorSwatchButton}" Grid.Row="5" Grid.Column="2" Content="" Padding="0" Margin="0,6,0,4"/>
+                  <TextBlock Grid.Row="6" Text="已中止（Aborted）" VerticalAlignment="Center"/><TextBox x:Name="StatusAbortedText" Grid.Row="6" Grid.Column="1"/><Button x:Name="StatusAbortedButton" Style="{StaticResource ColorSwatchButton}" Grid.Row="6" Grid.Column="2" Content="" Padding="0" Margin="0,6,0,4"/>
+                  <TextBlock Grid.Row="7" Text="活动阈值秒数（Active seconds）" VerticalAlignment="Center"/><TextBox x:Name="ActiveSecondsText" Grid.Row="7" Grid.Column="1"/>
+                  <TextBlock Grid.Row="8" Text="空闲阈值秒数（Idle seconds）" VerticalAlignment="Center"/><TextBox x:Name="IdleSecondsText" Grid.Row="8" Grid.Column="1"/>
+                  <TextBlock Grid.Row="9" Text="错误保持秒数（Error hold）" VerticalAlignment="Center"/><TextBox x:Name="ErrorHoldSecondsText" Grid.Row="9" Grid.Column="1"/>
                 </Grid>
               </StackPanel>
             </Expander>
-          </StackPanel>
-        </ScrollViewer>
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+        </TabControl>
 
         <Grid Grid.Row="2" Margin="26,10,20,14">
           <Button x:Name="ResetButton" Content="恢复默认" HorizontalAlignment="Left" />

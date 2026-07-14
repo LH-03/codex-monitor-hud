@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Monitor HUD Theme"
+  short_description: "Design and package shareable Monitor HUD themes"
+  default_prompt: "Use $create-monitor-hud-theme to design a polished, shareable theme for Codex Monitor HUD."

@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "codex-token-hud": {
+    "codex-monitor-hud": {
       "command": "node",
       "args": [
         "./src/mcp-server.mjs"

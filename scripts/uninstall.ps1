@@ -1,12 +1,12 @@
 param([switch]$RemoveSettings)
 
 $ErrorActionPreference = 'Stop'
-$pluginName = 'codex-token-strip'
+$pluginName = 'codex-monitor-hud'
 $targetRoot = Join-Path $HOME ('plugins\' + $pluginName)
 $marketplacePath = Join-Path $HOME '.agents\plugins\marketplace.json'
-$stateRoot = Join-Path $env:LOCALAPPDATA 'CodexTokenHUD'
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Codex Token HUD Settings.lnk'
-$startMenuFolder = Join-Path ([Environment]::GetFolderPath('Programs')) 'Codex Token HUD'
+$stateRoot = Join-Path $env:LOCALAPPDATA 'CodexMonitorHUD'
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Codex Monitor HUD Settings.lnk'
+$startMenuFolder = Join-Path ([Environment]::GetFolderPath('Programs')) 'Codex Monitor HUD'
 
 New-Item -ItemType Directory -Force -Path $stateRoot | Out-Null
 [IO.File]::WriteAllText((Join-Path $stateRoot 'exit.signal'), [DateTime]::UtcNow.ToString('O'))
@@ -31,4 +31,4 @@ if ($RemoveSettings -and (Test-Path -LiteralPath $stateRoot)) {
 if (Test-Path -LiteralPath $desktopShortcut) { Remove-Item -LiteralPath $desktopShortcut -Force }
 if (Test-Path -LiteralPath $startMenuFolder) { Remove-Item -LiteralPath $startMenuFolder -Recurse -Force }
 
-Write-Output 'Codex Token HUD was removed from the personal marketplace.'
+Write-Output 'Codex Monitor HUD was removed from the personal marketplace.'

@@ -1,9 +1,9 @@
 {
-  "name": "codex-token-strip",
-  "version": "1.3.1+codex.20260714170852",
-  "description": "A polished, configurable token HUD for Codex Desktop on Windows.",
+  "name": "codex-monitor-hud",
+  "version": "2.0.0-preview",
+  "description": "A lightweight real-time multi-task HUD for Codex Desktop on Windows.",
   "author": {
-    "name": "Codex Token HUD Contributors"
+    "name": "Codex Monitor HUD Contributors"
   },
   "license": "MIT",
   "keywords": [
@@ -11,32 +11,43 @@
     "token-usage",
     "hud",
     "windows",
-    "local-first"
+    "local-first",
+    "multi-task",
+    "pro-workflow"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Codex Token HUD",
-    "shortDescription": "A beautiful, configurable live Token HUD for Codex.",
-    "longDescription": "Shows Token counters, optional observed remaining allowance, model and context information in a customizable local overlay with six independent bubble layouts and concurrent task monitoring.",
-    "developerName": "Codex Token HUD Contributors",
+    "displayName": "Codex Monitor HUD",
+    "shortDescription": "Lightweight live monitoring for concurrent Codex tasks.",
+    "longDescription": "A local-first real-time HUD for high-concurrency Codex workflows. Keep one compact summary, expand a stable numbered task list, split selected tasks into independent bubbles, or opt in to targeted CODEX-labeled mid-task notices while Codex keeps working in the background.",
+    "developerName": "Codex Monitor HUD Contributors",
     "category": "Productivity",
     "capabilities": [
       "Interactive"
     ],
     "defaultPrompt": [
-      "Open Codex Token HUD settings",
-      "Explain the Token HUD accounting",
-      "Repair or restart Codex Token HUD"
+      "Open Codex Monitor HUD settings",
+      "Explain and configure proactive Codex notices",
+      "Explain the Monitor HUD accounting",
+      "Repair or restart Codex Monitor HUD"
     ],
     "brandColor": "#0A84FF",
     "composerIcon": "./assets/icon.svg",
     "screenshots": [
+      "./assets/hud-multitask.png",
+      "./assets/hud-multitask-en.png",
       "./assets/hud-frost.png",
       "./assets/settings.png",
+      "./assets/settings-multitask.png",
       "./assets/color-picker.png",
       "./assets/hud-cards.png",
-      "./assets/settings-en.png"
+      "./assets/settings-en.png",
+      "./assets/settings-multitask-en.png",
+      "./assets/settings-reminders.png",
+      "./assets/settings-reminders-en.png",
+      "./assets/settings-metrics.png",
+      "./assets/settings-metrics-en.png"
     ]
   }
 }
