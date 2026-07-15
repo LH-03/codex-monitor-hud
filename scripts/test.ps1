@@ -132,6 +132,7 @@ if ([int]$defaultConfig.multiTask.maxSplitBubbles -ne 6 -or [string]$defaultConf
 if ([string]$defaultConfig.multiTask.listStyle -ne 'rows' -or [string]$defaultConfig.multiTask.listDensity -ne 'compact' -or [string]$defaultConfig.attention.summaryMode -ne 'halo' -or [string]$defaultConfig.attention.listMode -ne 'flow' -or [string]$defaultConfig.attention.taskBubbleMode -ne 'flow' -or [string]$defaultConfig.transparencyMode -ne 'uniform') { throw 'List density, per-surface attention or transparency defaults are missing.' }
 if (-not [bool]$defaultConfig.attention.dotEnabled -or -not [bool]$defaultConfig.attention.dotBreathing -or [string]$defaultConfig.attention.dotPattern -ne 'heartbeat' -or [string]$defaultConfig.attention.dotBrightness -ne 'balanced') { throw 'Independent status-dot reminder defaults are missing.' }
 if ([bool]$defaultConfig.attention.onSettled -or [int]$defaultConfig.attention.completionGraceSeconds -ne 8) { throw 'Low-false-positive reminder defaults are missing.' }
+if ([int]$defaultConfig.statusTiming.terminalHoldSeconds -ne 120) { throw 'Completed-task retention must default to two minutes.' }
 if ([string]$defaultConfig.themeStyle.surface -ne 'solid' -or [string]$defaultConfig.themeStyle.shadow -ne 'soft' -or [double]$defaultConfig.themeStyle.statusDotSize -ne 8.0) { throw 'Rich theme-style defaults are missing.' }
 if ([bool]$defaultConfig.fields.estimatedCost -or [bool]$defaultConfig.multiTask.listFields.estimatedCost -or [bool]$defaultConfig.multiTask.bubbleFields.estimatedCost) { throw 'API-equivalent cost must remain opt-in on every surface.' }
 if ([bool]$defaultConfig.agentNotifications.enabled -or [string]$defaultConfig.agentNotifications.permission -ne 'text') { throw 'Codex proactive notifications must remain opt-in with text-only permission by default.' }
@@ -143,6 +144,7 @@ $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 's
 if ($mcpText -notmatch 'monitor_hud_disable_click_through' -or $mainText -notmatch 'passthrough-off\.signal') { throw 'Click-through recovery tool or signal is missing.' }
 if ($mainText -notmatch 'System\.Windows\.Forms\.NotifyIcon' -or $mainText -notmatch 'Disable-HudMousePassthrough' -or $mainText -notmatch '\$trayZh\.disableMousePassthrough' -or $mainText -notmatch '\$trayIcon\.Text') { throw 'Localized click-through tray recovery entry is missing.' }
 if ($settingsXaml -notmatch 'MousePassthroughCheck' -or $settingsXaml -notmatch 'TickFrequency="0\.1"' -or $settingsXaml -notmatch 'OpacitySlider[^>]+Minimum="0\.15"') { throw 'Click-through setting or low/smooth opacity controls are missing.' }
+if ($settingsXaml -notmatch 'TaskRetentionCombo' -or $settingsXaml -notmatch 'Retention1800Item' -or $mainText -match 'TerminalSilent.*return \$false' -or (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch 'terminalHoldSeconds = \[Math\]::Max\(0, \[Math\]::Min\(1800') { throw 'Completed-task retention setting or silent-completion hold is missing.' }
 foreach ($required in @('ThemeWorkshopDropZone','ThemeImportButton','AttentionHelp','ToolTipService.InitialShowDelay')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Polished settings affordance '$required' is missing." } }
 foreach ($required in @('MultiTaskTab','DisplayModeCombo','ListStyleCombo','ListDensityCombo','TaskNameModeCombo','MaxSplitCombo','AutoSplitCheck','ListFieldModel','BubbleFieldModel','PositionCustomItem','SummaryAttentionModeCombo','ListAttentionModeCombo','TaskBubbleAttentionModeCombo','SummaryAttentionFlowItem','SummaryAttentionFocusItem','DotAttentionEnabledCheck','DotPatternCombo','DotBrightnessCombo','DotSpeedCombo','DotBreathingCheck','TransparencyModeCombo')) {
     if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Multi-task setting '$required' is missing." }
@@ -159,6 +161,12 @@ if ($mainText -notmatch 'lastUpdateAnimationSignature' -or $mainText -notmatch '
 $hudXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\HudWindow.xaml')
 $bubbleXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\TaskBubbleWindow.xaml')
 if ($hudXaml -notmatch 'HudListToggleButton' -or $bubbleXaml -notmatch 'TaskBubbleResizeThumb') { throw 'Custom list toggle or task-bubble resize affordance is missing.' }
+foreach ($windowXaml in @($hudXaml,$bubbleXaml,$settingsXaml)) {
+    foreach ($required in @('UseLayoutRounding="True"','SnapsToDevicePixels="True"','TextOptions.TextFormattingMode="Display"','TextOptions.TextRenderingMode="ClearType"')) {
+        if ($windowXaml -notmatch [regex]::Escape($required)) { throw "High-DPI text rendering option '$required' is missing." }
+    }
+}
+if ($hudXaml -match 'DropShadowEffect' -or $bubbleXaml -match 'DropShadowEffect' -or $mainText -notmatch 'SetProcessDpiAwarenessContext') { throw 'Persistent HUD shadow removal or per-monitor DPI awareness is missing.' }
 foreach ($required in @('TaskBubbleDismissButton','Dismiss-HudTask','Dismissed = $false','state.Dismissed = $false','session_index.jsonl','thread_name','Refresh-HudSessionIndex')) { if ($bubbleXaml -notmatch [regex]::Escape($required) -and $mainText -notmatch [regex]::Escape($required)) { throw "Task dismissal or official thread-title path '$required' is missing." } }
 foreach ($localeFile in @('locales\zh-CN.json','locales\en.json','locales\symbols.json')) { if ((Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root $localeFile)) -notmatch 'noActiveTasks') { throw "Deleted/no-active task copy is missing from '$localeFile'." } }
 $shortcutText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\create-shortcuts.ps1')
@@ -265,7 +273,8 @@ if (@($activeNumbers.Keys | Sort-Object -Unique).Count -ne 64) { throw 'Visible 
 $activeFiles = @(Get-ActiveHudSessionFiles (Join-Path $HOME '.codex\sessions') 60)
 if ($activeFiles.Count -lt 1) { throw 'Active session discovery self-test failed.' }
 $capRoot = Join-Path $root '.test-output\session-cap'
-$capDay = Join-Path $capRoot (Get-Date).ToString('yyyy\MM\dd')
+$capNow = Get-Date
+$capDay = Join-Path (Join-Path (Join-Path $capRoot $capNow.Year.ToString('0000')) $capNow.Month.ToString('00')) $capNow.Day.ToString('00')
 try {
     if (Test-Path -LiteralPath $capRoot) { Remove-Item -LiteralPath $capRoot -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $capDay | Out-Null
@@ -279,7 +288,8 @@ $resumedRoot = Join-Path $root '.test-output\resumed-old-thread'
 try {
     if (Test-Path -LiteralPath $resumedRoot) { Remove-Item -LiteralPath $resumedRoot -Recurse -Force }
     $oldFolder = Join-Path $resumedRoot '2025\01\02'
-    $todayFolder = Join-Path $resumedRoot (Get-Date).ToString('yyyy\MM\dd')
+    $resumedNow = Get-Date
+    $todayFolder = Join-Path (Join-Path (Join-Path $resumedRoot $resumedNow.Year.ToString('0000')) $resumedNow.Month.ToString('00')) $resumedNow.Day.ToString('00')
     New-Item -ItemType Directory -Force -Path $oldFolder,$todayFolder | Out-Null
     $oldResumed = Join-Path $oldFolder 'old-but-resumed.jsonl'
     $todayIdle = Join-Path $todayFolder 'today-but-idle.jsonl'
@@ -291,6 +301,40 @@ try {
     if ($resumedFiles.Count -ne 1 -or [string]$resumedFiles[0].FullName -ne [string]$oldResumed) { throw 'Resumed old-date conversation discovery self-test failed.' }
 } finally {
     if (Test-Path -LiteralPath $resumedRoot) { Remove-Item -LiteralPath $resumedRoot -Recurse -Force }
+}
+
+# Regression for GitHub issue #2: date-format shortcuts once produced folders
+# such as 2026M7d15 and then fell back to a single session. Discovery must use
+# the real yyyy\MM\dd layout and retain every recent session across old folders.
+$multiDateRoot = Join-Path $root '.test-output\multi-date-active-tasks'
+try {
+    if (Test-Path -LiteralPath $multiDateRoot) { Remove-Item -LiteralPath $multiDateRoot -Recurse -Force }
+    $sessionFolders = @(
+        (Join-Path $multiDateRoot '2024\01\02'),
+        (Join-Path $multiDateRoot '2025\12\31'),
+        (Join-Path $multiDateRoot '2026\07\14'),
+        (Join-Path $multiDateRoot '2026\07\15')
+    )
+    $expectedPaths = @()
+    for ($index = 0; $index -lt $sessionFolders.Count; $index++) {
+        $folder = $sessionFolders[$index]
+        New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        $sessionPath = Join-Path $folder ('synthetic-task-{0}.jsonl' -f ($index + 1))
+        [IO.File]::WriteAllText($sessionPath,($contextRecord + "`n" + $rateRecord),(New-Object Text.UTF8Encoding($false)))
+        [IO.File]::SetLastWriteTimeUtc($sessionPath,[DateTime]::UtcNow.AddMinutes(-($index * 5)))
+        $expectedPaths += $sessionPath
+    }
+
+    $issueFiles = @(Get-ActiveHudSessionFiles $multiDateRoot 30)
+    if ($issueFiles.Count -ne 4) { throw ('Multi-date active-session discovery regression failed: expected 4, found ' + $issueFiles.Count) }
+    $actualPaths = @($issueFiles | ForEach-Object { $_.FullName } | Sort-Object)
+    if ((Compare-Object @($expectedPaths | Sort-Object) $actualPaths).Count -ne 0) { throw 'Multi-date active-session discovery returned the wrong files.' }
+
+    $issueSnapshots = @($issueFiles | ForEach-Object { Get-LatestHudSnapshot $_ } | Where-Object { $null -ne $_ })
+    $issueAggregate = Merge-HudSnapshots $issueSnapshots $locale
+    if ($issueSnapshots.Count -ne 4 -or $null -eq $issueAggregate -or $issueAggregate.ActiveTasks -ne 4) { throw 'Multi-date active-task aggregate regression failed.' }
+} finally {
+    if (Test-Path -LiteralPath $multiDateRoot) { Remove-Item -LiteralPath $multiDateRoot -Recurse -Force }
 }
 
 Write-Output 'PowerShell syntax: OK'
@@ -313,3 +357,4 @@ Write-Output 'Native taskbar, tray and cache-busted shortcut icon: OK'
 Write-Output 'Stable numbering stress: OK (10,000 churn cycles, 64 visible tasks)'
 Write-Output ("Active session discovery and 64-file cap: OK ({0} live file(s))" -f $activeFiles.Count)
 Write-Output 'Resumed old-date conversation discovery: OK'
+Write-Output 'Multi-date active task discovery: OK (GitHub issue #2 regression)'

@@ -9,7 +9,11 @@
         SizeToContent="WidthAndHeight"
         ShowInTaskbar="False"
         ShowActivated="False"
-        Topmost="True">
+        Topmost="True"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType">
   <Window.Resources>
     <Style x:Key="HudIconButton" TargetType="{x:Type Button}">
       <Setter Property="Width" Value="30" />
@@ -90,14 +94,6 @@
             Padding="16,11"
             BorderThickness="1"
             SnapsToDevicePixels="True">
-      <Border.Effect>
-        <DropShadowEffect x:Name="HudShadow"
-                          BlurRadius="28"
-                          ShadowDepth="8"
-                          Direction="270"
-                          Opacity="0.22"
-                          Color="#26000000" />
-      </Border.Effect>
       <StackPanel>
         <DockPanel LastChildFill="True">
           <Ellipse x:Name="StatusDot"

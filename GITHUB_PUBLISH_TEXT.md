@@ -1,4 +1,4 @@
-# GitHub publishing text for v2.0.0
+# GitHub publishing text for v2.0.1-preview
 
 ## Repository name
 
@@ -10,32 +10,32 @@
 
 ## Commit message
 
-`Rename project to Codex Monitor HUD and release v2.0.0`
+`Release 2.0.1-preview: task retention and Windows display fixes`
 
 ## Release tag
 
-`v2.0.0`
+`v2.0.1-preview`
 
 ## Release title
 
-`Codex Monitor HUD v2.0.0`
+`Codex Monitor HUD v2.0.1-preview`
 
 ## Release body
 
-Copy the contents of `GITHUB_RELEASE_NOTES.md`.
+Copy the contents of `RELEASE_NOTES_2.0.1-preview.md`.
 
 ## Suggested Chinese announcement
 
 ```text
-Codex Monitor HUD v2.0.0 已发布。
+Codex Monitor HUD v2.0.1-preview 已发布。
 
-这是一个面向 Windows 版 Codex Desktop 的轻量实时监控 HUD，不是事后统计面板。v2 完成了产品、插件、MCP、Skill、运行目录和 GitHub 仓库的统一改名，并保留汇总、任务列表、独立气泡和可叠加提醒。v2 是全新安装身份，不会迁移旧插件设置；所有数据仍在本机处理。
+这是一个面向 Windows 版 Codex Desktop 的轻量实时监控 HUD，不是事后统计面板。本次 preview 让完成后的对话按可配置时长留在 HUD 中，改进混合 DPI 屏幕上的文字清晰度，并移除常驻 HUD 与独立气泡的投影。默认仍为本地处理、无遥测；不会读取提示词、回复或工具输出。
 ```
 
 ## Suggested English announcement
 
 ```text
-Codex Monitor HUD v2.0.0 is a fresh product identity for lightweight real-time awareness of background and concurrent Codex tasks. It keeps summary, task-list, split-bubble and stackable reminder workflows, while making the product, plugin, MCP, Skill, runtime paths and repository name consistent. Legacy v1 settings are not migrated.
+Codex Monitor HUD v2.0.1-preview improves lightweight real-time awareness of background and concurrent Codex tasks on Windows. Finished conversations can remain visible for a user-selected period, mixed-DPI text stays sharper, and persistent HUD surfaces no longer cast a shadow over other applications. Processing remains local and does not read prompts, replies, or tool output.
 ```
 
 ## Screenshot order

@@ -1,5 +1,13 @@
 # Sensitive information scan
 
+## 2.0.1-preview release scan - 2026-07-15
+
+The release staging package was assembled from tracked public files plus the new public release notes only. It contains 85 files.
+
+- Excluded local settings, sessions, databases, logs, `.test-output`, archives and generated artifacts through `.gitignore` and package staging rules.
+- No maintainer path, user profile path or credential-shaped value was found in the staged package.
+- The package checksum is published alongside the ZIP; test and runtime fixtures use synthetic values only.
+
 ## Unreleased proactive-notice and resumed-thread scan - 2026-07-15
 
 Scanned 80 maintenance-source files after proactive Codex notices, bilingual settings screenshots, API-equivalent cost documentation and all-date resumed-thread discovery. Generated `.test-output` files and binary image contents were excluded from text matching.

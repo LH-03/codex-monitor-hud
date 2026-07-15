@@ -48,9 +48,16 @@ public static class HudNativeMethods {
     [DllImport("user32.dll", SetLastError=true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool DestroyIcon(IntPtr icon);
+    [DllImport("user32.dll", SetLastError=true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
 }
 '@
 }
+
+# Per-monitor V2 prevents Windows from bitmap-scaling the transparent HUD when
+# it moves between displays with different scale factors, which softens text.
+try { [void][HudNativeMethods]::SetProcessDpiAwarenessContext([IntPtr](-4)) } catch { }
 
 # A dedicated AppUserModelID prevents Windows from grouping the settings window
 # under powershell.exe and selecting the PowerShell taskbar icon for the group.
@@ -250,16 +257,6 @@ function New-HudSurfaceBrush {
     return New-HudRoleBrush ([string]$config.background) '#EAFFFFFF' 'background'
 }
 
-function Apply-HudShadowStyle {
-    param($Effect)
-    if ($null -eq $Effect) { return }
-    switch ([string]$config.themeStyle.shadow) {
-        'none' { $Effect.Opacity = 0.0; $Effect.BlurRadius = 0; $Effect.ShadowDepth = 0 }
-        'deep' { $Effect.Opacity = 0.34; $Effect.BlurRadius = 38; $Effect.ShadowDepth = 13 }
-        default { $Effect.Opacity = 0.22; $Effect.BlurRadius = 28; $Effect.ShadowDepth = 9 }
-    }
-}
-
 function New-AuroraBrush {
     $brush = New-Object Windows.Media.LinearGradientBrush
     $brush.StartPoint = New-Object Windows.Point(0, 0)
@@ -327,7 +324,6 @@ $hud = Load-XamlWindow (Join-Path $PSScriptRoot 'HudWindow.xaml')
 Set-HudWindowIcon $hud
 Write-HudDebug 'HUD XAML loaded.'
 $hudShell = Find-Control $hud 'HudShell'
-$hudShadow = Find-Control $hud 'HudShadow'
 $statusDot = Find-Control $hud 'StatusDot'
 $metricsPanel = Find-Control $hud 'MetricsPanel'
 $taskListToggleButton = Find-Control $hud 'TaskListToggleButton'
@@ -349,6 +345,7 @@ $numberCombo = Find-Control $settings 'NumberCombo'
 $positionCombo = Find-Control $settings 'PositionCombo'
 $monitorScopeCombo = Find-Control $settings 'MonitorScopeCombo'
 $activeWindowCombo = Find-Control $settings 'ActiveWindowCombo'
+$taskRetentionCombo = Find-Control $settings 'TaskRetentionCombo'
 $settingsTabs = Find-Control $settings 'SettingsTabs'
 $appearanceScrollViewer = Find-Control $settings 'AppearanceScrollViewer'
 $multiTaskScrollViewer = Find-Control $settings 'MultiTaskScrollViewer'
@@ -461,7 +458,7 @@ foreach ($key in @('Input','Cached','Uncached','Output','Reasoning','CallTotal',
 $settingsTextControls = @{}
 foreach ($name in @(
     'SettingsSubtitle','PresetsTitle','PresetsHint','ThemeWorkshopTitle','ThemeWorkshopHint','LanguageLayoutTitle','DisplayLanguageLabel','BubbleStyleLabel',
-    'NumberFormatLabel','PositionLabel','MonitorScopeLabel','ActiveWindowLabel','MetricsTitle','MetricsHint','PricingSourceTitle','PricingSourceHint','PricingPathLabel',
+    'NumberFormatLabel','PositionLabel','MonitorScopeLabel','ActiveWindowLabel','TaskRetentionLabel','MetricsTitle','MetricsHint','PricingSourceTitle','PricingSourceHint','PricingPathLabel',
     'AppearanceTitle','FontSizeLabel','RadiusLabel','OpacityLabel','BackgroundColorLabel','ForegroundColorLabel','AccentColorLabel',
     'MousePassthroughHint','StatusPalettesTitle','StatusPalettesHint','MultiTaskTitle','MultiTaskExplanation',
     'DisplayModeLabel','TaskNameModeLabel','MaxSplitLabel','NumberCooldownLabel','ListFieldsTitle','TaskBubbleFieldsTitle','TaskBubbleResizeHint',
@@ -478,7 +475,7 @@ foreach ($name in @(
         'LanguageZhItem','LanguageEnItem','LanguageSymbolsItem','LayoutChipsItem','LayoutCompactItem','LayoutInlineItem','LayoutOutlineItem','LayoutCardsItem','LayoutStackedItem',
     'NumberExactItem','NumberCompactItem','NumberAutoItem','PositionCustomItem','PositionTopRightItem','PositionTopCenterItem','PositionTopLeftItem',
     'PositionBottomRightItem','PositionBottomCenterItem','PositionBottomLeftItem','MonitorLatestItem','MonitorAggregateItem',
-    'ActiveWindow5Item','ActiveWindow15Item','ActiveWindow30Item','ActiveWindow60Item',
+    'ActiveWindow5Item','ActiveWindow15Item','ActiveWindow30Item','ActiveWindow60Item','Retention0Item','Retention30Item','Retention60Item','Retention120Item','Retention300Item','Retention600Item','Retention1800Item',
     'StatusPaletteDefault','StatusPaletteIntuitive','StatusPaletteColorblind','StatusPaletteCalm',
     'ModeSummaryItem','ModeListItem','ModeSplitItem','NameHoverItem','NameAlwaysItem','NameHiddenItem',
     'Cooldown30Item','Cooldown120Item','Cooldown300Item','Cooldown600Item',
@@ -569,7 +566,7 @@ function Apply-SettingsLanguage {
     $map = @{
         SettingsSubtitle='settingsSubtitle'; PresetsTitle='presetsTitle'; PresetsHint='presetsHint'; ThemeWorkshopTitle='themeWorkshopTitle'; ThemeWorkshopHint='themeWorkshopHint';
         LanguageLayoutTitle='languageLayoutTitle'; DisplayLanguageLabel='displayLanguage'; BubbleStyleLabel='bubbleStyle';
-        NumberFormatLabel='numberFormat'; PositionLabel='position'; MonitorScopeLabel='monitorScope'; ActiveWindowLabel='activeWindow';
+        NumberFormatLabel='numberFormat'; PositionLabel='position'; MonitorScopeLabel='monitorScope'; ActiveWindowLabel='activeWindow'; TaskRetentionLabel='taskRetention';
         MetricsTitle='metricsTitle'; MetricsHint='metricsHint'; PricingSourceTitle='pricingSourceTitle'; PricingSourceHint='pricingSourceHint'; PricingPathLabel='pricingPathLabel'; AppearanceTitle='appearanceTitle'; FontSizeLabel='fontSize';
         RadiusLabel='cornerRadius'; OpacityLabel='opacity'; BackgroundColorLabel='backgroundColor';
         ForegroundColorLabel='foregroundColor'; AccentColorLabel='accentColor'; MousePassthroughHint='mousePassthroughHint';
@@ -601,6 +598,7 @@ function Apply-SettingsLanguage {
         PositionBottomRightItem='positionBottomRight'; PositionBottomCenterItem='positionBottomCenter'; PositionBottomLeftItem='positionBottomLeft';
         MonitorLatestItem='monitorLatest'; MonitorAggregateItem='monitorAggregate';
         ActiveWindow5Item='minutes5'; ActiveWindow15Item='minutes15'; ActiveWindow30Item='minutes30'; ActiveWindow60Item='minutes60';
+        Retention0Item='retentionOff'; Retention30Item='seconds30'; Retention60Item='minutes1'; Retention120Item='minutes2'; Retention300Item='minutes5'; Retention600Item='minutes10'; Retention1800Item='minutes30';
         StatusPaletteDefault='statusPaletteDefault'; StatusPaletteIntuitive='statusPaletteIntuitive';
         StatusPaletteColorblind='statusPaletteColorblind'; StatusPaletteCalm='statusPaletteCalm';
         ModeSummaryItem='modeSummary'; ModeListItem='modeList'; ModeSplitItem='modeSplit';
@@ -988,7 +986,6 @@ function Test-HudUserTaskState {
     if ($null -eq $State -or $null -eq $State.Snapshot) { return $false }
     if ($null -ne $State.PSObject.Properties['IsInternalSession'] -and [bool]$State.IsInternalSession) { return $false }
     if ($null -ne $State.PSObject.Properties['Dismissed'] -and [bool]$State.Dismissed) { return $false }
-    if ($null -ne $State.PSObject.Properties['TerminalSilent'] -and [bool]$State.TerminalSilent) { return $false }
     if (-not [string]::IsNullOrWhiteSpace([string]$State.TerminalStatus) -and $State.TerminalAt -ne [DateTimeOffset]::MinValue) {
         $holdSeconds = [Math]::Max([double]$config.statusTiming.terminalHoldSeconds, [double]$config.attention.durationSeconds)
         if (([DateTimeOffset]::Now - $State.TerminalAt).TotalSeconds -gt $holdSeconds -and $State.AgentNoticeUntil -le [DateTimeOffset]::Now) { return $false }
@@ -1329,7 +1326,6 @@ function Update-TaskBubble {
         $entry.Shell.BorderBrush = New-HudRoleBrush ([string]$config.border) '#22FFFFFF' 'decoration'
         $entry.Shell.BorderThickness = New-Object Windows.Thickness([double]$config.themeStyle.borderWidth)
     }
-    if ($entry.Shell.Effect -is [Windows.Media.Effects.DropShadowEffect]) { Apply-HudShadowStyle $entry.Shell.Effect }
     $entry.Dot.Width = [double]$config.themeStyle.statusDotSize
     $entry.Dot.Height = [double]$config.themeStyle.statusDotSize
     $entry.Dot.Fill = New-HudBrush ([string]$config.statusColors.$status) '#FF8E8E93'
@@ -1856,7 +1852,6 @@ function Apply-HudAppearance {
     $script:locale = Get-HudLocale $paths ([string]$config.language)
     $hud.Topmost = [bool]$config.alwaysOnTop
     try { $hud.FontFamily = New-Object Windows.Media.FontFamily([string]$config.themeStyle.fontFamily) } catch { }
-    Apply-HudShadowStyle $hudShadow
     Set-HudMousePassthrough ([bool]$config.mousePassthrough)
     $hud.Opacity = if ([string]$config.transparencyMode -eq 'uniform') { [double]$config.opacity } else { 1.0 }
     $hudShell.CornerRadius = New-Object Windows.CornerRadius([double]$config.cornerRadius)
@@ -2228,6 +2223,7 @@ function Sync-ControlsFromConfig {
         Select-ComboTag $positionCombo ([string]$config.position)
         Select-ComboTag $monitorScopeCombo ([string]$config.monitorScope)
         Select-ComboTag $activeWindowCombo ([string][int]$config.activeWindowMinutes)
+        Select-ComboTag $taskRetentionCombo ([string][int]$config.statusTiming.terminalHoldSeconds)
         Select-ComboTag $displayModeCombo ([string]$config.multiTask.displayMode)
         Select-ComboTag $listStyleCombo ([string]$config.multiTask.listStyle)
         Select-ComboTag $listDensityCombo ([string]$config.multiTask.listDensity)
@@ -2333,6 +2329,7 @@ function Apply-ControlsToConfig {
     $position = Get-ComboTag $positionCombo
     $monitorScope = Get-ComboTag $monitorScopeCombo
     $activeWindow = Get-ComboTag $activeWindowCombo
+    $taskRetention = Get-ComboTag $taskRetentionCombo
     $displayMode = Get-ComboTag $displayModeCombo
     $listStyle = Get-ComboTag $listStyleCombo
     $listDensity = Get-ComboTag $listDensityCombo
@@ -2360,6 +2357,7 @@ function Apply-ControlsToConfig {
     if ($position) { $config.position = $position }
     if ($monitorScope) { $config.monitorScope = $monitorScope }
     if ($activeWindow) { $config.activeWindowMinutes = [int]$activeWindow }
+    if ($taskRetention) { $config.statusTiming.terminalHoldSeconds = [int]$taskRetention }
     if ($displayMode) { $config.multiTask.displayMode = $displayMode }
     if ($listStyle) { $config.multiTask.listStyle = $listStyle }
     if ($listDensity) { $config.multiTask.listDensity = $listDensity }
@@ -2611,7 +2609,7 @@ function Read-AppendedSessionData {
                 $State.TerminalStatus = 'completed'
                 $State.TerminalAt = [DateTimeOffset]$item.Timestamp
                 $State.TerminalSilent = $true
-                Write-HudDebug ('Silent completion ignored: ' + [string]$State.Workspace)
+                Write-HudDebug ('Silent completion retained: ' + [string]$State.Workspace)
                 $updated = $true
             } elseif ($item.Kind -eq 'aborted') {
                 Clear-PendingTaskCompletion $State
@@ -2785,7 +2783,7 @@ function Apply-SliderPreview {
 }
 
 $liveControls = @(
-    $languageCombo,$layoutCombo,$numberCombo,$positionCombo,$monitorScopeCombo,$activeWindowCombo,
+    $languageCombo,$layoutCombo,$numberCombo,$positionCombo,$monitorScopeCombo,$activeWindowCombo,$taskRetentionCombo,
     $displayModeCombo,$listStyleCombo,$listDensityCombo,$taskNameModeCombo,$maxSplitCombo,$numberCooldownCombo,
     $summaryAttentionModeCombo,$listAttentionModeCombo,$taskBubbleAttentionModeCombo,$dotPatternCombo,$dotBrightnessCombo,$dotSpeedCombo,$attentionDurationCombo,$transparencyModeCombo,
     $agentNotificationPermissionCombo,$agentNotificationModeCombo,$agentNotificationIntensityCombo,$agentNotificationDurationCombo,

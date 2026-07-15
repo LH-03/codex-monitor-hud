@@ -177,7 +177,7 @@ function handle(request) {
       result: {
         protocolVersion: params.protocolVersion || "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "codex-monitor-hud", version: "2.0.0" },
+        serverInfo: { name: "codex-monitor-hud", version: "2.0.1-preview" },
       },
     };
   }

@@ -1,5 +1,12 @@
 # Test results
 
+## 2.0.1-preview release validation - 2026-07-15
+
+- Added a synthetic four-date active-task regression for GitHub issue #2; it verifies aggregation across date folders without raising the 64-file discovery cap.
+- Updated the isolated runtime fixture so its 61 user tasks plus three filtering fixtures stay within that cap. List and split-bubble runs passed with five synthetic tasks and one churn cycle each.
+- Verified configurable completed-task retention, including silent completion without attention, and the return to normal monitoring after a new turn.
+- Verified the Per-Monitor DPI v2 and shadow-free HUD changes through the source suite, XAML checks and installed-copy parity. Generated test output contains synthetic values only.
+
 ## Unreleased post-v2 local acceptance - 2026-07-15
 
 - Test build `2.0.0-preview` removes the per-render 58%-to-100% whole-window fade that made frequent Token updates look like the HUD was repeatedly disappearing and reopening. A 16-record high-frequency usage burst now produces zero additional update animations; meaningful task/status transitions retain a subtle 96%-to-100% fade.

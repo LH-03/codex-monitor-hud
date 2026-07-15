@@ -11,7 +11,11 @@
         AllowsTransparency="True"
         Background="Transparent"
         ResizeMode="CanResizeWithGrip"
-        ShowInTaskbar="True">
+        ShowInTaskbar="True"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType">
   <Window.Resources>
     <SolidColorBrush x:Key="Ink" Color="#FF111827" />
     <SolidColorBrush x:Key="Muted" Color="#FF667085" />
@@ -439,6 +443,18 @@
                   <ComboBoxItem x:Name="ActiveWindow15Item" Content="15 分钟" Tag="15" />
                   <ComboBoxItem x:Name="ActiveWindow30Item" Content="30 分钟" Tag="30" />
                   <ComboBoxItem x:Name="ActiveWindow60Item" Content="60 分钟" Tag="60" />
+                </ComboBox>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock x:Name="TaskRetentionLabel" Text="结束后保留" FontSize="12" Foreground="{StaticResource Muted}" />
+                <ComboBox x:Name="TaskRetentionCombo">
+                  <ComboBoxItem x:Name="Retention0Item" Content="立即隐藏" Tag="0" />
+                  <ComboBoxItem x:Name="Retention30Item" Content="30 秒" Tag="30" />
+                  <ComboBoxItem x:Name="Retention60Item" Content="1 分钟" Tag="60" />
+                  <ComboBoxItem x:Name="Retention120Item" Content="2 分钟" Tag="120" />
+                  <ComboBoxItem x:Name="Retention300Item" Content="5 分钟" Tag="300" />
+                  <ComboBoxItem x:Name="Retention600Item" Content="10 分钟" Tag="600" />
+                  <ComboBoxItem x:Name="Retention1800Item" Content="30 分钟" Tag="1800" />
                 </ComboBox>
               </StackPanel>
             </WrapPanel>

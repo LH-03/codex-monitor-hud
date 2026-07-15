@@ -17,4 +17,4 @@
 - [ ] Test multiple monitors and mixed DPI before calling click-through fully validated.
 - [ ] Confirm font size persists with 0.1 precision and all four status color schemes remain editable.
 - [ ] Do not commit `~/.codex/sessions`, SQLite files or `%LOCALAPPDATA%\CodexMonitorHUD`.
-- [ ] Let the repository owner rename the GitHub repository manually, then update GitHub Desktop's remote before creating the v2.0.0 Release.
+- [ ] Confirm the release branch is `release/2.0.1-preview`, the tag is `v2.0.1-preview`, and the GitHub Release is marked as a pre-release.

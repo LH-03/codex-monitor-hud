@@ -4,12 +4,12 @@ Last updated: 2026-07-15
 
 ## Current release
 
-The planned public rename release is `v2.0.0`. The current large-change build is the **test build** `2.0.0-preview`; GitHub publication remains entirely user-controlled.
+The current patch build is the **preview** `2.0.1-preview`; GitHub publication remains entirely user-controlled. It adds configurable completed-task retention, mixed-DPI text clarity and shadow-free persistent HUD surfaces.
 
 ## Unreleased local acceptance work
 
 - Frequent Token records no longer replay the whole-window fade. Update animation is signature-gated to task membership, display mode, and status-phase changes, is much subtler, and does not override explicit completion or Codex notice effects.
-- Broad all-date discovery no longer equals visible-task membership. Internal subagent sessions and silent stops are hidden, completed user tasks leave the UI after their terminal reminder hold, and a bounded UTF-8 tail reader prevents final lifecycle records from being lost on Windows PowerShell 5.1.
+- Broad all-date discovery no longer equals visible-task membership. Internal subagent sessions remain hidden, completed user tasks stay visible for a configurable terminal hold, and a bounded UTF-8 tail reader prevents final lifecycle records from being lost on Windows PowerShell 5.1.
 - List rows use `project · Codex thread title` as their default identity. The title is live-read from `session_index.jsonl`, matching Codex Usage Tracker instead of parsing prompt text; hover adds start time, project-only remains optional, and the title is not persisted to the MCP task registry.
 - List rows and independent bubbles have a matched dismiss action. It changes only in-memory HUD visibility and resets when the same conversation emits a later `task_started` event.
 - If a running conversation file is removed, the next bounded scan removes its state and closes its independent bubble. With no visible tasks, the summary now says that there are no active Codex tasks instead of waiting forever for a usage record.
