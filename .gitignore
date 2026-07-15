@@ -6,4 +6,14 @@ artifacts/
 .test-output/
 settings.json
 *.user.json
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+sessions/
+logs/
+archive/
+private/
 node_modules/

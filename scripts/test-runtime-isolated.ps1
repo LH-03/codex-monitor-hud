@@ -1,6 +1,8 @@
 param(
     [ValidateSet('list','split')][string]$Mode = 'list',
-    [ValidateRange(1,128)][int]$TaskCount = 10,
+    # Three additional synthetic files exercise internal and terminal filtering.
+    # Keep the fixture at or below the production 64-file discovery cap.
+    [ValidateRange(1,61)][int]$TaskCount = 10,
     [ValidateRange(0,5)][int]$ChurnCycles = 0
 )
 
@@ -19,7 +21,8 @@ if (Test-Path -LiteralPath $runtimeLog) { Remove-Item -LiteralPath $runtimeLog -
 
 $localAppData = Join-Path $testRoot 'localapp'
 $profileRoot = Join-Path $testRoot 'profile'
-$sessionRoot = Join-Path $profileRoot ('.codex\sessions\' + (Get-Date).ToString('yyyy\MM\dd'))
+$sessionRoot = Join-Path (Join-Path (Join-Path (Join-Path $profileRoot '.codex') 'sessions') (Get-Date).ToString('yyyy')) ((Get-Date).ToString('MM'))
+$sessionRoot = Join-Path $sessionRoot ((Get-Date).ToString('dd'))
 $stateRoot = Join-Path $localAppData 'CodexMonitorHUD'
 $sessionIndexPath = Join-Path (Join-Path $profileRoot '.codex') 'session_index.jsonl'
 New-Item -ItemType Directory -Force -Path $sessionRoot, $stateRoot | Out-Null
@@ -123,8 +126,10 @@ try {
     $registryDeadline = [DateTime]::UtcNow.AddSeconds(10)
     while (-not (Test-Path -LiteralPath $registryPath) -and [DateTime]::UtcNow -lt $registryDeadline) { Start-Sleep -Milliseconds 200 }
     $registry = Get-Content -Raw -Encoding UTF8 -LiteralPath $registryPath | ConvertFrom-Json
-    if (@($registry.tasks).Count -ne $TaskCount) { throw ('Visible task filter expected {0} user tasks but registry contains {1}.' -f $TaskCount,@($registry.tasks).Count) }
-    $agentTarget = @($registry.tasks | Sort-Object task_number | Select-Object -First 1)[0]
+    $expectedInitialTaskCount = $TaskCount + 1 # The synthetic completed user task is inside the default retention period.
+    if (@($registry.tasks).Count -ne $expectedInitialTaskCount) { throw ('Visible task filter expected {0} user tasks but registry contains {1}.' -f $expectedInitialTaskCount,@($registry.tasks).Count) }
+    $agentTarget = @($registry.tasks | Where-Object { [string]$_.status -in @('active','listening','idle','paused') } | Sort-Object task_number | Select-Object -First 1)[0]
+    if ($null -eq $agentTarget) { throw 'No active synthetic user task was available for the Codex notice test.' }
 
     Start-Sleep -Milliseconds 500
     $beforeBurstLog = if (Test-Path -LiteralPath $runtimeLog) { Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog } else { '' }
@@ -186,7 +191,7 @@ try {
         }
         Start-Sleep -Seconds 10
         $postLifecycleRegistry = Get-Content -Raw -Encoding UTF8 -LiteralPath $registryPath | ConvertFrom-Json
-        if (@($postLifecycleRegistry.tasks | Where-Object { [string]$_.workspace -eq [string]$workspaces[0] }).Count -ne 0) { throw 'Silent/internal completion still occupies a visible task row.' }
+        if (@($postLifecycleRegistry.tasks | Where-Object { [string]$_.workspace -eq [string]$workspaces[0] }).Count -ne 1) { throw 'Silent completion did not remain visible during the configured retention period.' }
         if (@($postLifecycleRegistry.tasks | Where-Object { [string]$_.workspace -eq [string]$workspaces[1] }).Count -ne 1) { throw 'Immediately resumed task disappeared from the visible task set.' }
     }
 
@@ -216,7 +221,8 @@ try {
         if ($logText -notmatch ('Attention surface: bubble ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent') -or $logText -match ('Attention surface: list ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent')) { throw 'Codex notice escaped its single matching bubble.' }
     }
     if ($terminalFiles.Count -ge 3) {
-        if ($logText -notmatch ('Silent completion ignored: ' + [regex]::Escape($workspaces[0]))) { throw 'Silent completion was not filtered.' }
+        if ($logText -notmatch ('Silent completion retained: ' + [regex]::Escape($workspaces[0]))) { throw 'Silent completion was not retained.' }
+        if ($logText -match ('Attention triggered: ' + [regex]::Escape($workspaces[0]) + ' completed')) { throw 'Silent completion unexpectedly triggered attention.' }
         if ($logText -notmatch ('Pending completion canceled: ' + [regex]::Escape($workspaces[1]))) { throw 'Immediate continuation did not cancel its pending reminder.' }
         if ($logText -match ('Attention triggered: ' + [regex]::Escape($workspaces[1]) + ' completed')) { throw 'Cancelled completion still triggered attention.' }
         if ($logText -notmatch ('Attention triggered: ' + [regex]::Escape($workspaces[2]) + ' completed')) { throw 'Visible stable turn completion did not trigger attention.' }

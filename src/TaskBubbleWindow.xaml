@@ -13,7 +13,11 @@
         MaxHeight="360"
         ShowInTaskbar="False"
         ShowActivated="False"
-        Topmost="True">
+        Topmost="True"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType">
   <Window.Resources>
     <Style x:Key="HudIconButton" TargetType="{x:Type Button}">
       <Setter Property="Width" Value="30" />
@@ -52,9 +56,6 @@
   </Window.Resources>
   <Grid Margin="16">
     <Border x:Name="TaskBubbleShell" CornerRadius="18" Padding="12,9" BorderThickness="1" SnapsToDevicePixels="True">
-      <Border.Effect>
-        <DropShadowEffect BlurRadius="22" ShadowDepth="7" Direction="270" Opacity="0.20" Color="#24000000" />
-      </Border.Effect>
       <DockPanel LastChildFill="True">
         <Ellipse x:Name="TaskBubbleStatusDot" DockPanel.Dock="Left" Width="8" Height="8" Margin="0,0,9,0" VerticalAlignment="Center" />
         <Button x:Name="TaskBubbleDismissButton" DockPanel.Dock="Right" Style="{StaticResource HudIconButton}" Margin="5,0,0,0">

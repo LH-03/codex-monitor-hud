@@ -175,7 +175,7 @@ function Get-HudConfig {
     $result.themeStyle.borderWidth = [Math]::Max(0, [Math]::Min(4.0, [double]$result.themeStyle.borderWidth))
     $result.themeStyle.statusDotSize = [Math]::Max(5.0, [Math]::Min(18.0, [double]$result.themeStyle.statusDotSize))
     if ([string]::IsNullOrWhiteSpace([string]$result.themeStyle.fontFamily)) { $result.themeStyle.fontFamily = 'Segoe UI Variable Text, Microsoft YaHei UI' }
-    $result.statusTiming.terminalHoldSeconds = [Math]::Max(5, [Math]::Min(300, [int]$result.statusTiming.terminalHoldSeconds))
+    $result.statusTiming.terminalHoldSeconds = [Math]::Max(0, [Math]::Min(1800, [int]$result.statusTiming.terminalHoldSeconds))
     $result.pricing.path = [string]$result.pricing.path
     return $result
 }

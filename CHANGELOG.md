@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.1-preview - 2026-07-15
+
+- Keep finished conversations visible for a configurable period, including silent completion records. The default is two minutes; settings offer immediate hiding through thirty minutes, and a new turn clears the completed state immediately.
+- Improve Windows text clarity on mixed-DPI displays by enabling Per-Monitor V2 DPI awareness, layout rounding, pixel snapping and display-oriented text formatting.
+- Remove persistent drop shadows from the always-on-top summary HUD and independent task bubbles to reduce visual interference with other applications.
+- Add synthetic regressions for multi-date active-session discovery, completed-task retention settings, high-DPI text rendering and shadow-free persistent surfaces.
+
 ## Unreleased - local acceptance work
 
 - Stop replaying the whole-window fade for every Token refresh. Update animation is now keyed to task membership, display mode, and status-phase changes, uses a subtle 96%-to-100% fade, and yields to explicit attention effects.
