@@ -1,8 +1,8 @@
 param(
     [ValidateSet('list','split')][string]$Mode = 'list',
-    # Three additional synthetic files exercise internal and terminal filtering.
+    # Five additional synthetic files exercise internal, delayed-metadata and terminal filtering.
     # Keep the fixture at or below the production 64-file discovery cap.
-    [ValidateRange(1,61)][int]$TaskCount = 10,
+    [ValidateRange(1,59)][int]$TaskCount = 10,
     [ValidateRange(0,5)][int]$ChurnCycles = 0
 )
 
@@ -29,13 +29,13 @@ New-Item -ItemType Directory -Force -Path $sessionRoot, $stateRoot | Out-Null
 
 $encoding = New-Object Text.UTF8Encoding($false)
 function Write-SyntheticTask {
-    param([int]$Index, [string]$Prefix, [switch]$Internal, [switch]$AlreadyCompleted)
+    param([int]$Index, [string]$Prefix, [switch]$Internal, [switch]$AlreadyCompleted, [switch]$PaddedMetadata, [switch]$OmitMetadata, [switch]$LongTail)
     $now = [DateTimeOffset]::Now
     $sessionId = ('synthetic-{0}-{1}' -f $Prefix,$Index)
     $meta = [ordered]@{
         timestamp = $now.AddMinutes(-2).ToString('O')
         type = 'session_meta'
-        payload = [ordered]@{ id=$sessionId; originator = 'Codex Desktop'; source = $(if($Internal){[ordered]@{subagent=[ordered]@{other='guardian'}}}else{'vscode'}) }
+        payload = [ordered]@{ id=$sessionId; cwd=('C:\Synthetic\workspace-{0:d2}' -f $index); originator = 'Codex Desktop'; source = $(if($Internal){[ordered]@{subagent=[ordered]@{other='guardian'}}}else{'vscode'}) }
     } | ConvertTo-Json -Compress -Depth 6
     $context = [ordered]@{
         timestamp = $now.AddSeconds(-$index).ToString('O')
@@ -70,6 +70,26 @@ function Write-SyntheticTask {
     } | ConvertTo-Json -Compress -Depth 8
     $path = Join-Path $sessionRoot ('{0}-{1:d4}.jsonl' -f $Prefix,$index)
     $records = @($meta, $context, $started, $usage)
+    if ($Internal -or $PaddedMetadata) {
+        # Match Codex files where operational records precede session_meta.
+        # The title lookup and visible-task filter must use the same bound.
+        $padding = foreach ($paddingIndex in 1..16) {
+            [ordered]@{ timestamp=$now.AddMilliseconds(-500-$paddingIndex).ToString('O'); type='event_msg'; payload=[ordered]@{ type='internal_progress' } } | ConvertTo-Json -Compress -Depth 4
+        }
+        $records = @($padding) + $records
+    }
+    if ($LongTail) {
+        # Push turn_context beyond Get-LatestHudSnapshot's 2,000-line tail.
+        # Initialize-SessionFile must recover the project leaf from session_meta.cwd.
+        $tailPadding = foreach ($paddingIndex in 1..2100) {
+            [ordered]@{ timestamp=$now.AddMilliseconds(-400-$paddingIndex).ToString('O'); type='event_msg'; payload=[ordered]@{ type='internal_progress' } } | ConvertTo-Json -Compress -Depth 4
+        }
+        $metaIndex = if ($PaddedMetadata) { 16 } else { 0 }
+        $prefixRecords = @($records | Select-Object -First ($metaIndex + 2))
+        $suffixRecords = @($records | Select-Object -Skip ($metaIndex + 2))
+        $records = @($prefixRecords) + @($tailPadding) + @($suffixRecords)
+    }
+    if ($OmitMetadata) { $records = @($context, $started, $usage) }
     if ($AlreadyCompleted) {
         $records += ([ordered]@{
             timestamp = $now.AddMinutes(-2).AddSeconds(10).ToString('O')
@@ -82,10 +102,12 @@ function Write-SyntheticTask {
     [IO.File]::AppendAllText($sessionIndexPath,($indexEntry+[Environment]::NewLine),$encoding)
     return $path
 }
-for ($index = 1; $index -le $TaskCount; $index++) { [void](Write-SyntheticTask $index 'synthetic') }
+for ($index = 1; $index -le $TaskCount; $index++) { [void](Write-SyntheticTask $index 'synthetic' -PaddedMetadata:($index -eq 1) -LongTail:($index -eq 1)) }
 [void](Write-SyntheticTask 9001 'internal' -Internal)
 [void](Write-SyntheticTask 9002 'internal' -Internal)
 [void](Write-SyntheticTask 9003 'completed' -AlreadyCompleted)
+$lateInternalPath = Write-SyntheticTask 9004 'late-internal' -Internal -OmitMetadata
+$lateUserPath = Write-SyntheticTask 9005 'late-user' -OmitMetadata
 
 $config = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'config.default.json') | ConvertFrom-Json
 $config.language = 'en'
@@ -94,6 +116,12 @@ $config.multiTask.displayMode = $Mode
 $config.multiTask.maxSplitBubbles = 6
 $config.agentNotifications.enabled = $true
 $config.agentNotifications.permission = 'expressive'
+# Keep the pre-existing completed fixture stable while the test measures
+# token-only rendering; completion retention is covered separately below.
+$config.statusTiming.terminalHoldSeconds = 600
+# The delayed-identity regressions add a few seconds before the token burst.
+# Keep active-state transitions outside that animation-specific assertion.
+$config.statusTiming.activeSeconds = 60
 [IO.File]::WriteAllText((Join-Path $stateRoot 'settings.json'), ($config | ConvertTo-Json -Depth 8), $encoding)
 
 $savedLocalAppData = $env:LOCALAPPDATA
@@ -131,6 +159,40 @@ try {
     $agentTarget = @($registry.tasks | Where-Object { [string]$_.status -in @('active','listening','idle','paused') } | Sort-Object task_number | Select-Object -First 1)[0]
     if ($null -eq $agentTarget) { throw 'No active synthetic user task was available for the Codex notice test.' }
 
+    # A session file can arrive before its session_meta record. It must remain
+    # hidden while unresolved and stay hidden when that record identifies it as
+    # an auto-review/subagent session.
+    $lateMeta = [ordered]@{
+        timestamp = [DateTimeOffset]::Now.ToString('O')
+        type = 'session_meta'
+        payload = [ordered]@{ id='synthetic-late-internal-9004'; originator='Codex Desktop'; source=[ordered]@{subagent=[ordered]@{other='guardian'}} }
+    } | ConvertTo-Json -Compress -Depth 6
+    [IO.File]::AppendAllText($lateInternalPath,([Environment]::NewLine + $lateMeta + [Environment]::NewLine),$encoding)
+    $identityDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        Start-Sleep -Milliseconds 250
+        $afterIdentityRegistry = Get-Content -Raw -Encoding UTF8 -LiteralPath $registryPath | ConvertFrom-Json
+        $lateRows = @($afterIdentityRegistry.tasks | Where-Object { [string]$_.workspace -eq 'workspace-9004' }).Count
+    } while ($lateRows -ne 0 -and [DateTime]::UtcNow -lt $identityDeadline)
+    if ($lateRows -ne 0) { throw 'Late-metadata internal session briefly remained in the visible task registry.' }
+
+    $lateUserMeta = [ordered]@{
+        timestamp = [DateTimeOffset]::Now.ToString('O')
+        type = 'session_meta'
+        payload = [ordered]@{ id='synthetic-late-user-9005'; originator='Codex Desktop'; source='vscode' }
+    } | ConvertTo-Json -Compress -Depth 6
+    [IO.File]::AppendAllText($lateUserPath,([Environment]::NewLine + $lateUserMeta + [Environment]::NewLine),$encoding)
+    $identityDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        Start-Sleep -Milliseconds 250
+        $afterIdentityRegistry = Get-Content -Raw -Encoding UTF8 -LiteralPath $registryPath | ConvertFrom-Json
+        $lateUserRows = @($afterIdentityRegistry.tasks | Where-Object { [string]$_.workspace -eq 'workspace-9005' }).Count
+    } while ($lateUserRows -ne 1 -and [DateTime]::UtcNow -lt $identityDeadline)
+    if ($lateUserRows -ne 1) { throw 'Late-metadata user session did not appear after its identity became available.' }
+
+    # Let the identity-resolution render settle before measuring token-only
+    # update animations below.
+    Start-Sleep -Seconds 2
     Start-Sleep -Milliseconds 500
     $beforeBurstLog = if (Test-Path -LiteralPath $runtimeLog) { Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog } else { '' }
     $beforeBurstAnimations = ([regex]::Matches($beforeBurstLog,'Update animation:')).Count
@@ -213,7 +275,9 @@ try {
     $logText = Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog
     if ($logText -notmatch 'HUD Loaded event completed\.') { throw 'HUD Loaded completion marker is missing.' }
     if ($logText -match 'Dispatcher error:|HUD Loaded error:') { throw 'Runtime log contains a HUD error.' }
-    if ($logText -notmatch 'Session identity loaded: workspace-01; officialTitle=True') { throw 'Codex session-index thread title was not loaded for a user task.' }
+    if ($logText -notmatch 'Session identity loaded: workspace-01; metadata=True; officialTitle=True') { throw 'Codex session-index thread title was not loaded for a user task with late header metadata.' }
+    if ($logText -notmatch 'Session identity resolved: workspace-9004; internal=True; officialTitle=True') { throw 'Late-metadata internal session was not reclassified before display.' }
+    if ($logText -notmatch 'Session identity resolved: workspace-9005; internal=False; officialTitle=True') { throw 'Late-metadata user session did not refresh its official title.' }
     if ($logText -notmatch ('Agent notice accepted for task #' + [regex]::Escape([string]$agentTarget.task_number) + '; expressive=True')) { throw 'Expressive Codex notice was not accepted.' }
     if ($Mode -eq 'list') {
         if ($logText -notmatch ('Attention surface: list ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent') -or $logText -match ('Attention surface: bubble ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent')) { throw 'Codex notice escaped its single matching list item.' }

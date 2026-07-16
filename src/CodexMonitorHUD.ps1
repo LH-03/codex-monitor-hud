@@ -257,6 +257,19 @@ function New-HudSurfaceBrush {
     return New-HudRoleBrush ([string]$config.background) '#EAFFFFFF' 'background'
 }
 
+function Get-HudEffectProfile {
+    param([string]$Color, [double]$Opacity, [double]$Blur)
+    return Get-HudSurfaceEffectProfile `
+        -Background ([string]$config.background) `
+        -Foreground ([string]$config.foreground) `
+        -Surface ([string]$config.themeStyle.surface) `
+        -GradientStart ([string]$config.themeStyle.gradientStart) `
+        -GradientEnd ([string]$config.themeStyle.gradientEnd) `
+        -EffectColor $Color `
+        -BaseOpacity $Opacity `
+        -BaseBlur $Blur
+}
+
 function New-AuroraBrush {
     $brush = New-Object Windows.Media.LinearGradientBrush
     $brush.StartPoint = New-Object Windows.Point(0, 0)
@@ -346,6 +359,7 @@ $positionCombo = Find-Control $settings 'PositionCombo'
 $monitorScopeCombo = Find-Control $settings 'MonitorScopeCombo'
 $activeWindowCombo = Find-Control $settings 'ActiveWindowCombo'
 $taskRetentionCombo = Find-Control $settings 'TaskRetentionCombo'
+$terminalExitModeCombo = Find-Control $settings 'TerminalExitModeCombo'
 $settingsTabs = Find-Control $settings 'SettingsTabs'
 $appearanceScrollViewer = Find-Control $settings 'AppearanceScrollViewer'
 $multiTaskScrollViewer = Find-Control $settings 'MultiTaskScrollViewer'
@@ -458,7 +472,7 @@ foreach ($key in @('Input','Cached','Uncached','Output','Reasoning','CallTotal',
 $settingsTextControls = @{}
 foreach ($name in @(
     'SettingsSubtitle','PresetsTitle','PresetsHint','ThemeWorkshopTitle','ThemeWorkshopHint','LanguageLayoutTitle','DisplayLanguageLabel','BubbleStyleLabel',
-    'NumberFormatLabel','PositionLabel','MonitorScopeLabel','ActiveWindowLabel','TaskRetentionLabel','MetricsTitle','MetricsHint','PricingSourceTitle','PricingSourceHint','PricingPathLabel',
+    'NumberFormatLabel','PositionLabel','MonitorScopeLabel','ActiveWindowLabel','TaskRetentionLabel','TerminalExitModeLabel','TerminalExitHint','MetricsTitle','MetricsHint','PricingSourceTitle','PricingSourceHint','PricingPathLabel',
     'AppearanceTitle','FontSizeLabel','RadiusLabel','OpacityLabel','BackgroundColorLabel','ForegroundColorLabel','AccentColorLabel',
     'MousePassthroughHint','StatusPalettesTitle','StatusPalettesHint','MultiTaskTitle','MultiTaskExplanation',
     'DisplayModeLabel','TaskNameModeLabel','MaxSplitLabel','NumberCooldownLabel','ListFieldsTitle','TaskBubbleFieldsTitle','TaskBubbleResizeHint',
@@ -476,6 +490,7 @@ foreach ($name in @(
     'NumberExactItem','NumberCompactItem','NumberAutoItem','PositionCustomItem','PositionTopRightItem','PositionTopCenterItem','PositionTopLeftItem',
     'PositionBottomRightItem','PositionBottomCenterItem','PositionBottomLeftItem','MonitorLatestItem','MonitorAggregateItem',
     'ActiveWindow5Item','ActiveWindow15Item','ActiveWindow30Item','ActiveWindow60Item','Retention0Item','Retention30Item','Retention60Item','Retention120Item','Retention300Item','Retention600Item','Retention1800Item',
+    'TerminalExitFadeItem','TerminalExitGentleItem','TerminalExitFocusItem','TerminalExitBeaconItem',
     'StatusPaletteDefault','StatusPaletteIntuitive','StatusPaletteColorblind','StatusPaletteCalm',
     'ModeSummaryItem','ModeListItem','ModeSplitItem','NameHoverItem','NameAlwaysItem','NameHiddenItem',
     'Cooldown30Item','Cooldown120Item','Cooldown300Item','Cooldown600Item',
@@ -566,7 +581,7 @@ function Apply-SettingsLanguage {
     $map = @{
         SettingsSubtitle='settingsSubtitle'; PresetsTitle='presetsTitle'; PresetsHint='presetsHint'; ThemeWorkshopTitle='themeWorkshopTitle'; ThemeWorkshopHint='themeWorkshopHint';
         LanguageLayoutTitle='languageLayoutTitle'; DisplayLanguageLabel='displayLanguage'; BubbleStyleLabel='bubbleStyle';
-        NumberFormatLabel='numberFormat'; PositionLabel='position'; MonitorScopeLabel='monitorScope'; ActiveWindowLabel='activeWindow'; TaskRetentionLabel='taskRetention';
+        NumberFormatLabel='numberFormat'; PositionLabel='position'; MonitorScopeLabel='monitorScope'; ActiveWindowLabel='activeWindow'; TaskRetentionLabel='taskRetention'; TerminalExitModeLabel='terminalExitMode'; TerminalExitHint='terminalExitHint';
         MetricsTitle='metricsTitle'; MetricsHint='metricsHint'; PricingSourceTitle='pricingSourceTitle'; PricingSourceHint='pricingSourceHint'; PricingPathLabel='pricingPathLabel'; AppearanceTitle='appearanceTitle'; FontSizeLabel='fontSize';
         RadiusLabel='cornerRadius'; OpacityLabel='opacity'; BackgroundColorLabel='backgroundColor';
         ForegroundColorLabel='foregroundColor'; AccentColorLabel='accentColor'; MousePassthroughHint='mousePassthroughHint';
@@ -599,6 +614,7 @@ function Apply-SettingsLanguage {
         MonitorLatestItem='monitorLatest'; MonitorAggregateItem='monitorAggregate';
         ActiveWindow5Item='minutes5'; ActiveWindow15Item='minutes15'; ActiveWindow30Item='minutes30'; ActiveWindow60Item='minutes60';
         Retention0Item='retentionOff'; Retention30Item='seconds30'; Retention60Item='minutes1'; Retention120Item='minutes2'; Retention300Item='minutes5'; Retention600Item='minutes10'; Retention1800Item='minutes30';
+        TerminalExitFadeItem='terminalExitFade'; TerminalExitGentleItem='terminalExitGentle'; TerminalExitFocusItem='terminalExitFocus'; TerminalExitBeaconItem='terminalExitBeacon';
         StatusPaletteDefault='statusPaletteDefault'; StatusPaletteIntuitive='statusPaletteIntuitive';
         StatusPaletteColorblind='statusPaletteColorblind'; StatusPaletteCalm='statusPaletteCalm';
         ModeSummaryItem='modeSummary'; ModeListItem='modeList'; ModeSplitItem='modeSplit';
@@ -984,11 +1000,15 @@ function Get-TaskBaseIdentity {
 function Test-HudUserTaskState {
     param($State)
     if ($null -eq $State -or $null -eq $State.Snapshot) { return $false }
+    # Do not render a task until its identity header is available. This keeps a
+    # just-created auto-review/subagent file out of the UI instead of showing
+    # it briefly as a separate user conversation.
+    if ($null -ne $State.PSObject.Properties['IdentityMetadataFound'] -and -not [bool]$State.IdentityMetadataFound) { return $false }
     if ($null -ne $State.PSObject.Properties['IsInternalSession'] -and [bool]$State.IsInternalSession) { return $false }
     if ($null -ne $State.PSObject.Properties['Dismissed'] -and [bool]$State.Dismissed) { return $false }
     if (-not [string]::IsNullOrWhiteSpace([string]$State.TerminalStatus) -and $State.TerminalAt -ne [DateTimeOffset]::MinValue) {
-        $holdSeconds = [Math]::Max([double]$config.statusTiming.terminalHoldSeconds, [double]$config.attention.durationSeconds)
-        if (([DateTimeOffset]::Now - $State.TerminalAt).TotalSeconds -gt $holdSeconds -and $State.AgentNoticeUntil -le [DateTimeOffset]::Now) { return $false }
+        if ($State.AgentNoticeUntil -gt [DateTimeOffset]::Now) { return $true }
+        if ($null -ne $State.PSObject.Properties['TerminalExitCompleted'] -and [bool]$State.TerminalExitCompleted) { return $false }
     }
     return $true
 }
@@ -1001,7 +1021,7 @@ function Get-TaskStatus {
     param($State)
     if ($paused) { return 'paused' }
     if (-not [string]::IsNullOrWhiteSpace([string]$State.TerminalStatus) -and $State.TerminalAt -ne [DateTimeOffset]::MinValue) {
-        if (([DateTimeOffset]::Now - $State.TerminalAt).TotalSeconds -le [double]$config.statusTiming.terminalHoldSeconds) { return [string]$State.TerminalStatus }
+        if ($null -eq $State.PSObject.Properties['TerminalExitCompleted'] -or -not [bool]$State.TerminalExitCompleted) { return [string]$State.TerminalStatus }
     }
     if ($null -ne $State.LastReadErrorAt -and $State.LastReadErrorAt -ne [DateTimeOffset]::MinValue) {
         if (([DateTimeOffset]::Now - $State.LastReadErrorAt).TotalSeconds -le [double]$config.statusTiming.errorHoldSeconds) { return 'error' }
@@ -1043,6 +1063,50 @@ function Clear-PendingTaskCompletion {
     $State.PendingCompletionDueAt = [DateTimeOffset]::MinValue
 }
 
+function Reset-TerminalExitState {
+    param($State)
+    $State.TerminalExitStarted = $false
+    $State.TerminalExitCompleted = $false
+    $State.TerminalExitUntil = [DateTimeOffset]::MinValue
+}
+
+function Get-HudTerminalExitSpec {
+    param([string]$Mode = ([string]$config.statusTiming.terminalExitMode))
+    switch ($Mode) {
+        'fade' { return [pscustomobject]@{ Mode='fade'; DurationMs=1200; Scale=1.000; Glow=0.00; Blur=0.0; Flow=$false } }
+        'focus' { return [pscustomobject]@{ Mode='focus'; DurationMs=3600; Scale=1.035; Glow=0.82; Blur=34.0; Flow=$false } }
+        'beacon' { return [pscustomobject]@{ Mode='beacon'; DurationMs=5000; Scale=1.055; Glow=1.00; Blur=50.0; Flow=$true } }
+        default { return [pscustomobject]@{ Mode='gentle'; DurationMs=2400; Scale=1.016; Glow=0.38; Blur=18.0; Flow=$false } }
+    }
+}
+
+function Update-TerminalExitState {
+    param($State)
+    if ([string]::IsNullOrWhiteSpace([string]$State.TerminalStatus) -or $State.TerminalAt -eq [DateTimeOffset]::MinValue) {
+        if ([bool]$State.TerminalExitStarted -or [bool]$State.TerminalExitCompleted) { Reset-TerminalExitState $State; return $true }
+        return $false
+    }
+    if ([bool]$State.TerminalExitCompleted) { return $false }
+    $now = [DateTimeOffset]::Now
+    if ($State.AgentNoticeUntil -gt $now -or $State.AttentionUntil -gt $now) { return $false }
+    $retentionUntil = $State.TerminalAt.AddSeconds([double]$config.statusTiming.terminalHoldSeconds)
+    if ($retentionUntil -gt $now) { return $false }
+    if (-not [bool]$State.TerminalExitStarted) {
+        $spec = Get-HudTerminalExitSpec
+        $State.TerminalExitStarted = $true
+        $State.TerminalExitUntil = $now.AddMilliseconds([double]$spec.DurationMs)
+        $State.TerminalExitRevision = [int]$State.TerminalExitRevision + 1
+        Write-HudDebug ('Terminal exit started: {0} mode={1} r{2}' -f [string]$State.Workspace,[string]$spec.Mode,[int]$State.TerminalExitRevision)
+        return $true
+    }
+    if ($State.TerminalExitUntil -le $now) {
+        $State.TerminalExitCompleted = $true
+        Write-HudDebug ('Terminal exit completed: ' + [string]$State.Workspace)
+        return $true
+    }
+    return $false
+}
+
 function Confirm-PendingTaskCompletion {
     param($State)
     if ($State.PendingCompletionDueAt -eq [DateTimeOffset]::MinValue -or $State.PendingCompletionDueAt -gt [DateTimeOffset]::Now) { return $false }
@@ -1055,6 +1119,7 @@ function Confirm-PendingTaskCompletion {
     $State.TerminalStatus = 'completed'
     $State.TerminalAt = [DateTimeOffset]::Now
     $State.TerminalSilent = $false
+    Reset-TerminalExitState $State
     Clear-PendingTaskCompletion $State
     Set-TaskAttention $State 'completed'
     return $true
@@ -1079,6 +1144,75 @@ function Add-HudAttentionKeyFrame {
     $frame.KeyTime = [Windows.Media.Animation.KeyTime]::FromPercent($Percent)
     $frame.Value = $Value
     [void]$Animation.KeyFrames.Add($frame)
+}
+
+function Start-HudTerminalExitAnimation {
+    param($Container, [string]$Mode, [string]$Color)
+    if ($null -eq $Container) { return }
+    $spec = Get-HudTerminalExitSpec $Mode
+    $duration = New-Object Windows.Duration([TimeSpan]::FromMilliseconds([double]$spec.DurationMs))
+    $opacityFrames = switch ([string]$spec.Mode) {
+        'fade' { @(@(0.00,1.00),@(0.28,1.00),@(1.00,0.00)) }
+        'focus' { @(@(0.00,1.00),@(0.16,0.72),@(0.30,1.00),@(0.46,0.78),@(0.60,1.00),@(0.80,0.92),@(1.00,0.00)) }
+        'beacon' { @(@(0.00,1.00),@(0.10,0.58),@(0.20,1.00),@(0.31,0.66),@(0.42,1.00),@(0.54,0.62),@(0.66,1.00),@(0.82,0.94),@(1.00,0.00)) }
+        default { @(@(0.00,1.00),@(0.20,0.82),@(0.38,1.00),@(0.58,0.86),@(0.76,1.00),@(0.88,0.94),@(1.00,0.00)) }
+    }
+    $opacity = New-Object Windows.Media.Animation.DoubleAnimationUsingKeyFrames
+    $opacity.Duration = $duration
+    $opacity.FillBehavior = [Windows.Media.Animation.FillBehavior]::HoldEnd
+    foreach ($frame in $opacityFrames) { Add-HudAttentionKeyFrame $opacity ([double]$frame[0]) ([double]$frame[1]) }
+    $Container.BeginAnimation([Windows.UIElement]::OpacityProperty,$opacity)
+
+    $Container.RenderTransformOrigin = New-Object Windows.Point(0.5,0.5)
+    $scale = New-Object Windows.Media.ScaleTransform(1.0,1.0)
+    $Container.RenderTransform = $scale
+    $scaleFrames = switch ([string]$spec.Mode) {
+        'fade' { @(@(0.00,1.000),@(0.75,1.000),@(1.00,0.985)) }
+        'focus' { @(@(0.00,1.000),@(0.18,1.035),@(0.34,1.000),@(0.50,1.035),@(0.68,1.000),@(0.84,1.018),@(1.00,0.985)) }
+        'beacon' { @(@(0.00,1.000),@(0.12,1.055),@(0.24,1.000),@(0.36,1.055),@(0.48,1.000),@(0.60,1.055),@(0.73,1.000),@(0.86,1.024),@(1.00,0.980)) }
+        default { @(@(0.00,1.000),@(0.22,1.016),@(0.42,1.000),@(0.62,1.016),@(0.80,1.000),@(1.00,0.985)) }
+    }
+    foreach ($property in @([Windows.Media.ScaleTransform]::ScaleXProperty,[Windows.Media.ScaleTransform]::ScaleYProperty)) {
+        $animation = New-Object Windows.Media.Animation.DoubleAnimationUsingKeyFrames
+        $animation.Duration = $duration
+        $animation.FillBehavior = [Windows.Media.Animation.FillBehavior]::HoldEnd
+        foreach ($frame in $scaleFrames) { Add-HudAttentionKeyFrame $animation ([double]$frame[0]) ([double]$frame[1]) }
+        $scale.BeginAnimation($property,$animation)
+    }
+
+    if ([double]$spec.Glow -gt 0) {
+        $profile = Get-HudEffectProfile $Color ([double]$spec.Glow) ([double]$spec.Blur)
+        $effect = New-Object Windows.Media.Effects.DropShadowEffect
+        try { $effect.Color = [Windows.Media.ColorConverter]::ConvertFromString([string]$profile.Color) } catch { $effect.Color = [Windows.Media.Colors]::LimeGreen }
+        $effect.ShadowDepth = 0
+        $effect.BlurRadius = [double]$profile.Blur
+        $effect.Opacity = [double]$profile.MinimumOpacity
+        $Container.Effect = $effect
+        $glow = New-Object Windows.Media.Animation.DoubleAnimationUsingKeyFrames
+        $glow.Duration = $duration
+        $glow.FillBehavior = [Windows.Media.Animation.FillBehavior]::HoldEnd
+        foreach ($frame in @(@(0.00,[double]$profile.MinimumOpacity),@(0.18,[double]$profile.PeakOpacity),@(0.38,0.12),@(0.58,[double]$profile.PeakOpacity),@(0.78,0.10),@(1.00,0.00))) { Add-HudAttentionKeyFrame $glow ([double]$frame[0]) ([double]$frame[1]) }
+        $effect.BeginAnimation([Windows.Media.Effects.DropShadowEffect]::OpacityProperty,$glow)
+    }
+
+    if ([bool]$spec.Flow -and $Container -is [Windows.Controls.Border]) {
+        $profile = Get-HudEffectProfile $Color ([double]$spec.Glow) ([double]$spec.Blur)
+        $resolvedColor = try { [Windows.Media.ColorConverter]::ConvertFromString([string]$profile.Color) } catch { [Windows.Media.ColorConverter]::ConvertFromString('#FF32D74B') }
+        $rgb = ('{0:X2}{1:X2}{2:X2}' -f $resolvedColor.R,$resolvedColor.G,$resolvedColor.B)
+        $gradient = New-Object Windows.Media.LinearGradientBrush
+        $gradient.StartPoint = New-Object Windows.Point(0,0.5); $gradient.EndPoint = New-Object Windows.Point(1,0.5)
+        foreach ($stopSpec in @(@(0.00,('#00'+$rgb)),@(0.38,('#24'+$rgb)),@(0.50,[string]$profile.FlowCore),@(0.62,('#'+[string]$profile.FlowShoulderAlpha+$rgb)),@(1.00,('#00'+$rgb)))) {
+            [void]$gradient.GradientStops.Add((New-Object Windows.Media.GradientStop(([Windows.Media.ColorConverter]::ConvertFromString([string]$stopSpec[1])),[double]$stopSpec[0])))
+        }
+        $translate = New-Object Windows.Media.TranslateTransform(-1.4,0)
+        $gradient.RelativeTransform = $translate
+        $Container.BorderBrush = $gradient
+        $Container.BorderThickness = New-Object Windows.Thickness(2.4)
+        $travel = New-Object Windows.Media.Animation.DoubleAnimation(-1.4,1.4,(New-Object Windows.Duration([TimeSpan]::FromMilliseconds(1100))))
+        $travel.RepeatBehavior = New-Object Windows.Media.Animation.RepeatBehavior(4.0)
+        $travel.FillBehavior = [Windows.Media.Animation.FillBehavior]::Stop
+        $translate.BeginAnimation([Windows.Media.TranslateTransform]::XProperty,$travel)
+    }
 }
 
 function Start-HudDotAttentionAnimation {
@@ -1109,16 +1243,18 @@ function Start-HudDotAttentionAnimation {
     }
     $Dot.BeginAnimation([Windows.UIElement]::OpacityProperty, $opacityAnimation)
 
-    $glow = New-Object Windows.Media.Effects.DropShadowEffect
+    $effectColor = [string]$config.accent
     try {
-        if ($Dot.Fill -is [Windows.Media.SolidColorBrush]) { $glow.Color = $Dot.Fill.Color }
-        else { $glow.Color = [Windows.Media.ColorConverter]::ConvertFromString([string]$config.accent) }
-    } catch { $glow.Color = [Windows.Media.Colors]::DodgerBlue }
+        if ($Dot.Fill -is [Windows.Media.SolidColorBrush]) { $effectColor = $Dot.Fill.Color.ToString() }
+    } catch { }
+    $profile = Get-HudEffectProfile $effectColor ([double]$brightness.Glow) ([double]$brightness.Blur)
+    $glow = New-Object Windows.Media.Effects.DropShadowEffect
+    try { $glow.Color = [Windows.Media.ColorConverter]::ConvertFromString([string]$profile.Color) } catch { $glow.Color = [Windows.Media.Colors]::DodgerBlue }
     $glow.ShadowDepth = 0
-    $glow.BlurRadius = [double]$brightness.Blur
-    $glow.Opacity = 0.12
+    $glow.BlurRadius = [double]$profile.Blur
+    $glow.Opacity = [double]$profile.MinimumOpacity
     $Dot.Effect = $glow
-    $glowAnimation = New-Object Windows.Media.Animation.DoubleAnimation(0.12, [double]$brightness.Glow, (New-Object Windows.Duration([TimeSpan]::FromMilliseconds([Math]::Round($cycleMs / 2)))))
+    $glowAnimation = New-Object Windows.Media.Animation.DoubleAnimation([double]$profile.MinimumOpacity, [double]$profile.PeakOpacity, (New-Object Windows.Duration([TimeSpan]::FromMilliseconds([Math]::Round($cycleMs / 2)))))
     $glowAnimation.AutoReverse = $true
     $glowAnimation.RepeatBehavior = New-Object Windows.Media.Animation.RepeatBehavior([double]$repeatCount)
     $glowAnimation.FillBehavior = [Windows.Media.Animation.FillBehavior]::Stop
@@ -1145,19 +1281,23 @@ function Start-HudSurfaceAttentionAnimation {
     $repeatCount = [Math]::Max(2, [Math]::Ceiling($seconds / 0.9))
     $repeat = New-Object Windows.Media.Animation.RepeatBehavior([double]$repeatCount)
     if ($Mode -eq 'halo') {
+        $profile = Get-HudEffectProfile ([string]$config.accent) 0.72 20.0
         $effect = New-Object Windows.Media.Effects.DropShadowEffect
-        $effect.Color = [Windows.Media.ColorConverter]::ConvertFromString([string]$config.accent)
-        $effect.ShadowDepth = 0; $effect.BlurRadius = 20; $effect.Opacity = 0
+        $effect.Color = [Windows.Media.ColorConverter]::ConvertFromString([string]$profile.Color)
+        $effect.ShadowDepth = 0; $effect.BlurRadius = [double]$profile.Blur; $effect.Opacity = 0
         $Container.Effect = $effect
-        $animation = New-Object Windows.Media.Animation.DoubleAnimation(0.10,0.72,(New-Object Windows.Duration([TimeSpan]::FromMilliseconds(620))))
+        $animation = New-Object Windows.Media.Animation.DoubleAnimation([double]$profile.MinimumOpacity,[double]$profile.PeakOpacity,(New-Object Windows.Duration([TimeSpan]::FromMilliseconds(620))))
         $animation.AutoReverse=$true;$animation.RepeatBehavior=$repeat;$animation.FillBehavior=[Windows.Media.Animation.FillBehavior]::Stop
         $effect.BeginAnimation([Windows.Media.Effects.DropShadowEffect]::OpacityProperty,$animation)
         return
     }
     if ($Mode -eq 'flow' -and $Container -is [Windows.Controls.Border]) {
+        $profile = Get-HudEffectProfile ([string]$config.accent) 0.78 20.0
+        $flowColor = [Windows.Media.ColorConverter]::ConvertFromString([string]$profile.Color)
+        $flowRgb = ('{0:X2}{1:X2}{2:X2}' -f $flowColor.R,$flowColor.G,$flowColor.B)
         $gradient = New-Object Windows.Media.LinearGradientBrush
         $gradient.StartPoint = New-Object Windows.Point(0,0.5); $gradient.EndPoint = New-Object Windows.Point(1,0.5)
-        foreach ($stopSpec in @(@(0.00,'#000A84FF'),@(0.40,'#220A84FF'),@(0.50,'#FFF7FBFF'),@(0.60,'#B80A84FF'),@(1.00,'#000A84FF'))) {
+        foreach ($stopSpec in @(@(0.00,('#00'+$flowRgb)),@(0.40,('#22'+$flowRgb)),@(0.50,[string]$profile.FlowCore),@(0.60,('#'+[string]$profile.FlowShoulderAlpha+$flowRgb)),@(1.00,('#00'+$flowRgb)))) {
             [void]$gradient.GradientStops.Add((New-Object Windows.Media.GradientStop(([Windows.Media.ColorConverter]::ConvertFromString([string]$stopSpec[1])),[double]$stopSpec[0])))
         }
         $translate = New-Object Windows.Media.TranslateTransform(-1.3,0)
@@ -1238,15 +1378,16 @@ function Start-HudAgentAnimation {
     param($Container, $RequestedRecipe)
     if ($null -eq $Container) { return }
     $recipe = Get-HudAgentAnimationRecipe $RequestedRecipe
-    $color = try { [Windows.Media.ColorConverter]::ConvertFromString([string]$recipe.Color) } catch { [Windows.Media.ColorConverter]::ConvertFromString('#FF7C3AED') }
+    $profile = Get-HudEffectProfile ([string]$recipe.Color) ([double]$recipe.Intensity) ([double]$recipe.GlowRadius)
+    $color = try { [Windows.Media.ColorConverter]::ConvertFromString([string]$profile.Color) } catch { [Windows.Media.ColorConverter]::ConvertFromString('#FF7C3AED') }
     $duration = New-Object Windows.Duration([TimeSpan]::FromMilliseconds([double]$recipe.TempoMs))
     $repeat = New-Object Windows.Media.Animation.RepeatBehavior([double][int]$recipe.Cycles)
 
     if (@($recipe.Layers) -contains 'glow') {
         $effect = New-Object Windows.Media.Effects.DropShadowEffect
-        $effect.Color = $color; $effect.ShadowDepth = 0; $effect.BlurRadius = [double]$recipe.GlowRadius; $effect.Opacity = 0.05
+        $effect.Color = $color; $effect.ShadowDepth = 0; $effect.BlurRadius = [double]$profile.Blur; $effect.Opacity = [double]$profile.MinimumOpacity
         $Container.Effect = $effect
-        $glow = New-Object Windows.Media.Animation.DoubleAnimation(0.05,[Math]::Min(1.0,[double]$recipe.Intensity),$duration)
+        $glow = New-Object Windows.Media.Animation.DoubleAnimation([double]$profile.MinimumOpacity,[double]$profile.PeakOpacity,$duration)
         $glow.AutoReverse=$true;$glow.RepeatBehavior=$repeat;$glow.FillBehavior=[Windows.Media.Animation.FillBehavior]::Stop
         $effect.BeginAnimation([Windows.Media.Effects.DropShadowEffect]::OpacityProperty,$glow)
     }
@@ -1267,10 +1408,10 @@ function Start-HudAgentAnimation {
         }
     }
     if (@($recipe.Layers) -contains 'flow' -and $Container -is [Windows.Controls.Border]) {
-        $rgb = ([string]$recipe.Color).Substring(3)
+        $rgb = ('{0:X2}{1:X2}{2:X2}' -f $color.R,$color.G,$color.B)
         $gradient = New-Object Windows.Media.LinearGradientBrush
         $gradient.StartPoint=New-Object Windows.Point(0,0.5);$gradient.EndPoint=New-Object Windows.Point(1,0.5)
-        foreach ($stopSpec in @(@(0.00,('#00'+$rgb)),@(0.38,('#18'+$rgb)),@(0.50,('#FF'+$rgb)),@(0.62,('#70'+$rgb)),@(1.00,('#00'+$rgb)))) {
+        foreach ($stopSpec in @(@(0.00,('#00'+$rgb)),@(0.38,('#18'+$rgb)),@(0.50,[string]$profile.FlowCore),@(0.62,('#'+[string]$profile.FlowShoulderAlpha+$rgb)),@(1.00,('#00'+$rgb)))) {
             [void]$gradient.GradientStops.Add((New-Object Windows.Media.GradientStop(([Windows.Media.ColorConverter]::ConvertFromString([string]$stopSpec[1])),[double]$stopSpec[0])))
         }
         $from = if ([string]$recipe.Direction -eq 'right-to-left') { 1.4 } else { -1.4 }
@@ -1348,6 +1489,11 @@ function Update-TaskBubble {
         if ([string]$State.AttentionReason -eq 'agent') { Start-HudAgentAnimation $entry.Shell $State.AgentNoticeRecipe }
         else { Start-HudAttentionAnimation $entry.Dot $entry.Shell ([string]$config.attention.taskBubbleMode) }
     }
+    if ([int]$State.TerminalExitRevision -gt [int]$entry.LastExitRevision -and $State.TerminalExitUntil -gt [DateTimeOffset]::Now) {
+        $entry.LastExitRevision = [int]$State.TerminalExitRevision
+        Write-HudDebug ('Terminal exit surface: bubble {0} r{1}' -f [string]$State.Workspace,[int]$State.TerminalExitRevision)
+        Start-HudTerminalExitAnimation $entry.Shell ([string]$config.statusTiming.terminalExitMode) ([string]$config.statusColors.$status)
+    }
 }
 
 function Position-TaskBubbles {
@@ -1424,6 +1570,7 @@ function Show-TaskBubble {
         BaseStyle = $null
         InternalClosing = $false
         LastAttentionRevision = 0
+        LastExitRevision = 0
     }
     $script:splitWindows[$path] = $entry
     $entryRecord = $entry
@@ -1672,6 +1819,11 @@ function Render-TaskList {
                 else { Start-HudAttentionAnimation $dot $attentionSurface ([string]$config.attention.listMode) }
             }
         }
+        if ([int]$state.TerminalExitRevision -gt [int]$state.LastListExitRevision -and $state.TerminalExitUntil -gt [DateTimeOffset]::Now) {
+            $state.LastListExitRevision = [int]$state.TerminalExitRevision
+            Write-HudDebug ('Terminal exit surface: list {0} r{1}' -f [string]$state.Workspace,[int]$state.TerminalExitRevision)
+            Start-HudTerminalExitAnimation $attentionSurface ([string]$config.statusTiming.terminalExitMode) ([string]$config.statusColors.(Get-TaskStatus $state))
+        }
     }
 }
 
@@ -1837,6 +1989,7 @@ function Process-HudAgentNotifications {
             $target.AttentionRevision = $attentionSequence
             $target.AttentionReason = 'agent'
             $target.AttentionUntil = $target.AgentNoticeUntil
+            if (-not [string]::IsNullOrWhiteSpace([string]$target.TerminalStatus)) { Reset-TerminalExitState $target }
             Write-HudDebug ('Agent notice accepted for task #{0}; expressive={1}' -f [int]$target.Number,([string]$config.agentNotifications.permission -eq 'expressive'))
             Remove-Item -LiteralPath $file.FullName -Force -ErrorAction SilentlyContinue
             $changed = $true
@@ -1998,11 +2151,17 @@ function Export-HudPreview {
                 LastRenderedStatus = ''
                 TerminalStatus = ''
                 TerminalAt = [DateTimeOffset]::MinValue
+                TerminalSilent = $false
+                TerminalExitStarted = $false
+                TerminalExitCompleted = $false
+                TerminalExitUntil = [DateTimeOffset]::MinValue
+                TerminalExitRevision = 0
                 HasObservedActivity = $true
                 AttentionRevision = if ($PreviewAttentionMode -ne 'none') { $index + 1 } else { 0 }
                 AttentionReason = ''
                 AttentionUntil = if ($PreviewAttentionMode -ne 'none') { [DateTimeOffset]::Now.AddSeconds([int]$config.attention.durationSeconds) } else { [DateTimeOffset]::MinValue }
                 LastListAttentionRevision = 0
+                LastListExitRevision = 0
                 AgentNoticeText = ''
                 AgentNoticeUntil = [DateTimeOffset]::MinValue
                 AgentNoticeRecipe = $null
@@ -2224,6 +2383,7 @@ function Sync-ControlsFromConfig {
         Select-ComboTag $monitorScopeCombo ([string]$config.monitorScope)
         Select-ComboTag $activeWindowCombo ([string][int]$config.activeWindowMinutes)
         Select-ComboTag $taskRetentionCombo ([string][int]$config.statusTiming.terminalHoldSeconds)
+        Select-ComboTag $terminalExitModeCombo ([string]$config.statusTiming.terminalExitMode)
         Select-ComboTag $displayModeCombo ([string]$config.multiTask.displayMode)
         Select-ComboTag $listStyleCombo ([string]$config.multiTask.listStyle)
         Select-ComboTag $listDensityCombo ([string]$config.multiTask.listDensity)
@@ -2330,6 +2490,7 @@ function Apply-ControlsToConfig {
     $monitorScope = Get-ComboTag $monitorScopeCombo
     $activeWindow = Get-ComboTag $activeWindowCombo
     $taskRetention = Get-ComboTag $taskRetentionCombo
+    $terminalExitMode = Get-ComboTag $terminalExitModeCombo
     $displayMode = Get-ComboTag $displayModeCombo
     $listStyle = Get-ComboTag $listStyleCombo
     $listDensity = Get-ComboTag $listDensityCombo
@@ -2358,6 +2519,7 @@ function Apply-ControlsToConfig {
     if ($monitorScope) { $config.monitorScope = $monitorScope }
     if ($activeWindow) { $config.activeWindowMinutes = [int]$activeWindow }
     if ($taskRetention) { $config.statusTiming.terminalHoldSeconds = [int]$taskRetention }
+    if ($terminalExitMode) { $config.statusTiming.terminalExitMode = $terminalExitMode }
     if ($displayMode) { $config.multiTask.displayMode = $displayMode }
     if ($listStyle) { $config.multiTask.listStyle = $listStyle }
     if ($listDensity) { $config.multiTask.listDensity = $listDensity }
@@ -2456,30 +2618,57 @@ function Stop-HudApplication {
 
 function Test-HudInternalSessionFile {
     param([System.IO.FileInfo]$File)
+    return [bool](Get-HudSessionIdentity $File).IsInternalSession
+}
+
+function Get-HudSessionIdentity {
+    param([System.IO.FileInfo]$File)
+    $identity = [pscustomobject]@{
+        MetadataFound = $false
+        SessionId = ''
+        Workspace = ''
+        IsInternalSession = $false
+    }
     try {
-        foreach ($line in @(Get-Content -LiteralPath $File.FullName -Encoding UTF8 -TotalCount 12 -ErrorAction Stop)) {
+        # Codex can write operational records before session_meta. Keep this
+        # bounded, but use the same window for the session ID and subagent
+        # classification so a late header never creates a titleless or
+        # temporarily visible internal task.
+        foreach ($line in @(Get-Content -LiteralPath $File.FullName -Encoding UTF8 -TotalCount 64 -ErrorAction Stop)) {
             try { $record = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
             if ([string]$record.type -ne 'session_meta') { continue }
-            if ($null -eq $record.payload -or $null -eq $record.payload.PSObject.Properties['source']) { return $false }
-            $source = $record.payload.source
-            return ($null -ne $source -and $null -ne $source.PSObject -and $null -ne $source.PSObject.Properties['subagent'])
+            $identity.MetadataFound = $true
+            if ($null -ne $record.payload) {
+                foreach ($key in @('id','session_id')) {
+                    if ($null -ne $record.payload.PSObject.Properties[$key] -and -not [string]::IsNullOrWhiteSpace([string]$record.payload.$key)) {
+                        $identity.SessionId = [string]$record.payload.$key
+                        break
+                    }
+                }
+                if ($null -ne $record.payload.PSObject.Properties['cwd']) {
+                    try {
+                        $cwd = [string]$record.payload.cwd
+                        if (-not [string]::IsNullOrWhiteSpace($cwd)) {
+                            $trimmed = $cwd.TrimEnd([char[]]@('\','/'))
+                            $identity.Workspace = [IO.Path]::GetFileName($trimmed)
+                            if ([string]::IsNullOrWhiteSpace([string]$identity.Workspace)) { $identity.Workspace = $trimmed }
+                        }
+                    } catch { $identity.Workspace = '' }
+                }
+                if ($null -ne $record.payload.PSObject.Properties['source']) {
+                    $source = $record.payload.source
+                    $identity.IsInternalSession = ($null -ne $source -and $null -ne $source.PSObject -and $null -ne $source.PSObject.Properties['subagent'])
+                }
+            }
+            break
         }
     } catch { }
-    return $false
+    return $identity
 }
 
 function Get-HudSessionId {
     param([System.IO.FileInfo]$File)
-    try {
-        foreach ($line in @(Get-Content -LiteralPath $File.FullName -Encoding UTF8 -TotalCount 12 -ErrorAction Stop)) {
-            try { $record = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
-            if ([string]$record.type -ne 'session_meta') { continue }
-            foreach ($key in @('id','session_id')) {
-                if ($null -ne $record.payload.PSObject.Properties[$key] -and -not [string]::IsNullOrWhiteSpace([string]$record.payload.$key)) { return [string]$record.payload.$key }
-            }
-        }
-    } catch { }
-    return ''
+    return [string](Get-HudSessionIdentity $File).SessionId
 }
 
 function Refresh-HudSessionIndex {
@@ -2512,7 +2701,8 @@ function Initialize-SessionFile {
     param([System.IO.FileInfo]$File)
     if ($sessionStates.ContainsKey($File.FullName)) { return $false }
     $initialSnapshot = Get-LatestHudSnapshot $File
-    $sessionId = [string](Get-HudSessionId $File)
+    $identity = Get-HudSessionIdentity $File
+    $sessionId = [string]$identity.SessionId
     $sessionStates[$File.FullName] = [pscustomobject]@{
         Path = $File.FullName
         Number = Get-NextTaskNumber
@@ -2520,7 +2710,7 @@ function Initialize-SessionFile {
         Offset = [Int64]$File.Length
         PendingText = ''
         Model = if ($null -ne $initialSnapshot) { [string]$initialSnapshot.Model } else { '' }
-        Workspace = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['Workspace']) { [string]$initialSnapshot.Workspace } else { '' }
+        Workspace = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['Workspace'] -and -not [string]::IsNullOrWhiteSpace([string]$initialSnapshot.Workspace)) { [string]$initialSnapshot.Workspace } else { [string]$identity.Workspace }
         Snapshot = $initialSnapshot
         AllowanceTimestamp = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['AllowanceTimestamp']) { $initialSnapshot.AllowanceTimestamp } else { $null }
         WeeklyRemainingPercent = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['WeeklyRemainingPercent']) { $initialSnapshot.WeeklyRemainingPercent } else { $null }
@@ -2532,11 +2722,16 @@ function Initialize-SessionFile {
         TerminalStatus = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['TerminalStatus']) { [string]$initialSnapshot.TerminalStatus } else { '' }
         TerminalAt = if ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['TerminalTimestamp'] -and $null -ne $initialSnapshot.TerminalTimestamp) { [DateTimeOffset]$initialSnapshot.TerminalTimestamp } else { [DateTimeOffset]::MinValue }
         TerminalSilent = ($null -ne $initialSnapshot -and $null -ne $initialSnapshot.PSObject.Properties['TerminalSilent'] -and [bool]$initialSnapshot.TerminalSilent)
+        TerminalExitStarted = $false
+        TerminalExitCompleted = $false
+        TerminalExitUntil = [DateTimeOffset]::MinValue
+        TerminalExitRevision = 0
         HasObservedActivity = $false
         AttentionRevision = 0
         AttentionReason = ''
         AttentionUntil = [DateTimeOffset]::MinValue
         LastListAttentionRevision = 0
+        LastListExitRevision = 0
         AgentNoticeText = ''
         AgentNoticeUntil = [DateTimeOffset]::MinValue
         AgentNoticeRecipe = $null
@@ -2546,12 +2741,63 @@ function Initialize-SessionFile {
         Detached = $false
         BubbleWidth = 0.0
         BubbleHeight = 0.0
-        IsInternalSession = [bool](Test-HudInternalSessionFile $File)
+        IsInternalSession = [bool]$identity.IsInternalSession
+        IdentityMetadataFound = [bool]$identity.MetadataFound
         SessionId = $sessionId
         ConversationLabel = if (-not [string]::IsNullOrWhiteSpace($sessionId) -and $sessionTitleMap.ContainsKey($sessionId)) { [string]$sessionTitleMap[$sessionId] } else { '' }
         Dismissed = $false
     }
-    Write-HudDebug ('Session identity loaded: {0}; officialTitle={1}' -f [string]$sessionStates[$File.FullName].Workspace,(-not [string]::IsNullOrWhiteSpace([string]$sessionStates[$File.FullName].ConversationLabel)))
+    Write-HudDebug ('Session identity loaded: {0}; metadata={1}; officialTitle={2}' -f [string]$sessionStates[$File.FullName].Workspace,[bool]$identity.MetadataFound,(-not [string]::IsNullOrWhiteSpace([string]$sessionStates[$File.FullName].ConversationLabel)))
+    return $true
+}
+
+function Refresh-HudSessionIdentity {
+    param([Parameter(Mandatory = $true)]$State)
+    if ($null -ne $State.PSObject.Properties['IdentityMetadataFound'] -and [bool]$State.IdentityMetadataFound) { return $false }
+    $file = Get-Item -LiteralPath ([string]$State.Path) -ErrorAction SilentlyContinue
+    if ($null -eq $file) { return $false }
+    $identity = Get-HudSessionIdentity $file
+    if (-not [bool]$identity.MetadataFound) { return $false }
+    $State.IdentityMetadataFound = $true
+    $State.IsInternalSession = [bool]$identity.IsInternalSession
+    $State.SessionId = [string]$identity.SessionId
+    if ([string]::IsNullOrWhiteSpace([string]$State.Workspace) -and -not [string]::IsNullOrWhiteSpace([string]$identity.Workspace)) { $State.Workspace = [string]$identity.Workspace }
+    $nextTitle = if (-not [string]::IsNullOrWhiteSpace([string]$State.SessionId) -and $sessionTitleMap.ContainsKey([string]$State.SessionId)) { [string]$sessionTitleMap[[string]$State.SessionId] } else { '' }
+    $State.ConversationLabel = $nextTitle
+    Write-HudDebug ('Session identity resolved: {0}; internal={1}; officialTitle={2}' -f [string]$State.Workspace,[bool]$State.IsInternalSession,(-not [string]::IsNullOrWhiteSpace($nextTitle)))
+    return $true
+}
+
+function Set-HudSessionIdentityFromRecord {
+    param([Parameter(Mandatory = $true)]$State, [Parameter(Mandatory = $true)]$Record)
+    if ([string]$Record.type -ne 'session_meta') { return $false }
+    $State.IdentityMetadataFound = $true
+    $State.SessionId = ''
+    $State.IsInternalSession = $false
+    if ($null -ne $Record.payload) {
+        foreach ($key in @('id','session_id')) {
+            if ($null -ne $Record.payload.PSObject.Properties[$key] -and -not [string]::IsNullOrWhiteSpace([string]$Record.payload.$key)) {
+                $State.SessionId = [string]$Record.payload.$key
+                break
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$State.Workspace) -and $null -ne $Record.payload.PSObject.Properties['cwd']) {
+            try {
+                $cwd = [string]$Record.payload.cwd
+                if (-not [string]::IsNullOrWhiteSpace($cwd)) {
+                    $trimmed = $cwd.TrimEnd([char[]]@('\','/'))
+                    $State.Workspace = [IO.Path]::GetFileName($trimmed)
+                    if ([string]::IsNullOrWhiteSpace([string]$State.Workspace)) { $State.Workspace = $trimmed }
+                }
+            } catch { }
+        }
+        if ($null -ne $Record.payload.PSObject.Properties['source']) {
+            $source = $Record.payload.source
+            $State.IsInternalSession = ($null -ne $source -and $null -ne $source.PSObject -and $null -ne $source.PSObject.Properties['subagent'])
+        }
+    }
+    $State.ConversationLabel = if (-not [string]::IsNullOrWhiteSpace([string]$State.SessionId) -and $sessionTitleMap.ContainsKey([string]$State.SessionId)) { [string]$sessionTitleMap[[string]$State.SessionId] } else { '' }
+    Write-HudDebug ('Session identity resolved: {0}; internal={1}; officialTitle={2}' -f [string]$State.Workspace,[bool]$State.IsInternalSession,(-not [string]::IsNullOrWhiteSpace([string]$State.ConversationLabel)))
     return $true
 }
 
@@ -2559,6 +2805,7 @@ function Read-AppendedSessionData {
     param([Parameter(Mandatory = $true)]$State)
     if ([string]::IsNullOrWhiteSpace([string]$State.Path) -or -not (Test-Path -LiteralPath $State.Path)) { return $false }
     try {
+        $identityChanged = Refresh-HudSessionIdentity $State
         $file = Get-Item -LiteralPath $State.Path
         $State.LastWriteTimeUtc = $file.LastWriteTimeUtc
         if ($file.Length -lt $State.Offset) {
@@ -2567,7 +2814,7 @@ function Read-AppendedSessionData {
             $State.Model = ''
             $State.Workspace = ''
         }
-        if ($file.Length -eq $State.Offset) { return $false }
+        if ($file.Length -eq $State.Offset) { return $identityChanged }
         $stream = New-Object IO.FileStream($State.Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
         try {
             [void]$stream.Seek($State.Offset, [IO.SeekOrigin]::Begin)
@@ -2578,8 +2825,12 @@ function Read-AppendedSessionData {
 
         $split = Split-HudJsonLines ([string]$State.PendingText) $text
         $State.PendingText = [string]$split.PendingText
-        $updated = $false
+        $updated = $identityChanged
         foreach ($line in @($split.CompleteLines)) {
+            try {
+                $rawRecord = $line | ConvertFrom-Json -ErrorAction Stop
+                if (Set-HudSessionIdentityFromRecord $State $rawRecord) { $updated = $true }
+            } catch { }
             $item = Convert-HudRecord $line
             if ($null -eq $item) { continue }
             if ($item.Kind -eq 'context') {
@@ -2593,6 +2844,7 @@ function Read-AppendedSessionData {
                 $State.TerminalStatus = ''
                 $State.TerminalAt = [DateTimeOffset]::MinValue
                 $State.TerminalSilent = $false
+                Reset-TerminalExitState $State
                 $State.Dismissed = $false
                 $State.LastUsageAt = [DateTimeOffset]::Now
                 $State.HasObservedActivity = $true
@@ -2609,6 +2861,7 @@ function Read-AppendedSessionData {
                 $State.TerminalStatus = 'completed'
                 $State.TerminalAt = [DateTimeOffset]$item.Timestamp
                 $State.TerminalSilent = $true
+                Reset-TerminalExitState $State
                 Write-HudDebug ('Silent completion retained: ' + [string]$State.Workspace)
                 $updated = $true
             } elseif ($item.Kind -eq 'aborted') {
@@ -2616,6 +2869,7 @@ function Read-AppendedSessionData {
                 $State.TerminalStatus = 'aborted'
                 $State.TerminalAt = [DateTimeOffset]$item.Timestamp
                 $State.TerminalSilent = $false
+                Reset-TerminalExitState $State
                 Set-TaskAttention $State 'aborted'
                 $updated = $true
             }
@@ -2654,6 +2908,7 @@ function Read-AppendedSessionData {
     } catch {
         $State.LastReadErrorAt = [DateTimeOffset]::Now
         $script:lastReadErrorAt = [DateTimeOffset]::Now
+        Write-HudDebug ('Session read failed: ' + $_.Exception.Message)
         return $false
     }
 }
@@ -2714,10 +2969,13 @@ function Refresh-ActiveSessions {
     $changed = [bool]$indexChanged
     foreach ($file in $files) {
         $activePaths[$file.FullName] = $true
-        if (Initialize-SessionFile $file) {
+        $initialized = Initialize-SessionFile $file
+        $state = $sessionStates[$file.FullName]
+        if (Refresh-HudSessionIdentity $state) { $changed = $true }
+        if ($initialized) {
             $changed = $true
             if ([string]$config.multiTask.displayMode -eq 'split' -and ($isInitialScan -or [bool]$config.multiTask.autoSplitNewTasks)) {
-                $newState = $sessionStates[$file.FullName]
+                $newState = $state
                 if ((Test-HudUserTaskState $newState) -and $splitWindows.Count -lt [int]$config.multiTask.maxSplitBubbles) { Show-TaskBubble $newState }
             }
         }
@@ -2783,7 +3041,7 @@ function Apply-SliderPreview {
 }
 
 $liveControls = @(
-    $languageCombo,$layoutCombo,$numberCombo,$positionCombo,$monitorScopeCombo,$activeWindowCombo,$taskRetentionCombo,
+    $languageCombo,$layoutCombo,$numberCombo,$positionCombo,$monitorScopeCombo,$activeWindowCombo,$taskRetentionCombo,$terminalExitModeCombo,
     $displayModeCombo,$listStyleCombo,$listDensityCombo,$taskNameModeCombo,$maxSplitCombo,$numberCooldownCombo,
     $summaryAttentionModeCombo,$listAttentionModeCombo,$taskBubbleAttentionModeCombo,$dotPatternCombo,$dotBrightnessCombo,$dotSpeedCombo,$attentionDurationCombo,$transparencyModeCombo,
     $agentNotificationPermissionCombo,$agentNotificationModeCombo,$agentNotificationIntensityCombo,$agentNotificationDurationCombo,
@@ -3034,6 +3292,7 @@ $timer.Add_Tick({
     foreach ($state in @($sessionStates.Values)) {
         if (Read-AppendedSessionData $state) { $changed = $true }
         if (Confirm-PendingTaskCompletion $state) { $changed = $true }
+        if (Update-TerminalExitState $state) { $changed = $true }
         $taskStatus = Update-TaskStatusTransition $state
         if ([string]$state.LastRenderedStatus -ne $taskStatus) { $changed = $true }
     }

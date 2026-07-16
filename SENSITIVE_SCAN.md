@@ -1,5 +1,11 @@
 # Sensitive information scan
 
+## 2.0.2-preview source scan - 2026-07-15
+
+- Public candidates contain no local profile/repository paths, credentials, session JSONL, databases, logs, settings, archives, real task names or real Token values.
+- New identity, completion-departure and theme-adaptive effect tests use synthetic workspaces, colors and lifecycle records only.
+- Installer and local release procedure reject `private/`, `.test-output/`, generated artifacts and local-data extensions. The final exact ZIP is scanned again after the last public edit.
+
 ## 2.0.1-preview release scan - 2026-07-15
 
 The release staging package was assembled from tracked public files plus the new public release notes only. It contains 85 files.

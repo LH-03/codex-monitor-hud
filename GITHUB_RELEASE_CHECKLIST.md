@@ -17,4 +17,5 @@
 - [ ] Test multiple monitors and mixed DPI before calling click-through fully validated.
 - [ ] Confirm font size persists with 0.1 precision and all four status color schemes remain editable.
 - [ ] Do not commit `~/.codex/sessions`, SQLite files or `%LOCALAPPDATA%\CodexMonitorHUD`.
-- [ ] Confirm the release branch is `release/2.0.1-preview`, the tag is `v2.0.1-preview`, and the GitHub Release is marked as a pre-release.
+- [ ] Confirm GitHub Desktop is on `main`, the tag is `v2.0.2-preview`, and the GitHub Release is marked as a pre-release.
+- [ ] Regenerate the final ZIP, SHA-256 and copy-ready GitHub fields with the local release-preparation procedure after the last package-affecting edit.

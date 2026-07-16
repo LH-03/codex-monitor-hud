@@ -1,5 +1,14 @@
 # Test results
 
+## 2.0.2-preview release validation - 2026-07-15
+
+- Source validation passes PowerShell parsing, XAML and JSON parsing, locale parity, accounting, configuration migration, theme safety and active-session discovery.
+- Synthetic delayed-identity fixtures cover padded headers, metadata appended after discovery, official-title refresh, internal auto-review filtering and workspace fallback from `session_meta.cwd` in both isolated list and split modes.
+- Dedicated real-WPF list and split fixtures use zero retention plus the strongest completion departure; the target remains visible during its bounded animation and is removed only after it ends.
+- Synthetic solid, gradient and image-theme profiles verify dark/light classification, opposite color compensation, stronger dark-surface glow gain and hard opacity/blur ceilings shared by status dots, reminders, proactive CODEX notices and completion departure.
+- Node syntax validation passes for the MCP server.
+- Local `2.0.2-preview` installation passes source/install parity with 87 included files and zero missing, extra or hash-changed files. The manifest version, one personal marketplace entry and a fresh heartbeat were verified; local maintenance workflow files are excluded from the installed copy.
+
 ## 2.0.1-preview release validation - 2026-07-15
 
 - Added a synthetic four-date active-task regression for GitHub issue #2; it verifies aggregation across date folders without raising the 64-file discovery cap.

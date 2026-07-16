@@ -457,6 +457,16 @@
                   <ComboBoxItem x:Name="Retention1800Item" Content="30 分钟" Tag="1800" />
                 </ComboBox>
               </StackPanel>
+              <StackPanel>
+                <TextBlock x:Name="TerminalExitModeLabel" Text="完成退场提醒" FontSize="12" Foreground="{StaticResource Muted}" />
+                <ComboBox x:Name="TerminalExitModeCombo">
+                  <ComboBoxItem x:Name="TerminalExitFadeItem" Content="自然淡出" Tag="fade" />
+                  <ComboBoxItem x:Name="TerminalExitGentleItem" Content="轻柔提醒（推荐）" Tag="gentle" />
+                  <ComboBoxItem x:Name="TerminalExitFocusItem" Content="聚焦退场" Tag="focus" />
+                  <ComboBoxItem x:Name="TerminalExitBeaconItem" Content="强提醒退场" Tag="beacon" />
+                </ComboBox>
+                <TextBlock x:Name="TerminalExitHint" Text="保留时间结束后，只让对应列表行或独立气泡完成这段有界退场动画。" MaxWidth="270" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,3,0,0" />
+              </StackPanel>
             </WrapPanel>
 
               </StackPanel>

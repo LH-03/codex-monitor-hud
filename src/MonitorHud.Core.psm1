@@ -28,6 +28,75 @@ function Merge-HudConfig {
     return $Default
 }
 
+function ConvertTo-HudRgbColor {
+    param([string]$Value, [string]$Fallback = '#FF0A84FF')
+    $candidate = if ($Value -match '^#[0-9A-Fa-f]{8}$') { $Value.Substring(3) } elseif ($Value -match '^#[0-9A-Fa-f]{6}$') { $Value.Substring(1) } else { $null }
+    if ($null -eq $candidate) {
+        $candidate = if ($Fallback -match '^#[0-9A-Fa-f]{8}$') { $Fallback.Substring(3) } else { $Fallback.TrimStart('#') }
+    }
+    return [pscustomobject]@{
+        R = [Convert]::ToInt32($candidate.Substring(0,2),16)
+        G = [Convert]::ToInt32($candidate.Substring(2,2),16)
+        B = [Convert]::ToInt32($candidate.Substring(4,2),16)
+    }
+}
+
+function Get-HudRgbLuminance {
+    param($Color)
+    $channels = foreach ($value in @([double]$Color.R,[double]$Color.G,[double]$Color.B)) {
+        $channel = $value / 255.0
+        if ($channel -le 0.04045) { $channel / 12.92 } else { [Math]::Pow((($channel + 0.055) / 1.055),2.4) }
+    }
+    return (0.2126 * $channels[0]) + (0.7152 * $channels[1]) + (0.0722 * $channels[2])
+}
+
+function Get-HudSurfaceEffectProfile {
+    param(
+        [string]$Background,
+        [string]$Foreground,
+        [ValidateSet('solid','gradient','image')][string]$Surface = 'solid',
+        [string]$GradientStart = '',
+        [string]$GradientEnd = '',
+        [string]$EffectColor = '#FF0A84FF',
+        [double]$BaseOpacity = 0.72,
+        [double]$BaseBlur = 20.0
+    )
+    $foregroundLuminance = Get-HudRgbLuminance (ConvertTo-HudRgbColor $Foreground '#FFFFFFFF')
+    if ($Surface -eq 'gradient') {
+        $startLuminance = Get-HudRgbLuminance (ConvertTo-HudRgbColor $GradientStart $Background)
+        $endLuminance = Get-HudRgbLuminance (ConvertTo-HudRgbColor $GradientEnd $Background)
+        $surfaceLuminance = ($startLuminance + $endLuminance) / 2.0
+    } elseif ($Surface -eq 'image') {
+        # Image themes can vary frame by frame. Their required foreground color is
+        # the stable contrast contract, so use it to infer the intended polarity.
+        $surfaceLuminance = 1.0 - $foregroundLuminance
+    } else {
+        $surfaceLuminance = Get-HudRgbLuminance (ConvertTo-HudRgbColor $Background '#EAFFFFFF')
+    }
+    $isDark = $surfaceLuminance -lt 0.46
+    $color = ConvertTo-HudRgbColor $EffectColor '#FF0A84FF'
+    $target = if ($isDark) { 255.0 } else { 0.0 }
+    $mix = if ($isDark) { 0.22 } else { 0.18 }
+    $red = [int][Math]::Round($color.R + (($target - $color.R) * $mix))
+    $green = [int][Math]::Round($color.G + (($target - $color.G) * $mix))
+    $blue = [int][Math]::Round($color.B + (($target - $color.B) * $mix))
+    $adaptiveColor = ('#FF{0:X2}{1:X2}{2:X2}' -f $red,$green,$blue)
+    if ($isDark) {
+        return [pscustomobject]@{
+            Tone='dark'; Color=$adaptiveColor
+            PeakOpacity=[Math]::Min(1.0,($BaseOpacity * 1.18) + 0.06)
+            MinimumOpacity=0.08; Blur=[Math]::Min(72.0,$BaseBlur * 1.18)
+            FlowCore='#FFF7FBFF'; FlowShoulderAlpha='C8'
+        }
+    }
+    return [pscustomobject]@{
+        Tone='light'; Color=$adaptiveColor
+        PeakOpacity=[Math]::Min(0.92,$BaseOpacity * 0.92)
+        MinimumOpacity=0.03; Blur=[Math]::Max(6.0,$BaseBlur * 0.86)
+        FlowCore=$adaptiveColor; FlowShoulderAlpha='98'
+    }
+}
+
 function Get-HudThemes {
     param([Parameter(Mandatory = $true)][string]$PluginRoot)
     $themeRoots = @(
@@ -176,6 +245,7 @@ function Get-HudConfig {
     $result.themeStyle.statusDotSize = [Math]::Max(5.0, [Math]::Min(18.0, [double]$result.themeStyle.statusDotSize))
     if ([string]::IsNullOrWhiteSpace([string]$result.themeStyle.fontFamily)) { $result.themeStyle.fontFamily = 'Segoe UI Variable Text, Microsoft YaHei UI' }
     $result.statusTiming.terminalHoldSeconds = [Math]::Max(0, [Math]::Min(1800, [int]$result.statusTiming.terminalHoldSeconds))
+    if ($null -eq $result.statusTiming.PSObject.Properties['terminalExitMode'] -or @('fade','gentle','focus','beacon') -notcontains [string]$result.statusTiming.terminalExitMode) { $result.statusTiming.terminalExitMode = 'gentle' }
     $result.pricing.path = [string]$result.pricing.path
     return $result
 }
@@ -561,4 +631,4 @@ function Test-HudAccounting {
     (($Snapshot.Cached + $Snapshot.Uncached) -eq $Snapshot.Input) -and (($Snapshot.Input + $Snapshot.Output) -eq $Snapshot.CallTotal)
 }
 
-Export-ModuleMember -Function Get-HudPaths, Get-HudConfig, Save-HudConfig, New-HudTaskNumberPool, Get-HudTaskNumber, Add-HudReleasedTaskNumber, Get-HudLocale, Get-HudThemes, Get-HudPricingCatalog, Get-HudCostEstimate, Format-HudCost, Get-LatestHudSessionFile, Get-ActiveHudSessionFiles, Convert-HudRecord, Split-HudJsonLines, Get-LatestHudSnapshot, Get-LatestHudAllowanceSnapshot, Format-HudNumber, Get-HudMetrics, Merge-HudSnapshots, Test-HudAccounting
+Export-ModuleMember -Function Get-HudPaths, Get-HudConfig, Save-HudConfig, New-HudTaskNumberPool, Get-HudTaskNumber, Add-HudReleasedTaskNumber, Get-HudLocale, Get-HudThemes, Get-HudPricingCatalog, Get-HudCostEstimate, Format-HudCost, Get-LatestHudSessionFile, Get-ActiveHudSessionFiles, Convert-HudRecord, Split-HudJsonLines, Get-LatestHudSnapshot, Get-LatestHudAllowanceSnapshot, Format-HudNumber, Get-HudMetrics, Merge-HudSnapshots, Test-HudAccounting, Get-HudSurfaceEffectProfile

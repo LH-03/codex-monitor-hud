@@ -21,6 +21,13 @@ if (($result.cached + $result.uncached) -ne $result.input) { throw 'Input split 
 if (($result.input + $result.output) -ne $result.call_total) { throw 'Call total self-test failed.' }
 
 Import-Module $core -Force
+$darkEffect = Get-HudSurfaceEffectProfile -Background '#EE111827' -Foreground '#FFF8FAFC' -Surface solid -EffectColor '#FF0A84FF' -BaseOpacity 0.72 -BaseBlur 20
+$lightEffect = Get-HudSurfaceEffectProfile -Background '#F4F8FAFC' -Foreground '#FF172033' -Surface solid -EffectColor '#FF0A84FF' -BaseOpacity 0.72 -BaseBlur 20
+$gradientEffect = Get-HudSurfaceEffectProfile -Background '#FFFFFFFF' -Foreground '#FFF8FAFC' -Surface gradient -GradientStart '#FF101426' -GradientEnd '#FF222B45' -EffectColor '#FF7C3AED' -BaseOpacity 0.70 -BaseBlur 30
+$imageEffect = Get-HudSurfaceEffectProfile -Background '#FFFFFFFF' -Foreground '#FFF8FAFC' -Surface image -EffectColor '#FF7C3AED' -BaseOpacity 0.70 -BaseBlur 30
+if ($darkEffect.Tone -ne 'dark' -or $lightEffect.Tone -ne 'light' -or $gradientEffect.Tone -ne 'dark' -or $imageEffect.Tone -ne 'dark') { throw 'Dark/light theme surface classification self-test failed.' }
+if ([double]$darkEffect.PeakOpacity -le [double]$lightEffect.PeakOpacity -or [double]$darkEffect.Blur -le [double]$lightEffect.Blur -or [string]$darkEffect.Color -eq [string]$lightEffect.Color) { throw 'Theme-adaptive effect compensation self-test failed.' }
+if ([double]$darkEffect.PeakOpacity -gt 1.0 -or [double]$lightEffect.PeakOpacity -gt 0.92 -or [double]$darkEffect.Blur -gt 72.0) { throw 'Theme-adaptive effect bounds self-test failed.' }
 $completeTail = Split-HudJsonLines '' '{"type":"event_msg","payload":{"type":"token_count"}}'
 if ($completeTail.CompleteLines.Count -ne 1 -or -not [string]::IsNullOrEmpty([string]$completeTail.PendingText)) { throw 'Complete no-newline JSON tail self-test failed.' }
 $partialTail = Split-HudJsonLines '' '{"type":"event_msg"'
@@ -132,7 +139,7 @@ if ([int]$defaultConfig.multiTask.maxSplitBubbles -ne 6 -or [string]$defaultConf
 if ([string]$defaultConfig.multiTask.listStyle -ne 'rows' -or [string]$defaultConfig.multiTask.listDensity -ne 'compact' -or [string]$defaultConfig.attention.summaryMode -ne 'halo' -or [string]$defaultConfig.attention.listMode -ne 'flow' -or [string]$defaultConfig.attention.taskBubbleMode -ne 'flow' -or [string]$defaultConfig.transparencyMode -ne 'uniform') { throw 'List density, per-surface attention or transparency defaults are missing.' }
 if (-not [bool]$defaultConfig.attention.dotEnabled -or -not [bool]$defaultConfig.attention.dotBreathing -or [string]$defaultConfig.attention.dotPattern -ne 'heartbeat' -or [string]$defaultConfig.attention.dotBrightness -ne 'balanced') { throw 'Independent status-dot reminder defaults are missing.' }
 if ([bool]$defaultConfig.attention.onSettled -or [int]$defaultConfig.attention.completionGraceSeconds -ne 8) { throw 'Low-false-positive reminder defaults are missing.' }
-if ([int]$defaultConfig.statusTiming.terminalHoldSeconds -ne 120) { throw 'Completed-task retention must default to two minutes.' }
+if ([int]$defaultConfig.statusTiming.terminalHoldSeconds -ne 120 -or [string]$defaultConfig.statusTiming.terminalExitMode -ne 'gentle') { throw 'Completed-task retention must default to two minutes with the gentle departure cue.' }
 if ([string]$defaultConfig.themeStyle.surface -ne 'solid' -or [string]$defaultConfig.themeStyle.shadow -ne 'soft' -or [double]$defaultConfig.themeStyle.statusDotSize -ne 8.0) { throw 'Rich theme-style defaults are missing.' }
 if ([bool]$defaultConfig.fields.estimatedCost -or [bool]$defaultConfig.multiTask.listFields.estimatedCost -or [bool]$defaultConfig.multiTask.bubbleFields.estimatedCost) { throw 'API-equivalent cost must remain opt-in on every surface.' }
 if ([bool]$defaultConfig.agentNotifications.enabled -or [string]$defaultConfig.agentNotifications.permission -ne 'text') { throw 'Codex proactive notifications must remain opt-in with text-only permission by default.' }
@@ -141,10 +148,18 @@ if ([bool]$defaultConfig.multiTask.listFields.taskTotal -or -not [bool]$defaultC
 $mainText = Get-Content -Raw -Encoding UTF8 -LiteralPath $main
 $mcpText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\mcp-server.mjs')
 $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\SettingsWindow.xaml')
+$installText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install.ps1')
 if ($mcpText -notmatch 'monitor_hud_disable_click_through' -or $mainText -notmatch 'passthrough-off\.signal') { throw 'Click-through recovery tool or signal is missing.' }
 if ($mainText -notmatch 'System\.Windows\.Forms\.NotifyIcon' -or $mainText -notmatch 'Disable-HudMousePassthrough' -or $mainText -notmatch '\$trayZh\.disableMousePassthrough' -or $mainText -notmatch '\$trayIcon\.Text') { throw 'Localized click-through tray recovery entry is missing.' }
 if ($settingsXaml -notmatch 'MousePassthroughCheck' -or $settingsXaml -notmatch 'TickFrequency="0\.1"' -or $settingsXaml -notmatch 'OpacitySlider[^>]+Minimum="0\.15"') { throw 'Click-through setting or low/smooth opacity controls are missing.' }
-if ($settingsXaml -notmatch 'TaskRetentionCombo' -or $settingsXaml -notmatch 'Retention1800Item' -or $mainText -match 'TerminalSilent.*return \$false' -or (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch 'terminalHoldSeconds = \[Math\]::Max\(0, \[Math\]::Min\(1800') { throw 'Completed-task retention setting or silent-completion hold is missing.' }
+if ($settingsXaml -notmatch 'TaskRetentionCombo' -or $settingsXaml -notmatch 'Retention1800Item' -or $settingsXaml -notmatch 'TerminalExitModeCombo' -or $settingsXaml -notmatch 'TerminalExitBeaconItem' -or $mainText -match 'TerminalSilent.*return \$false' -or $mainText -notmatch 'Start-HudTerminalExitAnimation' -or $mainText -notmatch 'Update-TerminalExitState' -or $mainText -notmatch 'Get-HudSessionIdentity[\s\S]{0,2400}-TotalCount 64' -or $mainText -notmatch 'record\.payload\.cwd' -or $mainText -notmatch 'Set-HudSessionIdentityFromRecord' -or $mainText -notmatch 'IdentityMetadataFound' -or (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch "@\('fade','gentle','focus','beacon'\)") { throw 'Completed-task retention/departure, workspace identity, or late-metadata filter is missing.' }
+foreach ($localOnlyName in @('private','AGENTS.md','WORKSPACE_STATE.md')) {
+    if ($installText -notmatch [regex]::Escape("'$localOnlyName'")) { throw "Installer must exclude local-only '$localOnlyName' material." }
+}
+foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','scripts/prepare-delivery.ps1')) {
+    if ($installText -notmatch [regex]::Escape("'$localOnlyPath'")) { throw "Installer must exclude local-only '$localOnlyPath' material." }
+}
+if ($installText -notmatch '\$excludedRootNames' -or $installText -notmatch '\$excludedRelativePaths') { throw 'Installer exclusion boundary is missing.' }
 foreach ($required in @('ThemeWorkshopDropZone','ThemeImportButton','AttentionHelp','ToolTipService.InitialShowDelay')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Polished settings affordance '$required' is missing." } }
 foreach ($required in @('MultiTaskTab','DisplayModeCombo','ListStyleCombo','ListDensityCombo','TaskNameModeCombo','MaxSplitCombo','AutoSplitCheck','ListFieldModel','BubbleFieldModel','PositionCustomItem','SummaryAttentionModeCombo','ListAttentionModeCombo','TaskBubbleAttentionModeCombo','SummaryAttentionFlowItem','SummaryAttentionFocusItem','DotAttentionEnabledCheck','DotPatternCombo','DotBrightnessCombo','DotSpeedCombo','DotBreathingCheck','TransparencyModeCombo')) {
     if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Multi-task setting '$required' is missing." }
@@ -177,11 +192,12 @@ try {
     if (Test-Path -LiteralPath $migrationRoot) { Remove-Item -LiteralPath $migrationRoot -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $migrationRoot | Out-Null
     $legacySettingsPath = Join-Path $migrationRoot 'settings.json'
-    [ordered]@{ multiTask=[ordered]@{ taskFields=[ordered]@{ model=$false; callTotal=$true; taskTotal=$false; updated=$false }; listDensity='invalid' } } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $legacySettingsPath -Encoding UTF8
+    [ordered]@{ multiTask=[ordered]@{ taskFields=[ordered]@{ model=$false; callTotal=$true; taskTotal=$false; updated=$false }; listDensity='invalid' }; statusTiming=[ordered]@{ terminalExitMode='invalid' } } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $legacySettingsPath -Encoding UTF8
     $migrationPaths = [pscustomobject]@{ DefaultConfigPath=(Join-Path $root 'config.default.json'); ConfigPath=$legacySettingsPath }
     $migratedConfig = Get-HudConfig $migrationPaths
     if ([string]$migratedConfig.multiTask.listDensity -ne 'compact' -or [bool]$migratedConfig.multiTask.bubbleFields.model -or -not [bool]$migratedConfig.multiTask.bubbleFields.callTotal) { throw 'Legacy task-field or list-density migration self-test failed.' }
     if (-not [bool]$migratedConfig.multiTask.listFields.model -or [bool]$migratedConfig.multiTask.listFields.taskTotal) { throw 'Legacy settings unexpectedly replaced compact list-field defaults.' }
+    if ([string]$migratedConfig.statusTiming.terminalExitMode -ne 'gentle') { throw 'Invalid legacy terminal-exit mode did not migrate to the gentle default.' }
 } finally {
     if (Test-Path -LiteralPath $migrationRoot) { Remove-Item -LiteralPath $migrationRoot -Recurse -Force }
 }
@@ -191,9 +207,13 @@ foreach ($surfaceMode in @('summaryMode','listMode','taskBubbleMode')) {
 foreach ($required in @('completed_silent','PendingCompletionTurnId','completionGraceSeconds','LastListAttentionRevision','config.multiTask.displayMode -eq ''summary''')) { if ($mainText -notmatch [regex]::Escape($required) -and $required -ne 'completed_silent') { throw "Low-false-positive or per-surface routing path '$required' is missing." } }
 if ((Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\MonitorHud.Core.psm1')) -notmatch 'completed_silent') { throw 'Silent completion filtering is missing.' }
 foreach ($path in @('docs\AI_PORTING_AND_CUSTOMIZATION_GUIDE.md','skills\create-monitor-hud-theme\SKILL.md','skills\create-monitor-hud-theme\references\theme-format.md')) { if (-not (Test-Path -LiteralPath (Join-Path $root $path))) { throw "Customization artifact '$path' is missing." } }
+if (-not (Test-Path -LiteralPath (Join-Path $root 'scripts\test-terminal-exit-isolated.ps1'))) { throw 'Terminal departure runtime regression is missing.' }
 foreach ($required in @('Import-HudThemeFile','Assert-HudThemeDefinition','\.cmhud-theme','System\.IO\.Compression','New-HudSurfaceBrush')) { if ($mainText -notmatch $required) { throw "Theme workshop runtime path '$required' is missing." } }
 foreach ($required in @('Start-HudDotAttentionAnimation','Start-HudSurfaceAttentionAnimation','dotEnabled','dotBreathing','dotBrightness','dotPattern','dotSpeed')) {
     if ($mainText -notmatch [regex]::Escape($required)) { throw "Stackable attention path '$required' is missing." }
+}
+foreach ($required in @('Get-HudEffectProfile','Get-HudSurfaceEffectProfile','profile.PeakOpacity','profile.FlowCore','profile.FlowShoulderAlpha')) {
+    if ($mainText -notmatch [regex]::Escape($required) -and (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch [regex]::Escape($required)) { throw "Theme-adaptive notification effect path '$required' is missing." }
 }
 foreach ($mode in @('halo','breathe','flow','focus')) {
     if ($mainText -notmatch [regex]::Escape("'$mode'")) { throw "Surface attention mode '$mode' is missing." }

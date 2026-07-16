@@ -25,7 +25,10 @@ if (Test-Path -LiteralPath $stateRoot) {
 
 if ((Resolve-Path -LiteralPath $SourceRoot).Path -ne $targetRoot) {
     New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
-    $items = Get-ChildItem -Force -LiteralPath $SourceRoot | Where-Object { $_.Name -notin @('.git','artifacts','.test-output') }
+    # Developer-only material must never become part of an installed plugin.
+    $excludedRootNames = @('.git','artifacts','.test-output','private','AGENTS.md','WORKSPACE_STATE.md')
+    $excludedRelativePaths = @('docs/MAINTENANCE_WORKFLOW.md','scripts/prepare-delivery.ps1')
+    $items = Get-ChildItem -Force -LiteralPath $SourceRoot | Where-Object { $_.Name -notin $excludedRootNames }
     foreach ($item in $items) {
         $copied = $false
         for ($attempt = 0; $attempt -lt 30 -and -not $copied; $attempt++) {
@@ -40,7 +43,9 @@ if ((Resolve-Path -LiteralPath $SourceRoot).Path -ne $targetRoot) {
     # this directory untouched.
     foreach ($installedFile in Get-ChildItem -LiteralPath $targetRoot -Recurse -File -Force) {
         $relativePath = $installedFile.FullName.Substring($targetRoot.Length).TrimStart('\')
-        if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot $relativePath))) {
+        $rootName = ($relativePath -split '[\\/]')[0]
+        $normalizedRelativePath = $relativePath.Replace('\','/')
+        if ($rootName -in $excludedRootNames -or $normalizedRelativePath -in $excludedRelativePaths -or -not (Test-Path -LiteralPath (Join-Path $SourceRoot $relativePath))) {
             Remove-Item -LiteralPath $installedFile.FullName -Force
         }
     }

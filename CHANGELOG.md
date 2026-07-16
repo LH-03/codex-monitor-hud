@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.2-preview - 2026-07-15
+
+- Wait for bounded session identity metadata before rendering a newly discovered task, refresh delayed official titles, recover workspace names from `session_meta.cwd`, and keep internal auto-review sessions from appearing transiently as duplicate user tasks.
+- Add four completion-departure levels for list rows and independent task bubbles: natural fade, gentle cue, focus exit and a bounded beacon. The existing completed-task retention setting still controls when the departure begins.
+- Adapt status-dot, automatic reminder, proactive CODEX-notice and completion-departure effects to light, dark, gradient and image-theme polarity so the selected intensity remains perceptually clear without exceeding animation limits.
+- Exclude developer-only `private/` material from installation and delivery packages.
+
 ## 2.0.1-preview - 2026-07-15
 
 - Keep finished conversations visible for a configurable period, including silent completion records. The default is two minutes; settings offer immediate hiding through thirty minutes, and a new turn clears the completed state immediately.

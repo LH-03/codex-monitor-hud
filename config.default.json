@@ -92,7 +92,8 @@
     "activeSeconds": 12,
     "idleSeconds": 90,
     "errorHoldSeconds": 30,
-    "terminalHoldSeconds": 120
+    "terminalHoldSeconds": 120,
+    "terminalExitMode": "gentle"
   },
   "background": "#EAF7F8FA",
   "foreground": "#FF111827",

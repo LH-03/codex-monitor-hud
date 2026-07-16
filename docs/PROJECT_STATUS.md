@@ -4,10 +4,14 @@ Last updated: 2026-07-15
 
 ## Current release
 
-The current patch build is the **preview** `2.0.1-preview`; GitHub publication remains entirely user-controlled. It adds configurable completed-task retention, mixed-DPI text clarity and shadow-free persistent HUD surfaces.
+The current installed release candidate is the **preview** `2.0.2-preview`; GitHub publication remains entirely user-controlled. It prevents incomplete or internal task identities from flashing into the HUD, adds four bounded completion-departure levels, and keeps every notification effect legible across light and dark themes.
 
 ## Unreleased local acceptance work
 
+- Newly discovered files wait for bounded `session_meta` identity before rendering. Delayed official titles refresh in place, workspace labels can recover from `session_meta.cwd`, and internal auto-review sessions do not appear transiently as extra user tasks.
+- After the configured completed-task retention expires, a list row or independent bubble can leave by natural fade, gentle cue, focus exit or bounded beacon. Only the target surface animates, and a new turn cancels terminal departure immediately.
+- A shared luminance profile adapts status-dot glows, automatic reminder surfaces, proactive CODEX notices and completion departure to light, dark, gradient and image-theme polarity. Dark surfaces receive bounded extra gain; light surfaces use tighter, darker contrast.
+- The installed candidate passed full source/install parity with local maintenance workflow files excluded, one personal marketplace entry and a fresh HUD heartbeat.
 - Frequent Token records no longer replay the whole-window fade. Update animation is signature-gated to task membership, display mode, and status-phase changes, is much subtler, and does not override explicit completion or Codex notice effects.
 - Broad all-date discovery no longer equals visible-task membership. Internal subagent sessions remain hidden, completed user tasks stay visible for a configurable terminal hold, and a bounded UTF-8 tail reader prevents final lifecycle records from being lost on Windows PowerShell 5.1.
 - List rows use `project · Codex thread title` as their default identity. The title is live-read from `session_index.jsonl`, matching Codex Usage Tracker instead of parsing prompt text; hover adds start time, project-only remains optional, and the title is not persisted to the MCP task registry.
@@ -26,7 +30,6 @@ The current patch build is the **preview** `2.0.1-preview`; GitHub publication r
 - Active-session discovery now evaluates recent writes across every creation-date folder. This fixes resumed older conversations that previously alternated inside one list row and caused repeat numbering instead of appearing concurrently.
 - The installer and `INSTALL_WITH_CODEX.md` preserve basic-monitoring defaults on first install, then present advanced DIY capabilities as explicit user choices.
 - `docs/AI_PORTING_AND_CUSTOMIZATION_GUIDE.md` explains the architecture and adaptation boundaries for other platforms and agent runtimes; `skills/create-monitor-hud-theme` is the distributable theme-authoring Skill.
-- Test build `2.0.0-preview` is installed locally. Source/install parity is 85 files; the live registry exposes the one current user task while excluding recent internal/completed sessions. No public clone, Commit, Push, Release or Issue operation is part of this acceptance cycle.
 
 ## v2.0.0 rename work in progress
 
