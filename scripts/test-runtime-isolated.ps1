@@ -252,6 +252,15 @@ try {
             [IO.File]::AppendAllText($terminalFiles[3].FullName, ([Environment]::NewLine + $aborted), $encoding)
         }
         Start-Sleep -Seconds 10
+        # Folder polling can consume up to 1.5 seconds before the runtime sees
+        # the record, so wait for the eight-second continuation guard itself
+        # instead of racing it with a fixed ten-second process shutdown.
+        $completionDeadline = [DateTime]::UtcNow.AddSeconds(5)
+        do {
+            $lifecycleLog = Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog
+            if ($lifecycleLog -match ('Attention triggered: ' + [regex]::Escape($workspaces[2]) + ' completed')) { break }
+            Start-Sleep -Milliseconds 250
+        } while ([DateTime]::UtcNow -lt $completionDeadline)
         $postLifecycleRegistry = Get-Content -Raw -Encoding UTF8 -LiteralPath $registryPath | ConvertFrom-Json
         if (@($postLifecycleRegistry.tasks | Where-Object { [string]$_.workspace -eq [string]$workspaces[0] }).Count -ne 1) { throw 'Silent completion did not remain visible during the configured retention period.' }
         if (@($postLifecycleRegistry.tasks | Where-Object { [string]$_.workspace -eq [string]$workspaces[1] }).Count -ne 1) { throw 'Immediately resumed task disappeared from the visible task set.' }

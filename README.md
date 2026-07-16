@@ -1,156 +1,87 @@
 # Codex Monitor HUD
 
-> You are reading: **English** · [阅读简体中文版 →](README.zh-CN.md)
+> English · [简体中文](README.zh-CN.md)
 
-**Know when Codex needs you—without keeping Codex in front.**
+Codex Monitor HUD is a Windows desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
 
-Codex Monitor HUD is a lightweight, always-visible real-time task monitor for Codex Desktop on Windows. Leave Codex working in the background while you watch a video, play a game, write, browse, or work in another app. A small desktop HUD keeps the live state of your Codex tasks in sight and draws your attention back only when something needs it.
+The project is intentionally a live monitor, not a historical analytics service, billing tool, or conversation database.
 
-> **Safety reminder:** do not close a Codex conversation while it is still running. If you accidentally click its close button, restart Codex (and the HUD if needed) before judging the monitor state; the deleted-conversation recovery path is intentionally conservative.
+## What it shows
 
-It is built for one job: **reliable live awareness of background Codex work**. Token counters and the latest locally observed weekly allowance provide useful context, but they are not the product's identity. This is not a historical analytics suite, billing dashboard, or conversation index.
+- active, listening, idle, paused, read-error, completed, and aborted states;
+- cached and uncached input, output, reasoning output, call total, task total, and context use;
+- the latest weekly-allowance observation present in local Codex records;
+- stable task numbers and a two-line task identity;
+- optional public-API-equivalent cost estimates, clearly labeled as estimates.
 
-## Who it is for
+Each task-list item has a project/workspace main title and a subtitle line. The default hover mode keeps the time visible and reveals the official Codex conversation title on hover. `Always` keeps the conversation title visible; `Hidden` keeps only the project and time. Titles come from Codex's local `session_index.jsonl`, not from prompt or response text.
 
-Codex Monitor HUD is especially useful when you:
+## Display modes
 
-- let Codex run long tasks while another app is in the foreground;
-- run several Codex tasks concurrently and need to see which one is active, settled, completed, or interrupted;
-- want a compact visual reminder instead of repeatedly reopening Codex;
-- care about fast refresh, low overhead, local processing, and a UI that can stay on screen for hours;
-- want task-level live context without maintaining another usage database.
+| Mode | Behavior |
+| --- | --- |
+| Summary | One compact aggregate HUD; no per-task windows. |
+| List | Stable numbered rows inside the main HUD. Styles: rows, cards, and rail. Detail: Compact, Balanced, or Detailed. |
+| Split | Up to 12 independent, resizable task bubbles backed by the same session-state table. |
 
-## Monitor now, analyze later
+Task discovery is capped at 64 recent session files. Reopened conversations are found by recent write time even when their files remain under an older creation-date folder. Internal/subagent sessions and expired terminal tasks are filtered from the user-visible projection.
 
-| Your main need | Better fit |
-|---|---|
-| Keep background Codex tasks visible in a small always-on-top HUD | **Codex Monitor HUD** |
-| See concurrent tasks as one summary, a list, or separate bubbles | **Codex Monitor HUD** |
-| Get a visible return-to-work cue when a task settles, completes, or fails | **Codex Monitor HUD** |
-| Investigate historical usage by task, model, subagent, call, or time range | [Codex Usage Tracker](https://github.com/douglasmonsky/codex-usage-tracker) |
-| Use a local SQLite index, dashboard, CLI reports, or deeper usage diagnostics | [Codex Usage Tracker](https://github.com/douglasmonsky/codex-usage-tracker) |
+![Task list rendered with synthetic data](assets/hud-multitask-en.png)
 
-[Codex Usage Tracker](https://github.com/douglasmonsky/codex-usage-tracker) is a strong local-first choice when you want detailed analysis after or across runs. It intentionally offers a broader dashboard, index, CLI, and investigation workflow. Codex Monitor HUD stays focused on the lighter, immediate question: **what is Codex doing right now, and do I need to return?** This project's maintainer has also contributed a reviewed and merged pull request to Codex Usage Tracker with Simplified Chinese localization and small performance improvements.
+## Optional behavior
 
-## Three ways to watch concurrent work
+These features are disabled by default and should be enabled deliberately:
 
-- **Summary** — the default. One compact bubble shows the combined live picture without task names.
-- **Task list** — expand the HUD into stable numbered rows. Choose compact rows, information cards, or a status rail; tune the density separately. Every row shows `project · short conversation label` by default, so parallel conversations inside one project remain distinguishable. Hover adds the start time; project-only and always-show-time modes remain available.
-- **Split bubbles** — detach one important task or split all visible tasks into independent, resizable bubbles. Merge one task or everything back into the summary at any time.
+- double-click a task row or bubble to open its validated `codex://threads/<id>` deep link;
+- retract a quiet HUD to one overall light or numbered horizontal/vertical task lights;
+- automatic completion, abort/error, settling, and context-threshold reminders;
+- proactive, task-targeted Codex notices with text-only or bounded expressive permission;
+- mouse click-through, with recovery from the notification-area menu and settings shortcuts;
+- API-equivalent cost estimates and imported local themes.
 
-Each list row and independent bubble also has a restrained × action for manual cleanup. It removes only that item from the current HUD view—never the Codex conversation or log—and the item returns automatically if the same conversation starts another turn.
+The HUD does not infer completion from prose. Completed and aborted states require lifecycle evidence; an activity timeout becomes idle rather than a false completion.
 
-List fields and independent-bubble fields are configured separately. The latest weekly allowance observation is account-wide, so it remains on the summary rather than being repeated as if every task had its own allowance.
+## Codex Micro color reference
 
-Rapid task churn is bounded and predictable: visible tasks keep their numbers, released numbers cool down before reuse, expired or externally deleted state is removed, and reopened older conversations are rediscovered by recent write time in their original creation-date folders instead of replacing newer rows. When no visible task remains, the HUD reports that directly instead of waiting forever for a vanished conversation. Session discovery is capped at 64 active files, and independent bubbles are hard-capped at 12. These guardrails protect long-running, high-concurrency use without turning the monitor into another indexing service.
+The optional `codexMicro` scheme uses five display-reference values sampled from OpenAI's public Codex Micro page. It is not an official OpenAI HUD palette, does not imply endorsement, and is not calibrated to reproduce the page or hardware lighting. Display, color-management, accessibility, and theme differences can change the visible result. See [COLOR_ATTRIBUTION.md](COLOR_ATTRIBUTION.md) for the source, values, mapping, and limitations.
 
-![Concurrent task list with synthetic data](assets/hud-multitask-en.png)
+## Runtime and performance boundary
 
-## Attention that points to the right task
+The current implementation uses Windows PowerShell 5.1, WPF, Windows Forms for the notification-area icon, and small Win32 interop helpers. It avoids a database, reads only appended session bytes after discovery, caches locale and render projections, and does not rebuild unchanged WPF trees.
 
-Codex Monitor HUD distinguishes ordinary live activity from moments that may need you. Status-dot reminders and surface reminders are independent and can run together:
+Windows PowerShell/WPF can retain a high private committed-memory watermark after parsing or rendering bursts. The HUD returns unused working-set pages to Windows after updates; this reduces physical resident memory but does not make the committed watermark disappear. Local measurements are recorded in [TEST_RESULTS.md](TEST_RESULTS.md); they are machine-specific and are not a universal memory guarantee. A substantially lower committed-memory floor would require a future compiled .NET resident host.
 
-- status-dot rhythm, brightness, speed, and optional subtle scale breathing;
-- soft halo, whole-surface breathing, moving pulse light, or a stronger focus pulse;
-- separate behavior for the summary, the relevant list row, and an independent task bubble;
-- separate switches for explicit completion, abort/error, and natural settling.
+## Privacy
 
-The monitor does not guess beyond the local evidence it can observe. **Completed** and **aborted** require explicit lifecycle events. A normal activity timeout becomes **settled/idle**, not a false completion.
+Processing is local. The HUD:
 
-### Optional: let Codex call you back mid-turn
+- reads only the top-level usage, model, lifecycle, workspace leaf, session ID, and official local title needed for display;
+- does not store prompts, assistant messages, tool output, raw transcripts, or credentials;
+- does not write to Codex session files;
+- makes no network requests and has no telemetry;
+- keeps the MCP task registry limited to task number, workspace leaf, coarse status, and update time.
 
-Alongside automatic state reminders, the HUD has a **separately authorized, off-by-default** proactive Codex notice channel. A developer or user can define a policy such as “notify me when a decision, approval, manual inspection, or named milestone needs attention.” Codex can send a short, unmistakably **CODEX NOTICE** message and then continue the same task; the turn does not have to end first.
+See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 
-- Each new Codex task rediscovers the capability from the plugin tool list instead of relying on another conversation's memory. Tasks already open during an install or upgrade may need to be recreated, or Codex restarted.
-- Codex first reads whether permission is off, text-only, or expressive, plus privacy-safe active task numbers.
-- Summary mode includes the source task number. List and split modes show text and motion only on the matching task. If targeting is ambiguous, Codex should ask instead of guess.
-- Text-only permission uses the user's configured notice style. Expressive permission lets Codex compose glow, pulse, breathe, flow, tempo, direction, and intensity in real time.
-- Choreography is bounded declarative visual data, never executable model-supplied code. Notices reject links and rich text and are capped at 160 characters.
+## Requirements
 
-Notice color, glow preset, strength, duration, and default motion are configured separately from automatic completion/error reminders. The channel is an attention cue, not a replacement for normal replies and not a way to manufacture task status.
-
-## Designed to stay out of the way
-
-- Local incremental reads instead of a second usage database.
-- Summary mode creates no per-task windows; list rows render only while expanded.
-- Fast bounded discovery and stale-state cleanup for long-running use.
-- Starts with the Codex plugin lifecycle, not Windows login.
-- Optional mouse click-through, disabled by default, with recovery from the persistent notification-area icon, settings shortcuts, and Codex.
-- Uniform, layered-clarity, and smart-focus transparency modes. Important values can remain readable while the shell and secondary details fade further.
-- Always-on-top positioning, six bubble layouts, ten visual presets, and opacity down to 15%.
-
-## Screenshots
-
-| Grouped chips | Metric cards |
-|---|---|
-| ![Grouped chips with synthetic data](assets/hud-frost-en.png) | ![Metric cards with synthetic data](assets/hud-cards-en.png) |
-
-| Settings | HSV / ARGB color picker |
-|---|---|
-| ![English settings](assets/settings-en.png) | ![English color picker](assets/color-picker-en.png) |
-
-| Multi-task controls | Proactive Codex notice and automatic reminders |
-|---|---|
-| ![English multi-task settings](assets/settings-multitask-en.png) | ![English proactive Codex notice and automatic reminder settings](assets/settings-reminders-en.png) |
-
-| Information-card list | Status-rail list |
-|---|---|
-| ![English information-card task list](assets/hud-list-cards-en.png) | ![English status-rail task list](assets/hud-list-rail-en.png) |
-
-All screenshots use synthetic task names, Token values, and allowance values. They contain no real logs, prompts, account data, or conversation content.
-
-## Live information
-
-Depending on the selected view and fields, the HUD can show:
-
-- active, listening, idle, paused, error, completed, and aborted states;
-- active task count, stable task number, project/conversation identity, model, and update time;
-- cached input, fresh input, output, reasoning output, call total, and task total;
-- context pressure and the latest weekly remaining allowance observed in local Codex records.
-- an opt-in cumulative **estimated API-equivalent cost** for the summary, each list row, and each independent bubble.
-
-The weekly allowance value is a recent local observation, not a direct account API query. It may lag behind another Codex surface until a newer local record is written.
-
-The cost figure is deliberately labeled as an estimate. It applies public text-token API prices to cumulative Codex input, cached input, and output tokens; it is **not** a ChatGPT subscription bill, an actual charge, or an exact credit conversion. Subscribers can use it as a rough view of Codex usage scale and API-equivalent value—plus the small satisfaction of seeing that today's subscription earned its keep. [OpenAI currently states](https://help.openai.com/en/articles/20001275/) that Codex, ChatGPT Work, ChatGPT for Excel, and Workspace Agents can draw from the same agentic usage/credit pool when available on a plan. This HUD sees only local Codex session records, so it cannot measure or separate Work usage and cannot reconstruct the full shared pool.
-
-Pricing is local and updateable: the project uses its bundled snapshot by default, so no other application or user folder is required. A custom JSON using the `codex-usage-tracker-pricing-v1`-compatible schema can be selected explicitly in Metrics. No pricing request is made while the HUD runs; unknown models show `--` instead of a guessed value, and the UI never displays the full local path.
-
-![English Metrics settings with opt-in API-equivalent cost](assets/settings-metrics-en.png)
-
-## Appearance and interaction
-
-- Simplified Chinese, English, and symbol-only HUD labels. Language and recovery entries stay bilingual.
-- Six bubble layouts: grouped chips, compact chips, inline minimal, outlined chips, metric cards, and stacked cards.
-- Three task-list styles and three density levels.
-- Ten data-driven visual presets plus per-state ARGB color editing.
-- A drag-and-drop Theme Workshop for `.json` / `.cmhud-theme` files and `.cmhud-theme.zip` packs with local PNG/JPG artwork. Themes can control gradients, typography, shadows, borders, status-dot scale, list density, and reminder appearance without executing theme code.
-- Exact, compact, and automatic number formatting.
-- Font size in 0.1-point steps, radius, opacity, scale, position, field selection, and update animation.
-- Drag to move, double-click for settings, and right-click for display and lifecycle controls.
-- Notification-area controls remain available while click-through is enabled.
-
-Basic built-in presets focus on appearance. Rich themes may intentionally carry visual layout, density, and reminder styling, but cannot alter reminder triggers, monitored data, or privacy behavior. See [Themes and UI extension points](docs/THEMING_AND_UI_EXTENSIONS.md), invoke [`$create-monitor-hud-theme`](skills/create-monitor-hud-theme/SKILL.md) to make a shareable theme, or read the [AI customization and porting guide](docs/AI_PORTING_AND_CUSTOMIZATION_GUIDE.md) before a deep modification, macOS/Linux port, or Claude Code adapter.
+- Windows 10 or Windows 11;
+- Codex Desktop with local session records available;
+- Windows PowerShell 5.1 or later;
+- Node.js available to the Codex plugin host.
 
 ## Install with Codex
 
-Copy this repository's GitHub URL and paste it into Codex with the following prompt:
+Give Codex the repository URL and ask it to read [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) before installing. A minimal English request is:
 
 ```text
-Install and configure the Codex Monitor HUD plugin from this GitHub repository:
-
-<PASTE_THIS_REPOSITORY_URL_HERE>
-
-Read INSTALL_WITH_CODEX.md first. On Windows, run scripts/install.ps1, validate the
-plugin and live local-log parser, enable the personal plugin entry, and open settings.
-Do not enable Windows login startup. Do not upload, delete, move, or modify my Codex
-session logs, usage databases, prompts, settings, or conversation content. Tell me
-clearly if Codex must restart or open a new task before plugin discovery completes.
-Keep the first install on basic monitoring defaults. Do not enable proactive notices,
-expressive choreography, cost estimates, click-through, or third-party themes for me.
-After installation, explain these optional DIY features and let me choose.
+Install Codex Monitor HUD from this repository. Read INSTALL_WITH_CODEX.md first.
+Use English for a first install, preserve existing settings on upgrade, run the project
+tests, install the personal plugin, and do not enable optional notices, cost estimates,
+click-through, themes, or Windows login startup without asking me.
 ```
 
-For a bilingual copy-and-paste prompt and verification checklist, see [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md).
+For Simplified Chinese, state that the request is Chinese and use `-DefaultLanguage zh-CN` on first install.
 
 ## Manual install
 
@@ -158,53 +89,41 @@ For a bilingual copy-and-paste prompt and verification checklist, see [INSTALL_W
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-Enable `codex-monitor-hud` in the personal plugin marketplace, then restart Codex or open a new task if plugin discovery has not refreshed yet.
+Manual first install defaults to English. Existing settings are preserved. The installer creates desktop and Start-menu settings shortcuts and does not enable Windows login startup.
 
-The installer creates desktop and Start menu settings shortcuts. It does not enable Windows login startup.
+## Everyday controls
 
-## Everyday use
+- Click the task count to open or close the list.
+- Detach one task or use **Split all** from the HUD/tray menu.
+- Drag the main HUD to use a custom position.
+- Double-click the main HUD to open Settings.
+- If click-through is enabled, use the notification-area icon to disable it.
+- Dismissing a row or bubble affects only the current HUD view; the task returns on its next turn.
 
-- Leave **Summary** selected for the smallest always-visible monitor.
-- Open the task counter to inspect the task list.
-- Detach a task that deserves its own bubble, or choose **Split all** for a parallel-task command center.
-- Use the notification-area **Display mode** submenu to switch modes or merge all bubbles.
-- If click-through is enabled, use the notification-area icon and choose **Disable click-through** to regain pointer access.
-- Ask Codex to “open Codex Monitor HUD settings” after the plugin is loaded.
+Settings are stored at `%LOCALAPPDATA%\CodexMonitorHUD\settings.json` and are not packaged with the plugin.
 
-Settings are stored locally under `%LOCALAPPDATA%\CodexMonitorHUD\settings.json` and are never included in releases.
-
-## Accounting
-
-Cached input is part of input, not an extra bucket:
+## Token accounting
 
 ```text
-fresh input = input tokens - cached input tokens
-call total  = input tokens + output tokens
+uncached input = input tokens - cached input tokens
+call total     = input tokens + output tokens
 ```
 
-Reasoning output is shown as an output detail and is not added to the call total again.
-
-## Privacy and limits
-
-Codex Monitor HUD reads the top-level usage, model, minimal lifecycle, and workspace-leaf information needed from recent local Codex sessions. For same-project identification, it follows Codex Usage Tracker's proven approach and reads Codex's separate `session_index.jsonl` to obtain the official `thread_name`; it does not derive titles from prompt text. The title remains runtime-only and is never written to the MCP registry, settings, repository, or a usage index. It does not store prompts, assistant messages, tool output, raw transcripts, or account credentials. It makes no network requests and has no telemetry. See [PRIVACY.md](PRIVACY.md).
-
-Requirements:
-
-- Windows 10 or Windows 11;
-- Codex Desktop with local session records available;
-- Windows PowerShell 5.1 or later;
-- Node.js available to the local Codex plugin host.
-
-Codex Monitor HUD is an independent, unofficial open-source project and is not affiliated with or endorsed by OpenAI.
+Reasoning output is an output detail and is not added to call total a second time. Weekly allowance is a latest local observation, not a direct account query. Cost estimates use local pricing data and are not subscription bills, charges, or exact credit conversions.
 
 ## Development
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode list -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-isolated.ps1
 ```
 
-There are no npm dependencies and no build step. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+Tests use synthetic sessions and isolated state roots. See [Architecture](docs/ARCHITECTURE.md), [Project status](docs/PROJECT_STATUS.md), [Test results](TEST_RESULTS.md), and [Contributing](CONTRIBUTING.md).
 
-## License
+## Project status and disclaimer
 
-MIT
+The current source version is `2.1.0`. It is Windows-only and unofficial; it is not affiliated with or endorsed by OpenAI. See [RELEASE_NOTES_2.1.0.md](RELEASE_NOTES_2.1.0.md) for the current release summary.
+
+MIT License.

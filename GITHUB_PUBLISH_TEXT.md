@@ -1,4 +1,6 @@
-# GitHub publishing text for v2.0.2-preview
+# Superseded GitHub publishing text for v2.1.0
+
+> Use [GITHUB_RELEASE_DRAFT_2.1.0.md](GITHUB_RELEASE_DRAFT_2.1.0.md) for the current GitHub Desktop commit and Release fields. This retained file is historical draft material only.
 
 ## Repository name
 
@@ -6,36 +8,34 @@
 
 ## Repository description
 
-`A lightweight real-time monitoring bubble for background Codex tasks on Windows.`
+`A local Windows HUD for current Codex task state, multi-task routing, and optional attention cues.`
 
 ## Commit message
 
-`Release 2.0.2-preview: task identity and completion cues`
+`Release 2.1.0: stable multi-task HUD and runtime-path reductions`
 
 ## Release tag
 
-`v2.0.2-preview`
+`v2.1.0`
 
 ## Release title
 
-`Codex Monitor HUD v2.0.2-preview`
+`Codex Monitor HUD v2.1.0`
 
 ## Release body
 
-Copy the contents of `RELEASE_NOTES_2.0.2-preview.md`.
+Copy the contents of `RELEASE_NOTES_2.1.0.md`.
 
 ## Suggested Chinese announcement
 
 ```text
-Codex Monitor HUD v2.0.2-preview 已发布。
-
-这是一个面向 Windows 版 Codex Desktop 的轻量实时监控 HUD，不是事后统计面板。本次 preview 修复新对话主标题延迟和内部任务短暂重复显示，加入四档任务完成退场，并让所有通知光效自动适配深浅主题。默认仍为本地处理、无遥测；不会读取提示词、回复或工具输出。
+Codex Monitor HUD v2.1.0 是 Windows 版稳定 v2。它提供汇总、双行任务列表和独立气泡，加入按需设置进程、静默任务灯与上下文提醒，并减少无变化时的重复解析和 WPF 重建。处理仍在本地，不修改 Codex 会话。PowerShell/WPF 的提交内存高水位与测试边界已在文档中明确说明。
 ```
 
 ## Suggested English announcement
 
 ```text
-Codex Monitor HUD v2.0.2-preview keeps new task identity stable from first appearance, adds four bounded completion-departure levels, and adapts every notification effect to light and dark themes. Processing remains local and does not read prompts, replies, or tool output.
+Codex Monitor HUD v2.1.0 is the stable Windows v2 line. It provides summary, two-line task-list, and independent-bubble views; adds an on-demand Settings process, quiet task lights, and context alerts; and reduces unchanged parsing and WPF reconstruction. Processing remains local and does not modify Codex sessions. The PowerShell/WPF committed-memory boundary is documented explicitly.
 ```
 
 ## Screenshot order
@@ -47,5 +47,7 @@ Codex Monitor HUD v2.0.2-preview keeps new task identity stable from first appea
 5. `assets/settings-en.png` — English settings.
 6. `assets/settings-reminders.png` — stackable status-dot and bubble reminders.
 7. `assets/settings-reminders-en.png` — English reminder controls.
+8. `assets/settings-behavior.png` — Simplified Chinese task navigation, quiet indicator and context thresholds.
+9. `assets/settings-behavior-en.png` — English task navigation, quiet indicator and context thresholds.
 
 All screenshots contain synthetic values and are safe to publish.

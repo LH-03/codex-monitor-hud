@@ -288,6 +288,8 @@
       <Setter Property="MinWidth" Value="150" />
       <Setter Property="BorderBrush" Value="#18000000" />
       <Setter Property="Background" Value="#FFF7F8FA" />
+      <Setter Property="Foreground" Value="{StaticResource Ink}" />
+      <Setter Property="CaretBrush" Value="{StaticResource Blue}" />
     </Style>
     <Style TargetType="TabItem">
       <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI" />
@@ -533,14 +535,13 @@
                   </StackPanel>
                 </WrapPanel>
                 <CheckBox x:Name="AutoSplitCheck" Content="分裂模式下自动拆出新任务" Margin="0,10,0,14" />
-                <TextBlock x:Name="ListFieldsTitle" Text="列表每项信息" FontSize="15" FontWeight="SemiBold" Margin="0,6,0,10" />
-                <WrapPanel>
-                  <CheckBox x:Name="ListFieldModel" Content="模型" />
-                  <CheckBox x:Name="ListFieldCallTotal" Content="本次合计" />
-                  <CheckBox x:Name="ListFieldTaskTotal" Content="任务累计" />
-                  <CheckBox x:Name="ListFieldEstimatedCost" Content="API 成本估算" />
-                  <CheckBox x:Name="ListFieldUpdated" Content="更新时间" />
-                </WrapPanel>
+                <TextBlock x:Name="ListFieldsTitle" Text="列表信息密度" FontSize="15" FontWeight="SemiBold" Margin="0,6,0,4" />
+                <TextBlock x:Name="ListDetailHint" Text="三档预设让每行保持可扫读；上下文占用始终显示。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8" />
+                <ComboBox x:Name="ListDetailCombo" Width="360" HorizontalAlignment="Left">
+                  <ComboBoxItem x:Name="ListDetailCompactItem" Content="简洁：状态 + 上下文占用" Tag="compact" />
+                  <ComboBoxItem x:Name="ListDetailBalancedItem" Content="标准：再加输入、输出和本次合计" Tag="balanced" />
+                  <ComboBoxItem x:Name="ListDetailDetailedItem" Content="详细：再加缓存、任务累计、模型和更新时间" Tag="detailed" />
+                </ComboBox>
                 <TextBlock x:Name="TaskBubbleFieldsTitle" Text="独立小气泡信息" FontSize="15" FontWeight="SemiBold" Margin="0,10,0,4" />
                 <TextBlock x:Name="TaskBubbleResizeHint" Text="每个独立气泡都可拖动右下角调整大小；字段选择与列表互不影响。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8" />
                 <WrapPanel>
@@ -713,7 +714,80 @@
             </ScrollViewer>
           </TabItem>
 
-          <TabItem x:Name="MetricsTab" Header="Metrics">
+        <TabItem x:Name="BehaviorTab" Header="Behavior">
+          <ScrollViewer x:Name="BehaviorScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="8,12,18,20">
+              <TextBlock x:Name="BehaviorTitle" Text="行为与提醒  Behavior" FontSize="15" FontWeight="SemiBold" />
+              <TextBlock x:Name="BehaviorHint" Text="把交互、安静收缩和上下文预警集中在一处；默认保持克制。" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,4,0,14" TextWrapping="Wrap" />
+
+              <Border Width="620" HorizontalAlignment="Left" Background="#080A84FF" BorderBrush="#200A84FF" BorderThickness="1" CornerRadius="13" Padding="14,12" Margin="0,0,0,10">
+                <StackPanel>
+                  <TextBlock x:Name="TaskNavigationTitle" Text="任务跳转" FontSize="14" FontWeight="SemiBold" />
+                  <TextBlock x:Name="TaskNavigationHint" Text="双击任务列表项或独立气泡，在 Codex 中打开对应任务。" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,8" TextWrapping="Wrap" />
+                  <CheckBox x:Name="OpenTaskOnDoubleClickCheck" Content="双击打开 Codex 任务详情" />
+                </StackPanel>
+              </Border>
+
+              <Border Width="620" HorizontalAlignment="Left" Background="#080A84FF" BorderBrush="#200A84FF" BorderThickness="1" CornerRadius="13" Padding="14,12" Margin="0,0,0,10">
+                <StackPanel>
+                  <TextBlock x:Name="IdleIndicatorTitle" Text="安静指示灯" FontSize="14" FontWeight="SemiBold" />
+                  <TextBlock x:Name="IdleIndicatorHint" Text="长时间没有任务活动时，只保留状态点；悬停或新活动会立即展开。" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,8" TextWrapping="Wrap" />
+                  <CheckBox x:Name="IdleIndicatorEnabledCheck" Content="启用自动缩回" Margin="0,0,0,8" />
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="IdleIndicatorDelayLabel" Text="无活动时长" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="IdleIndicatorDelayCombo" Grid.Column="1">
+                      <ComboBoxItem x:Name="IdleIndicator5Item" Content="5 分钟" Tag="5" />
+                      <ComboBoxItem x:Name="IdleIndicator15Item" Content="15 分钟" Tag="15" />
+                      <ComboBoxItem x:Name="IdleIndicator30Item" Content="30 分钟" Tag="30" />
+                      <ComboBoxItem x:Name="IdleIndicator60Item" Content="60 分钟" Tag="60" />
+                    </ComboBox>
+                  </Grid>
+                  <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="IdleIndicatorLayoutLabel" Text="缩回布局" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="IdleIndicatorLayoutCombo" Grid.Column="1">
+                      <ComboBoxItem x:Name="IdleIndicatorOverallItem" Content="单个总状态灯" Tag="overall" />
+                      <ComboBoxItem x:Name="IdleIndicatorHorizontalItem" Content="横向任务状态灯" Tag="horizontal" />
+                      <ComboBoxItem x:Name="IdleIndicatorVerticalItem" Content="纵向任务状态灯" Tag="vertical" />
+                    </ComboBox>
+                  </Grid>
+                  <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="IdleIndicatorTaskStyleLabel" Text="子任务灯样式" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                    <ComboBox x:Name="IdleIndicatorTaskStyleCombo" Grid.Column="1">
+                      <ComboBoxItem x:Name="IdleIndicatorTaskDotItem" Content="圆点与编号" Tag="dot" />
+                      <ComboBoxItem x:Name="IdleIndicatorTaskBarItem" Content="圆角长条与编号" Tag="bar" />
+                    </ComboBox>
+                  </Grid>
+                  <CheckBox x:Name="IdleIndicatorBubblesCheck" Content="独立气泡也自动缩回" Margin="0,9,0,0" />
+                </StackPanel>
+              </Border>
+
+              <Border Width="620" HorizontalAlignment="Left" Background="#080A84FF" BorderBrush="#200A84FF" BorderThickness="1" CornerRadius="13" Padding="14,12" Margin="0,0,0,10">
+                <StackPanel>
+                  <TextBlock x:Name="ContextAlertsTitle" Text="上下文占用提醒" FontSize="14" FontWeight="SemiBold" />
+                  <TextBlock x:Name="ContextAlertsHint" Text="只在向上跨越阈值时提醒；上下文压缩或占用下降后会自动重置。" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,8" TextWrapping="Wrap" />
+                  <CheckBox x:Name="ContextMetricVisibleCheck" Content="显示上下文占用（提醒必需）" Margin="0,0,0,6" />
+                  <CheckBox x:Name="ContextAlertsEnabledCheck" Content="启用三级上下文提醒" Margin="0,0,0,8" />
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="132"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <TextBlock x:Name="ContextThresholdsLabel" Text="提醒阈值" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Grid.RowSpan="3" />
+                    <TextBox x:Name="ContextThreshold1Text" Grid.Column="1" Grid.Row="0" MinWidth="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Right" Margin="0" Foreground="{StaticResource Ink}" CaretBrush="{StaticResource Blue}" />
+                    <TextBlock x:Name="ContextThreshold1Hint" Text="阈值 1 (%)" Grid.Column="2" Grid.Row="0" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="10,0,0,0" />
+                    <TextBox x:Name="ContextThreshold2Text" Grid.Column="1" Grid.Row="1" MinWidth="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Right" Margin="0,7,0,0" Foreground="{StaticResource Ink}" CaretBrush="{StaticResource Blue}" />
+                    <TextBlock x:Name="ContextThreshold2Hint" Text="阈值 2 (%)" Grid.Column="2" Grid.Row="1" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="10,7,0,0" />
+                    <TextBox x:Name="ContextThreshold3Text" Grid.Column="1" Grid.Row="2" MinWidth="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Right" Margin="0,7,0,0" Foreground="{StaticResource Ink}" CaretBrush="{StaticResource Blue}" />
+                    <TextBlock x:Name="ContextThreshold3Hint" Text="阈值 3 (%)" Grid.Column="2" Grid.Row="2" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="10,7,0,0" />
+                  </Grid>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <TabItem x:Name="MetricsTab" Header="Metrics">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="8,14,8,22">
             <TextBlock x:Name="MetricsTitle" Text="显示内容  Metrics" FontSize="15" FontWeight="SemiBold" />
@@ -812,7 +886,9 @@
                   <Button x:Name="StatusPaletteIntuitive" Content="直觉语义" />
                   <Button x:Name="StatusPaletteColorblind" Content="色觉友好" />
                   <Button x:Name="StatusPaletteCalm" Content="低干扰" />
+                  <Button x:Name="StatusPaletteCodexMicro" Content="Codex Micro 展示参考色" />
                 </WrapPanel>
+                <TextBlock x:Name="StatusPaletteCodexMicroSource" Text="Codex Micro 展示参考色取样自 OpenAI 官方页面；仅作本地视觉参考，未获 OpenAI 认可。不同显示器、色彩管理和主题下的结果不保证与页面或硬件灯光一致。" TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,0,0,8" />
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="180"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
                   <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/></Grid.RowDefinitions>

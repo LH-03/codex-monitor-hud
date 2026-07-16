@@ -1,5 +1,6 @@
 param(
-    [string]$SourceRoot = (Split-Path -Parent $PSScriptRoot)
+    [string]$SourceRoot = (Split-Path -Parent $PSScriptRoot),
+    [ValidateSet('zh-CN','en')][string]$DefaultLanguage = 'en'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,6 +9,7 @@ $targetRoot = Join-Path $HOME ('plugins\' + $pluginName)
 $legacyPluginRoot = Join-Path $HOME 'plugins\codex-token-strip'
 $marketplacePath = Join-Path $HOME '.agents\plugins\marketplace.json'
 $stateRoot = Join-Path $env:LOCALAPPDATA 'CodexMonitorHUD'
+$settingsPath = Join-Path $stateRoot 'settings.json'
 
 if (Test-Path -LiteralPath $legacyPluginRoot) {
     throw "Legacy Codex Token HUD plugin detected at $legacyPluginRoot. This is a fresh v2 identity; uninstall the legacy plugin first. No settings or legacy files were migrated or deleted."
@@ -56,6 +58,15 @@ if ((Resolve-Path -LiteralPath $SourceRoot).Path -ne $targetRoot) {
     }
 }
 
+# Prompt-language selection is supplied by Codex's install workflow. Only a
+# first install receives this default; upgrades preserve the user's settings.
+if (-not (Test-Path -LiteralPath $settingsPath)) {
+    New-Item -ItemType Directory -Force -Path $stateRoot | Out-Null
+    $initialSettings = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $targetRoot 'config.default.json') | ConvertFrom-Json
+    $initialSettings.language = $DefaultLanguage
+    [IO.File]::WriteAllText($settingsPath, ($initialSettings | ConvertTo-Json -Depth 12), (New-Object Text.UTF8Encoding($false)))
+}
+
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $marketplacePath) | Out-Null
 if (Test-Path -LiteralPath $marketplacePath) {
     $marketplace = Get-Content -Raw -Encoding UTF8 -LiteralPath $marketplacePath | ConvertFrom-Json
@@ -83,6 +94,7 @@ $marketplace | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 -LiteralPath
 
 Write-Output "Installed: $targetRoot"
 Write-Output "Marketplace: $marketplacePath"
+Write-Output "First-install language: $DefaultLanguage (existing settings are preserved)"
 Write-Output 'Windows login startup is disabled. The Codex plugin MCP host starts the HUD when Codex loads the plugin.'
 Write-Output 'Restart Codex or start a new task after enabling the plugin.'
 Write-Output 'Open settings later from the desktop shortcut or Start menu: Codex Monitor HUD.'

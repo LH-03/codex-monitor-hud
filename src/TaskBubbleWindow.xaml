@@ -7,8 +7,8 @@
         AllowsTransparency="True"
         Background="Transparent"
         SizeToContent="WidthAndHeight"
-        MinWidth="280"
-        MinHeight="84"
+        MinWidth="0"
+        MinHeight="0"
         MaxWidth="960"
         MaxHeight="360"
         ShowInTaskbar="False"
@@ -77,14 +77,19 @@
                   StrokeLineJoin="Round" />
           </Viewbox>
         </Button>
-        <StackPanel>
+        <StackPanel x:Name="TaskBubbleContent">
           <StackPanel Orientation="Horizontal">
             <Border x:Name="TaskBubbleNumberBadge" CornerRadius="8" Background="#120A84FF" Padding="7,3" Margin="0,0,7,0">
               <TextBlock x:Name="TaskBubbleNumber" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="12" FontWeight="SemiBold" />
             </Border>
             <TextBlock x:Name="TaskBubbleName" MaxWidth="230" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="12" FontWeight="SemiBold" />
           </StackPanel>
-          <TextBlock x:Name="TaskBubbleMetrics" MaxWidth="520" TextTrimming="CharacterEllipsis" Margin="0,5,0,0" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="12" TextWrapping="NoWrap" />
+          <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+            <Border x:Name="TaskBubbleContextMetric" CornerRadius="7" Padding="6,2" Margin="0,0,7,0" BorderThickness="1">
+              <TextBlock x:Name="TaskBubbleContextText" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="12" FontWeight="SemiBold" />
+            </Border>
+            <TextBlock x:Name="TaskBubbleMetrics" MaxWidth="520" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="12" TextWrapping="NoWrap" />
+          </StackPanel>
         </StackPanel>
       </DockPanel>
     </Border>

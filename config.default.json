@@ -1,6 +1,6 @@
 {
   "preset": "frost",
-  "language": "zh-CN",
+  "language": "en",
   "layout": "chips",
   "numberFormat": "exact",
   "monitorScope": "aggregate",
@@ -9,6 +9,7 @@
     "displayMode": "summary",
     "listStyle": "rows",
     "listDensity": "compact",
+    "listDetail": "balanced",
     "nameMode": "hover",
     "maxSplitBubbles": 6,
     "autoSplitNewTasks": true,
@@ -26,6 +27,24 @@
       "taskTotal": true,
       "estimatedCost": false,
       "updated": true
+    }
+  },
+  "behavior": {
+    "openTaskOnDoubleClick": false,
+    "idleIndicator": {
+      "enabled": false,
+      "afterMinutes": 15,
+      "layout": "overall",
+      "taskStyle": "dot",
+      "includeTaskBubbles": true
+    },
+    "contextAlerts": {
+      "enabled": false,
+      "thresholds": [
+        75,
+        90,
+        98
+      ]
     }
   },
   "attention": {

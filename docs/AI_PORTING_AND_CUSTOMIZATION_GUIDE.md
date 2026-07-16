@@ -6,7 +6,7 @@ This document helps a coding AI or human maintainer understand, modify, or re-im
 
 ## 1. Product truth / 产品本质
 
-Codex Monitor HUD is a lightweight, local-first, real-time attention surface. Its competitive advantage is not exhaustive historical analytics. It keeps Codex in the background while a compact floating HUD answers four questions:
+Codex Monitor HUD is a local-first, real-time attention surface rather than a historical analytics service. The current PowerShell/WPF implementation is compact in scope, but it should not be described as having a universally low memory floor. Its job is to answer four questions:
 
 - Is work active, quiet, finished for this turn, aborted, or unreadable?
 - Which concurrent task needs attention?
@@ -20,7 +20,7 @@ Any port should preserve this priority order: **reliable live state > correct ta
 The shipping implementation is Windows-specific:
 
 - PowerShell hosts the runtime and incremental file reader.
-- WPF renders the summary HUD, task list, split bubbles, settings, tooltips, and animations.
+- WPF renders the summary HUD, task list, split bubbles, settings, tooltips, and animations. Settings and Color Picker run in an on-demand process rather than remaining in the resident HUD.
 - Win32 extended window styles implement mouse click-through.
 - Windows Forms provides the notification-area icon and recovery menu.
 - The source reads Codex session JSONL files under the current user's `.codex/sessions` directory in read-only, shared-read mode.
@@ -33,7 +33,7 @@ Do not treat these Windows mechanisms as the product. They are replaceable platf
 | Area | File | Responsibility |
 |---|---|---|
 | Parsing and accounting | `src/MonitorHud.Core.psm1` | Paths, config merge, JSONL record parsing, token/rate snapshots, aggregation, task numbering, themes |
-| Runtime orchestration | `src/CodexMonitorHUD.ps1` | Incremental tails, task lifecycle, reminder routing, WPF binding, tray, click-through, theme import |
+| Runtime orchestration | `src/CodexMonitorHUD.ps1` | Incremental tails, task lifecycle, cached projections, reminder routing, WPF binding, on-demand settings host, working-set trim, tray, click-through, theme import |
 | Agent notice bridge | `src/mcp-server.mjs`, `skills/codex-monitor-hud/SKILL.md` | Per-task capability discovery, opt-in text notices, bounded live choreography and agent usage rules |
 | HUD surfaces | `src/HudWindow.xaml`, `src/TaskBubbleWindow.xaml` | Summary/list shell and independent task bubbles |
 | Settings | `src/SettingsWindow.xaml`, `src/ColorPickerWindow.xaml` | Organized controls, polished tooltips, theme workshop, color editing |
@@ -41,7 +41,7 @@ Do not treat these Windows mechanisms as the product. They are replaceable platf
 | Localization | `locales/*.json` | Chinese, English, and symbols-only UI strings; keys must stay identical |
 | Themes | `themes/*.json` | Built-in declarative themes |
 | Theme creation Skill | `skills/create-monitor-hud-theme/` | AI workflow and shareable theme schema |
-| Verification | `scripts/test.ps1`, `scripts/test-runtime-isolated.ps1` | Static, parsing, concurrency, UI contract, and isolated runtime checks |
+| Verification | `scripts/test.ps1`, `scripts/test-runtime-isolated.ps1`, `scripts/test-behavior-isolated.ps1` | Static, parsing, concurrency, UI contract, list/split runtime, quiet behavior, and context-alert checks |
 
 ## 4. Lifecycle semantics that must not be simplified / 不能偷懒的状态语义
 
@@ -188,7 +188,7 @@ src/MonitorHud.Core.psm1, src/CodexMonitorHUD.ps1, and scripts/test.ps1 complete
 First report the product positioning, lifecycle semantics, platform-specific
 boundaries, privacy invariants, and the exact adapter surface you plan to change.
 Do not modify Codex/Claude data, user settings, databases, or GitHub. Keep the
-real-time monitor lightweight. When porting, normalize the target tool's
+real-time monitor bounded and responsive. When porting, normalize the target tool's
 documented events into the canonical adapter model before building UI.
 Clearly separate verified target capabilities from assumptions and do not
 promise feature parity when the target does not expose the required metrics.

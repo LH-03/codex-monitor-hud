@@ -2,6 +2,7 @@ param(
     [switch]$Managed,
     [int]$ParentPid = 0,
     [switch]$OpenSettings,
+    [switch]$SettingsHost,
     [switch]$SelfTest,
     [switch]$DebugLog,
     [string]$InstanceId = '',
@@ -11,13 +12,16 @@ param(
     [string]$ImportThemeFile,
     [switch]$PreviewSettingsAdvanced,
     [switch]$PreviewSettingsReminders,
-    [ValidateSet('general','multi','metrics','appearance')][string]$PreviewSettingsTab = 'general',
+    [ValidateSet('general','multi','behavior','metrics','appearance')][string]$PreviewSettingsTab = 'general',
     [ValidateSet('zh-CN','en','symbols')][string]$PreviewLanguage = 'zh-CN',
     [ValidateSet('chips','compact','inline','outline','cards','stacked')][string]$PreviewLayout = 'chips',
     [ValidateSet('summary','list')][string]$PreviewHudMode = 'summary',
     [ValidateSet('rows','cards','rail')][string]$PreviewListStyle = 'rows',
     [ValidateSet('compact','balanced','relaxed')][string]$PreviewListDensity = 'compact',
+    [ValidateSet('hover','always','hidden')][string]$PreviewTaskNameMode = 'hover',
     [ValidateSet('none','off','halo','breathe','flow','focus')][string]$PreviewAttentionMode = 'none',
+    [ValidateSet('none','overall','horizontal','vertical')][string]$PreviewQuietLayout = 'none',
+    [ValidateSet('dot','bar')][string]$PreviewQuietTaskStyle = 'dot',
     [ValidateSet('uniform','layered','focus')][string]$PreviewTransparencyMode = 'uniform',
     [double]$PreviewOpacity = 0,
     [double]$PreviewFontSize = 0
@@ -51,6 +55,11 @@ public static class HudNativeMethods {
     [DllImport("user32.dll", SetLastError=true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll", SetLastError=true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetProcessWorkingSetSize(IntPtr process, IntPtr minimum, IntPtr maximum);
 }
 '@
 }
@@ -76,6 +85,7 @@ function Write-HudDebug {
     ('{0:O} {1}' -f [DateTime]::Now, $Message) | Add-Content -Encoding UTF8 -LiteralPath $debugPath
 }
 $openSignal = Join-Path $paths.StateRoot 'open-settings.signal'
+$reloadSettingsSignal = Join-Path $paths.StateRoot 'reload-settings.signal'
 $showSignal = Join-Path $paths.StateRoot 'show.signal'
 $hideSignal = Join-Path $paths.StateRoot 'hide.signal'
 $pauseSignal = Join-Path $paths.StateRoot 'pause.signal'
@@ -90,7 +100,7 @@ $mutex = $null
 $isUtilityRun = $SelfTest -or -not [string]::IsNullOrWhiteSpace($RenderPreview) -or -not [string]::IsNullOrWhiteSpace($RenderSettingsPreview) -or -not [string]::IsNullOrWhiteSpace($RenderColorPickerPreview) -or -not [string]::IsNullOrWhiteSpace($ImportThemeFile)
 if (-not $isUtilityRun) {
     $createdNew = $false
-    $mutexSuffix = if ([string]::IsNullOrWhiteSpace($InstanceId)) { '' } else { '-' + ([regex]::Replace($InstanceId, '[^A-Za-z0-9_.-]', '_')) }
+    $mutexSuffix = if ($SettingsHost) { '-settings' } elseif ([string]::IsNullOrWhiteSpace($InstanceId)) { '' } else { '-' + ([regex]::Replace($InstanceId, '[^A-Za-z0-9_.-]', '_')) }
     $mutex = New-Object Threading.Mutex($true, ('Local\CodexMonitorHUD' + $mutexSuffix), [ref]$createdNew)
     if (-not $createdNew) {
         if ($OpenSettings) { [IO.File]::WriteAllText($openSignal, [DateTime]::UtcNow.ToString('O')) }
@@ -298,8 +308,18 @@ function Select-ComboTag {
 
 $config = Get-HudConfig $paths
 $pricingCatalog = Get-HudPricingCatalog $pluginRoot ([string]$config.pricing.path)
-$locale = Get-HudLocale $paths ([string]$config.language)
-$settingsLocale = if ([string]$config.language -eq 'symbols') { Get-HudLocale $paths 'en' } else { $locale }
+$hudLocaleCache = @{
+    'zh-CN' = Get-HudLocale $paths 'zh-CN'
+    'en' = Get-HudLocale $paths 'en'
+    'symbols' = Get-HudLocale $paths 'symbols'
+}
+function Get-RuntimeHudLocale {
+    param([string]$Language)
+    if ($hudLocaleCache.ContainsKey($Language)) { return $hudLocaleCache[$Language] }
+    return $hudLocaleCache['en']
+}
+$locale = Get-RuntimeHudLocale ([string]$config.language)
+$settingsLocale = if ([string]$config.language -eq 'symbols') { Get-RuntimeHudLocale 'en' } else { $locale }
 $snapshot = $null
 $sessionStates = @{}
 $sessionIndexPath = Join-Path $HOME '.codex\session_index.jsonl'
@@ -318,7 +338,20 @@ $interactivePreview = $false
 $currentStatus = 'idle'
 $lastMainAttentionRevision = 0
 $attentionSequence = 0
+$isMainIndicatorCollapsed = $false
+$contextMetricContainer = $null
 $lastUpdateAnimationSignature = ''
+$lastQuietIndicatorSignature = ''
+$lastContextMenuSignature = ''
+$lastHudAppearanceSignature = ''
+$lastHudMetricsStructureSignature = ''
+$hudMetricControls = @{}
+$summaryNoticeVisible = $false
+$lastTaskListRenderSignature = ''
+$lastMaterialUpdateAt = [DateTimeOffset]::Now
+$lastFullGcAt = [DateTimeOffset]::MinValue
+$lastWorkingSetTrimAt = [DateTimeOffset]::MinValue
+$memoryTrimPending = $true
 $themes = @(Get-HudThemes $pluginRoot)
 $hudHandle = [IntPtr]::Zero
 $hudBaseExtendedStyle = $null
@@ -331,19 +364,29 @@ $statusPalettes = [ordered]@{
     intuitive = [ordered]@{ active='#FF30D158'; listening='#FF0A84FF'; idle='#FF8E8E93'; paused='#FFFF9F0A'; error='#FFFF453A'; completed='#FF30D158'; aborted='#FFFF453A' }
     colorblind = [ordered]@{ active='#FF009E73'; listening='#FF56B4E9'; idle='#FF8A8A8A'; paused='#FFE69F00'; error='#FFD55E00'; completed='#FF009E73'; aborted='#FFD55E00' }
     calm = [ordered]@{ active='#FF5AC8A8'; listening='#FF6FA8DC'; idle='#FF9AA0A6'; paused='#FFD4A95B'; error='#FFD97070'; completed='#FF5AC8A8'; aborted='#FFD97070' }
+    codexMicro = [ordered]@{ active='#FF9CD5FE'; listening='#FFFFD0B8'; idle='#FFFFFFFF'; paused='#FFFFD0B8'; error='#FFFF7373'; completed='#FF9BF396'; aborted='#FFFF7373' }
 }
 
 $hud = Load-XamlWindow (Join-Path $PSScriptRoot 'HudWindow.xaml')
 Set-HudWindowIcon $hud
 Write-HudDebug 'HUD XAML loaded.'
 $hudShell = Find-Control $hud 'HudShell'
+$hudContentPanel = Find-Control $hud 'HudContentPanel'
 $statusDot = Find-Control $hud 'StatusDot'
 $metricsPanel = Find-Control $hud 'MetricsPanel'
 $taskListToggleButton = Find-Control $hud 'TaskListToggleButton'
 $taskListDivider = Find-Control $hud 'TaskListDivider'
 $taskListScroller = Find-Control $hud 'TaskListScroller'
 $taskListPanel = Find-Control $hud 'TaskListPanel'
+$quietIndicatorPanel = Find-Control $hud 'QuietIndicatorPanel'
+$quietOverallHost = Find-Control $hud 'QuietOverallHost'
+$quietOverallRing = Find-Control $hud 'QuietOverallRing'
+$quietOverallDot = Find-Control $hud 'QuietOverallDot'
+$quietIndicatorSeparator = Find-Control $hud 'QuietIndicatorSeparator'
+$quietTaskIndicators = Find-Control $hud 'QuietTaskIndicators'
 
+$loadSettingsUi = $SettingsHost -or -not [string]::IsNullOrWhiteSpace($RenderSettingsPreview) -or -not [string]::IsNullOrWhiteSpace($RenderColorPickerPreview) -or -not [string]::IsNullOrWhiteSpace($ImportThemeFile)
+if ($loadSettingsUi) {
 $settings = Load-XamlWindow (Join-Path $PSScriptRoot 'SettingsWindow.xaml')
 Set-HudWindowIcon $settings
 Write-HudDebug 'Settings XAML loaded.'
@@ -363,6 +406,7 @@ $terminalExitModeCombo = Find-Control $settings 'TerminalExitModeCombo'
 $settingsTabs = Find-Control $settings 'SettingsTabs'
 $appearanceScrollViewer = Find-Control $settings 'AppearanceScrollViewer'
 $multiTaskScrollViewer = Find-Control $settings 'MultiTaskScrollViewer'
+$behaviorScrollViewer = Find-Control $settings 'BehaviorScrollViewer'
 $displayModeCombo = Find-Control $settings 'DisplayModeCombo'
 $listStyleCombo = Find-Control $settings 'ListStyleCombo'
 $listDensityCombo = Find-Control $settings 'ListDensityCombo'
@@ -390,6 +434,17 @@ $agentNotificationIntensityCombo = Find-Control $settings 'AgentNotificationInte
 $agentNotificationDurationCombo = Find-Control $settings 'AgentNotificationDurationCombo'
 $agentNotificationColorText = Find-Control $settings 'AgentNotificationColorText'
 $agentNotificationColorButton = Find-Control $settings 'AgentNotificationColorButton'
+$openTaskOnDoubleClickCheck = Find-Control $settings 'OpenTaskOnDoubleClickCheck'
+$idleIndicatorEnabledCheck = Find-Control $settings 'IdleIndicatorEnabledCheck'
+$idleIndicatorDelayCombo = Find-Control $settings 'IdleIndicatorDelayCombo'
+$idleIndicatorLayoutCombo = Find-Control $settings 'IdleIndicatorLayoutCombo'
+$idleIndicatorTaskStyleCombo = Find-Control $settings 'IdleIndicatorTaskStyleCombo'
+$idleIndicatorBubblesCheck = Find-Control $settings 'IdleIndicatorBubblesCheck'
+$contextMetricVisibleCheck = Find-Control $settings 'ContextMetricVisibleCheck'
+$contextAlertsEnabledCheck = Find-Control $settings 'ContextAlertsEnabledCheck'
+$contextThreshold1Text = Find-Control $settings 'ContextThreshold1Text'
+$contextThreshold2Text = Find-Control $settings 'ContextThreshold2Text'
+$contextThreshold3Text = Find-Control $settings 'ContextThreshold3Text'
 $transparencyModeCombo = Find-Control $settings 'TransparencyModeCombo'
 $fontSizeSlider = Find-Control $settings 'FontSizeSlider'
 $radiusSlider = Find-Control $settings 'RadiusSlider'
@@ -414,6 +469,7 @@ $statusPaletteButtons = [ordered]@{
     intuitive = Find-Control $settings 'StatusPaletteIntuitive'
     colorblind = Find-Control $settings 'StatusPaletteColorblind'
     calm = Find-Control $settings 'StatusPaletteCalm'
+    codexMicro = Find-Control $settings 'StatusPaletteCodexMicro'
 }
 $statusTextControls = [ordered]@{
     active = Find-Control $settings 'StatusActiveText'
@@ -445,16 +501,11 @@ $settingsScrollViewer = Find-Control $settings 'SettingsScrollViewer'
 $settingsTabControls = [ordered]@{
     GeneralTab = Find-Control $settings 'GeneralTab'
     MultiTaskTab = Find-Control $settings 'MultiTaskTab'
+    BehaviorTab = Find-Control $settings 'BehaviorTab'
     MetricsTab = Find-Control $settings 'MetricsTab'
     AppearanceTab = Find-Control $settings 'AppearanceTab'
 }
-$listFieldControls = [ordered]@{
-    model = Find-Control $settings 'ListFieldModel'
-    callTotal = Find-Control $settings 'ListFieldCallTotal'
-    taskTotal = Find-Control $settings 'ListFieldTaskTotal'
-    estimatedCost = Find-Control $settings 'ListFieldEstimatedCost'
-    updated = Find-Control $settings 'ListFieldUpdated'
-}
+$listDetailCombo = Find-Control $settings 'ListDetailCombo'
 $bubbleFieldControls = [ordered]@{
     model = Find-Control $settings 'BubbleFieldModel'
     callTotal = Find-Control $settings 'BubbleFieldCallTotal'
@@ -474,13 +525,15 @@ foreach ($name in @(
     'SettingsSubtitle','PresetsTitle','PresetsHint','ThemeWorkshopTitle','ThemeWorkshopHint','LanguageLayoutTitle','DisplayLanguageLabel','BubbleStyleLabel',
     'NumberFormatLabel','PositionLabel','MonitorScopeLabel','ActiveWindowLabel','TaskRetentionLabel','TerminalExitModeLabel','TerminalExitHint','MetricsTitle','MetricsHint','PricingSourceTitle','PricingSourceHint','PricingPathLabel',
     'AppearanceTitle','FontSizeLabel','RadiusLabel','OpacityLabel','BackgroundColorLabel','ForegroundColorLabel','AccentColorLabel',
-    'MousePassthroughHint','StatusPalettesTitle','StatusPalettesHint','MultiTaskTitle','MultiTaskExplanation',
-    'DisplayModeLabel','TaskNameModeLabel','MaxSplitLabel','NumberCooldownLabel','ListFieldsTitle','TaskBubbleFieldsTitle','TaskBubbleResizeHint',
+    'MousePassthroughHint','StatusPalettesTitle','StatusPalettesHint','StatusPaletteCodexMicroSource','MultiTaskTitle','MultiTaskExplanation',
+    'DisplayModeLabel','TaskNameModeLabel','MaxSplitLabel','NumberCooldownLabel','ListFieldsTitle','ListDetailHint','TaskBubbleFieldsTitle','TaskBubbleResizeHint',
     'ListDensityLabel',
     'ListStyleLabel','AgentNotificationTitle','AgentNotificationHint','AgentNotificationPermissionLabel','AgentNotificationModeLabel','AgentNotificationGlowPresetLabel','AgentNotificationIntensityLabel','AgentNotificationDurationLabel','AgentNotificationColorLabel',
     'AttentionTitle','AttentionHint','AttentionTriggersTitle','AttentionSurfacesTitle','SummaryAttentionModeLabel','ListAttentionModeLabel','TaskBubbleAttentionModeLabel','AttentionDurationLabel',
     'DotAttentionTitle','DotAttentionHint','DotPatternLabel','DotBrightnessLabel','DotSpeedLabel',
-    'TransparencyModeLabel','TransparencyHint'
+    'TransparencyModeLabel','TransparencyHint','BehaviorTitle','BehaviorHint','TaskNavigationTitle','TaskNavigationHint',
+    'IdleIndicatorTitle','IdleIndicatorHint','IdleIndicatorDelayLabel','IdleIndicatorLayoutLabel','IdleIndicatorTaskStyleLabel','ContextAlertsTitle','ContextAlertsHint','ContextThresholdsLabel',
+    'ContextThreshold1Hint','ContextThreshold2Hint','ContextThreshold3Hint'
 )) { $settingsTextControls[$name] = Find-Control $settings $name }
 
 $settingsContentControls = @{}
@@ -491,7 +544,7 @@ foreach ($name in @(
     'PositionBottomRightItem','PositionBottomCenterItem','PositionBottomLeftItem','MonitorLatestItem','MonitorAggregateItem',
     'ActiveWindow5Item','ActiveWindow15Item','ActiveWindow30Item','ActiveWindow60Item','Retention0Item','Retention30Item','Retention60Item','Retention120Item','Retention300Item','Retention600Item','Retention1800Item',
     'TerminalExitFadeItem','TerminalExitGentleItem','TerminalExitFocusItem','TerminalExitBeaconItem',
-    'StatusPaletteDefault','StatusPaletteIntuitive','StatusPaletteColorblind','StatusPaletteCalm',
+    'StatusPaletteDefault','StatusPaletteIntuitive','StatusPaletteColorblind','StatusPaletteCalm','StatusPaletteCodexMicro',
     'ModeSummaryItem','ModeListItem','ModeSplitItem','NameHoverItem','NameAlwaysItem','NameHiddenItem',
     'Cooldown30Item','Cooldown120Item','Cooldown300Item','Cooldown600Item',
     'ListRowsItem','ListCardsItem','ListRailItem','ListDensityCompactItem','ListDensityBalancedItem','ListDensityRelaxedItem',
@@ -507,7 +560,9 @@ foreach ($name in @(
     'DotBrightnessSubtleItem','DotBrightnessBalancedItem','DotBrightnessBrightItem',
     'DotSpeedSlowItem','DotSpeedNormalItem','DotSpeedFastItem',
     'Attention4Item','Attention6Item','Attention10Item','Attention15Item',
-    'TransparencyUniformItem','TransparencyLayeredItem','TransparencyFocusItem'
+    'TransparencyUniformItem','TransparencyLayeredItem','TransparencyFocusItem',
+    'IdleIndicator5Item','IdleIndicator15Item','IdleIndicator30Item','IdleIndicator60Item',
+    'IdleIndicatorOverallItem','IdleIndicatorHorizontalItem','IdleIndicatorVerticalItem','IdleIndicatorTaskDotItem','IdleIndicatorTaskBarItem'
 )) { $settingsContentControls[$name] = Find-Control $settings $name }
 
 $presetPanel = $settingsContentControls['PresetFrost'].Parent
@@ -537,6 +592,10 @@ $pickerTargetButton = $null
 $pickerHue = 0.0
 $pickerSaturation = 0.0
 $pickerSyncing = $false
+} else {
+    $settings = $null
+    $colorPicker = $null
+}
 
 function Get-ThemeDisplayName {
     param($Theme)
@@ -568,16 +627,16 @@ function Update-ThemeButtonLabels {
 
 function Get-BilingualText {
     param([string]$Key)
-    $zh = Get-HudLocale $paths 'zh-CN'
-    $en = Get-HudLocale $paths 'en'
+    $zh = Get-RuntimeHudLocale 'zh-CN'
+    $en = Get-RuntimeHudLocale 'en'
     if ([string]$config.language -eq 'en') { return ('{0} ({1})' -f [string]$en.$Key, [string]$zh.$Key) }
     if ([string]$config.language -eq 'symbols') { return ('{0} ({1} / {2})' -f [string]$locale.$Key, [string]$zh.$Key, [string]$en.$Key) }
     return ('{0} ({1})' -f [string]$zh.$Key, [string]$en.$Key)
 }
 
 function Apply-SettingsLanguage {
-    $script:locale = Get-HudLocale $paths ([string]$config.language)
-    $script:settingsLocale = if ([string]$config.language -eq 'symbols') { Get-HudLocale $paths 'en' } else { $locale }
+    $script:locale = Get-RuntimeHudLocale ([string]$config.language)
+    $script:settingsLocale = if ([string]$config.language -eq 'symbols') { Get-RuntimeHudLocale 'en' } else { $locale }
     $map = @{
         SettingsSubtitle='settingsSubtitle'; PresetsTitle='presetsTitle'; PresetsHint='presetsHint'; ThemeWorkshopTitle='themeWorkshopTitle'; ThemeWorkshopHint='themeWorkshopHint';
         LanguageLayoutTitle='languageLayoutTitle'; DisplayLanguageLabel='displayLanguage'; BubbleStyleLabel='bubbleStyle';
@@ -585,17 +644,21 @@ function Apply-SettingsLanguage {
         MetricsTitle='metricsTitle'; MetricsHint='metricsHint'; PricingSourceTitle='pricingSourceTitle'; PricingSourceHint='pricingSourceHint'; PricingPathLabel='pricingPathLabel'; AppearanceTitle='appearanceTitle'; FontSizeLabel='fontSize';
         RadiusLabel='cornerRadius'; OpacityLabel='opacity'; BackgroundColorLabel='backgroundColor';
         ForegroundColorLabel='foregroundColor'; AccentColorLabel='accentColor'; MousePassthroughHint='mousePassthroughHint';
-        StatusPalettesTitle='statusPalettesTitle'; StatusPalettesHint='statusPalettesHint';
+        StatusPalettesTitle='statusPalettesTitle'; StatusPalettesHint='statusPalettesHint'; StatusPaletteCodexMicroSource='statusPaletteCodexMicroSource';
         MultiTaskTitle='multiTaskTitle'; MultiTaskExplanation='multiTaskExplanation'; DisplayModeLabel='displayMode';
         ListStyleLabel='listStyle'; ListDensityLabel='listDensity'; TaskNameModeLabel='taskNameMode'; MaxSplitLabel='maxSplitBubbles'; NumberCooldownLabel='numberCooldown';
-        ListFieldsTitle='listFieldsTitle'; TaskBubbleFieldsTitle='taskBubbleFieldsTitle'; TaskBubbleResizeHint='taskBubbleResizeHint';
+        ListFieldsTitle='listFieldsTitle'; ListDetailHint='listDetailHint'; TaskBubbleFieldsTitle='taskBubbleFieldsTitle'; TaskBubbleResizeHint='taskBubbleResizeHint';
         AgentNotificationTitle='agentNotificationTitle'; AgentNotificationHint='agentNotificationHint'; AgentNotificationPermissionLabel='agentNotificationPermission';
         AgentNotificationModeLabel='agentNotificationMode'; AgentNotificationGlowPresetLabel='agentNotificationGlowPreset'; AgentNotificationIntensityLabel='agentNotificationIntensity';
         AgentNotificationDurationLabel='agentNotificationDuration'; AgentNotificationColorLabel='agentNotificationColor';
         AttentionTitle='attentionTitle'; AttentionHint='attentionHint'; AttentionTriggersTitle='attentionTriggersTitle'; AttentionSurfacesTitle='attentionSurfacesTitle';
         SummaryAttentionModeLabel='attentionSummaryMode'; ListAttentionModeLabel='attentionListMode'; TaskBubbleAttentionModeLabel='attentionTaskBubbleMode'; AttentionDurationLabel='attentionDuration';
         DotAttentionTitle='dotAttentionTitle'; DotAttentionHint='dotAttentionHint'; DotPatternLabel='dotPattern'; DotBrightnessLabel='dotBrightness'; DotSpeedLabel='dotSpeed';
-        TransparencyModeLabel='transparencyMode'; TransparencyHint='transparencyHint'
+        TransparencyModeLabel='transparencyMode'; TransparencyHint='transparencyHint';
+        BehaviorTitle='behaviorTitle'; BehaviorHint='behaviorHint'; TaskNavigationTitle='taskNavigationTitle'; TaskNavigationHint='taskNavigationHint';
+        IdleIndicatorTitle='idleIndicatorTitle'; IdleIndicatorHint='idleIndicatorHint'; IdleIndicatorDelayLabel='idleIndicatorDelay'; IdleIndicatorLayoutLabel='idleIndicatorLayout'; IdleIndicatorTaskStyleLabel='idleIndicatorTaskStyle';
+        ContextAlertsTitle='contextAlertsTitle'; ContextAlertsHint='contextAlertsHint'; ContextThresholdsLabel='contextThresholds';
+        ContextThreshold1Hint='contextThresholdEarly'; ContextThreshold2Hint='contextThresholdWatch'; ContextThreshold3Hint='contextThresholdCritical'
     }
     foreach ($name in $map.Keys) { $settingsTextControls[$name].Text = [string]$settingsLocale.($map[$name]) }
     foreach ($name in @('PresetsHint','MetricsHint')) {
@@ -616,7 +679,7 @@ function Apply-SettingsLanguage {
         Retention0Item='retentionOff'; Retention30Item='seconds30'; Retention60Item='minutes1'; Retention120Item='minutes2'; Retention300Item='minutes5'; Retention600Item='minutes10'; Retention1800Item='minutes30';
         TerminalExitFadeItem='terminalExitFade'; TerminalExitGentleItem='terminalExitGentle'; TerminalExitFocusItem='terminalExitFocus'; TerminalExitBeaconItem='terminalExitBeacon';
         StatusPaletteDefault='statusPaletteDefault'; StatusPaletteIntuitive='statusPaletteIntuitive';
-        StatusPaletteColorblind='statusPaletteColorblind'; StatusPaletteCalm='statusPaletteCalm';
+        StatusPaletteColorblind='statusPaletteColorblind'; StatusPaletteCalm='statusPaletteCalm'; StatusPaletteCodexMicro='statusPaletteCodexMicro';
         ModeSummaryItem='modeSummary'; ModeListItem='modeList'; ModeSplitItem='modeSplit';
         ListRowsItem='listRows'; ListCardsItem='listCards'; ListRailItem='listRail';
         ListDensityCompactItem='listDensityCompact'; ListDensityBalancedItem='listDensityBalanced'; ListDensityRelaxedItem='listDensityRelaxed';
@@ -634,18 +697,21 @@ function Apply-SettingsLanguage {
         DotBrightnessSubtleItem='dotBrightnessSubtle'; DotBrightnessBalancedItem='dotBrightnessBalanced'; DotBrightnessBrightItem='dotBrightnessBright';
         DotSpeedSlowItem='dotSpeedSlow'; DotSpeedNormalItem='dotSpeedNormal'; DotSpeedFastItem='dotSpeedFast';
         Attention4Item='seconds4'; Attention6Item='seconds6'; Attention10Item='seconds10'; Attention15Item='seconds15';
-        TransparencyUniformItem='transparencyUniform'; TransparencyLayeredItem='transparencyLayered'; TransparencyFocusItem='transparencyFocus'
+        TransparencyUniformItem='transparencyUniform'; TransparencyLayeredItem='transparencyLayered'; TransparencyFocusItem='transparencyFocus';
+        IdleIndicator5Item='minutes5'; IdleIndicator15Item='minutes15'; IdleIndicator30Item='minutes30'; IdleIndicator60Item='minutes60';
+        IdleIndicatorOverallItem='idleIndicatorOverall'; IdleIndicatorHorizontalItem='idleIndicatorHorizontal'; IdleIndicatorVerticalItem='idleIndicatorVertical';
+        IdleIndicatorTaskDotItem='idleIndicatorTaskDot'; IdleIndicatorTaskBarItem='idleIndicatorTaskBar'
     }
     foreach ($name in $contentMap.Keys) { $settingsContentControls[$name].Content = [string]$settingsLocale.($contentMap[$name]) }
-    $zhLocale = Get-HudLocale $paths 'zh-CN'
-    $enLocale = Get-HudLocale $paths 'en'
+    $zhLocale = Get-RuntimeHudLocale 'zh-CN'
+    $enLocale = Get-RuntimeHudLocale 'en'
     $settingsTextControls['DisplayLanguageLabel'].Text = ('{0} / {1}' -f [string]$zhLocale.displayLanguage, [string]$enLocale.displayLanguage)
     $settingsContentControls['LanguageZhItem'].Content = ('{0} ({1})' -f [string]$zhLocale.languageZh, [string]$enLocale.languageZh)
     $settingsContentControls['LanguageEnItem'].Content = ('{0} ({1})' -f [string]$enLocale.languageEn, [string]$zhLocale.languageEn)
     $settingsContentControls['LanguageSymbolsItem'].Content = ('{0} ({1})' -f [string]$zhLocale.languageSymbols, [string]$enLocale.languageSymbols)
     Update-ThemeButtonLabels
 
-    $english = Get-HudLocale $paths 'en'
+    $english = Get-RuntimeHudLocale 'en'
     foreach ($key in $fieldControls.Keys) {
         $fieldControls[$key].Content = if ([string]$config.language -eq 'symbols') {
             ('{0}  {1}' -f [string]$locale.$key, [string]$english.$key)
@@ -663,6 +729,14 @@ function Apply-SettingsLanguage {
     $agentNotificationEnabledCheck.Content = [string]$settingsLocale.agentNotificationEnabled
     $dotAttentionEnabledCheck.Content = [string]$settingsLocale.dotAttentionEnabled
     $dotBreathingCheck.Content = [string]$settingsLocale.dotBreathing
+    $openTaskOnDoubleClickCheck.Content = [string]$settingsLocale.openTaskOnDoubleClick
+    $idleIndicatorEnabledCheck.Content = [string]$settingsLocale.idleIndicatorEnabled
+    $idleIndicatorBubblesCheck.Content = [string]$settingsLocale.idleIndicatorBubbles
+    $contextMetricVisibleCheck.Content = [string]$settingsLocale.contextMetricVisible
+    $contextAlertsEnabledCheck.Content = [string]$settingsLocale.contextAlertsEnabled
+    $settings.FindName('ListDetailCompactItem').Content = [string]$settingsLocale.listDetailCompact
+    $settings.FindName('ListDetailBalancedItem').Content = [string]$settingsLocale.listDetailBalanced
+    $settings.FindName('ListDetailDetailedItem').Content = [string]$settingsLocale.listDetailDetailed
     $themeImportButton.Content = [string]$settingsLocale.themeImportButton
     $attentionHelp.ToolTip = [string]$settingsLocale.attentionTooltip
     $attentionCompletedCheck.ToolTip = [string]$settingsLocale.attentionCompletedTooltip
@@ -673,13 +747,12 @@ function Apply-SettingsLanguage {
     foreach ($control in @($summaryAttentionModeCombo,$listAttentionModeCombo,$taskBubbleAttentionModeCombo)) { $control.ToolTip = [string]$settingsLocale.attentionRoutingTooltip }
     $themeWorkshopDropZone.ToolTip = [string]$settingsLocale.themeWorkshopTooltip
     $fieldControls['estimatedCost'].ToolTip = [string]$settingsLocale.estimatedCostTooltip
-    $listFieldControls['estimatedCost'].ToolTip = [string]$settingsLocale.estimatedCostTooltip
     $bubbleFieldControls['estimatedCost'].ToolTip = [string]$settingsLocale.estimatedCostTooltip
     $pricingPathText.ToolTip = [string]$settingsLocale.pricingPathTooltip
-    foreach ($key in $listFieldControls.Keys) { $listFieldControls[$key].Content = [string]$settingsLocale.$key }
     foreach ($key in $bubbleFieldControls.Keys) { $bubbleFieldControls[$key].Content = [string]$settingsLocale.$key }
     $settingsTabControls['GeneralTab'].Header = [string]$settingsLocale.generalTab
     $settingsTabControls['MultiTaskTab'].Header = [string]$settingsLocale.multiTaskTab
+    $settingsTabControls['BehaviorTab'].Header = [string]$settingsLocale.behaviorTab
     $settingsTabControls['MetricsTab'].Header = [string]$settingsLocale.metricsTab
     $settingsTabControls['AppearanceTab'].Header = [string]$settingsLocale.appearanceTab
     $resetButton.Content = [string]$settingsLocale.resetDefaults
@@ -693,7 +766,7 @@ function Apply-SettingsLanguage {
 
 function Set-ColorPickerLanguage {
     param([string]$Language)
-    $pickerLocale = if ($Language -eq 'en') { Get-HudLocale $paths 'en' } else { Get-HudLocale $paths 'zh-CN' }
+    $pickerLocale = if ($Language -eq 'en') { Get-RuntimeHudLocale 'en' } else { Get-RuntimeHudLocale 'zh-CN' }
     $colorPicker.Title = ('{0} - {1}' -f [string]$pickerLocale.appName, [string]$pickerLocale.colorPickerTitle)
     $colorPickerTitle.Text = [string]$pickerLocale.colorPickerTitle
     $pickerValueLabel.Text = [string]$pickerLocale.colorPickerValue
@@ -803,17 +876,19 @@ function Show-ColorPicker {
     [void]$colorPicker.ShowDialog()
 }
 
-$colorWheelImage.Source=New-ColorWheelBitmap
-$colorWheelCanvas.Add_MouseLeftButtonDown({$colorWheelCanvas.CaptureMouse()|Out-Null;Set-PickerFromPoint ($_.GetPosition($colorWheelCanvas))})
-$colorWheelCanvas.Add_MouseMove({if($_.LeftButton -eq [Windows.Input.MouseButtonState]::Pressed){Set-PickerFromPoint ($_.GetPosition($colorWheelCanvas))}})
-$colorWheelCanvas.Add_MouseLeftButtonUp({$colorWheelCanvas.ReleaseMouseCapture()})
-foreach($pickerSlider in @($pickerValueSlider,$pickerAlphaSlider)){$pickerSlider.Add_ValueChanged({if(-not $pickerSyncing){Update-PickerVisuals}})}
-$pickerHexText.Add_LostFocus({if($pickerSyncing){return};try{$c=[Windows.Media.ColorConverter]::ConvertFromString([string]$pickerHexText.Text);$h=Convert-ColorToHsv $c;$script:pickerHue=$h.Hue;$script:pickerSaturation=$h.Saturation;$script:pickerSyncing=$true;try{$pickerValueSlider.Value=$h.Value;$pickerAlphaSlider.Value=$h.Alpha}finally{$script:pickerSyncing=$false};Update-PickerVisuals}catch{}})
-$pickerApplyButton.Add_Click({$pickerTargetText.Text=Format-HudColor (Get-PickerColor);if($pickerTargetText-eq$agentNotificationColorText){Select-ComboTag $agentNotificationGlowPresetCombo 'custom'};Update-ColorSwatches;Apply-ControlsToConfig;$colorPicker.Hide()})
-$pickerCancelButton.Add_Click({$colorPicker.Hide()})
-$colorPickerClose.Add_Click({$colorPicker.Hide()})
-$colorPickerTitleBar.Add_MouseLeftButtonDown({if($_.ButtonState -eq [Windows.Input.MouseButtonState]::Pressed){$colorPicker.DragMove()}})
-$colorPicker.Add_Closing({if(-not $closingApp){$_.Cancel=$true;$colorPicker.Hide()}})
+if ($loadSettingsUi) {
+    $colorWheelImage.Source=New-ColorWheelBitmap
+    $colorWheelCanvas.Add_MouseLeftButtonDown({$colorWheelCanvas.CaptureMouse()|Out-Null;Set-PickerFromPoint ($_.GetPosition($colorWheelCanvas))})
+    $colorWheelCanvas.Add_MouseMove({if($_.LeftButton -eq [Windows.Input.MouseButtonState]::Pressed){Set-PickerFromPoint ($_.GetPosition($colorWheelCanvas))}})
+    $colorWheelCanvas.Add_MouseLeftButtonUp({$colorWheelCanvas.ReleaseMouseCapture()})
+    foreach($pickerSlider in @($pickerValueSlider,$pickerAlphaSlider)){$pickerSlider.Add_ValueChanged({if(-not $pickerSyncing){Update-PickerVisuals}})}
+    $pickerHexText.Add_LostFocus({if($pickerSyncing){return};try{$c=[Windows.Media.ColorConverter]::ConvertFromString([string]$pickerHexText.Text);$h=Convert-ColorToHsv $c;$script:pickerHue=$h.Hue;$script:pickerSaturation=$h.Saturation;$script:pickerSyncing=$true;try{$pickerValueSlider.Value=$h.Value;$pickerAlphaSlider.Value=$h.Alpha}finally{$script:pickerSyncing=$false};Update-PickerVisuals}catch{}})
+    $pickerApplyButton.Add_Click({$pickerTargetText.Text=Format-HudColor (Get-PickerColor);if($pickerTargetText-eq$agentNotificationColorText){Select-ComboTag $agentNotificationGlowPresetCombo 'custom'};Update-ColorSwatches;Apply-ControlsToConfig;$colorPicker.Hide()})
+    $pickerCancelButton.Add_Click({$colorPicker.Hide()})
+    $colorPickerClose.Add_Click({$colorPicker.Hide()})
+    $colorPickerTitleBar.Add_MouseLeftButtonDown({if($_.ButtonState -eq [Windows.Input.MouseButtonState]::Pressed){$colorPicker.DragMove()}})
+    $colorPicker.Add_Closing({if(-not$SettingsHost-and-not$closingApp){$_.Cancel=$true;$colorPicker.Hide()}})
+}
 
 function Export-ColorPickerPreview {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -880,6 +955,7 @@ function Add-WaitingMetric {
     $text.Foreground = New-HudRoleBrush ([string]$config.foreground) '#FFFFFFFF' 'primary'
     $text.VerticalAlignment = [Windows.VerticalAlignment]::Center
     [void]$metricsPanel.Children.Add($text)
+    return $text
 }
 
 function Add-HudSeparator {
@@ -959,7 +1035,9 @@ function Add-HudMetric {
         $container.Padding = New-Object Windows.Thickness(4, 3, 4, 3)
         $container.Margin = New-Object Windows.Thickness(0, 0, 0, 2)
     }
+    if ([string]$Metric.Key -eq 'context') { $script:contextMetricContainer = $container }
     [void]$metricsPanel.Children.Add($container)
+    return [pscustomobject]@{ Label=$label; Value=$value; Container=$container }
 }
 
 function Get-NextTaskNumber {
@@ -995,6 +1073,14 @@ function Get-TaskBaseIdentity {
     $label = if ($null -ne $State.PSObject.Properties['ConversationLabel']) { [string]$State.ConversationLabel } else { '' }
     if ([string]$config.multiTask.nameMode -eq 'hidden' -or [string]::IsNullOrWhiteSpace($label)) { return $workspace }
     return ('{0} {1} {2}' -f $workspace,[char]0x00B7,$label)
+}
+
+function Get-TaskListSubtitle {
+    param($State, [switch]$IncludeConversationTitle)
+    $time = ([DateTimeOffset]$State.StartedAt).ToLocalTime().ToString('HH:mm')
+    $label = if ($null -ne $State.PSObject.Properties['ConversationLabel']) { [string]$State.ConversationLabel } else { '' }
+    if (-not $IncludeConversationTitle -or [string]$config.multiTask.nameMode -eq 'hidden' -or [string]::IsNullOrWhiteSpace($label)) { return $time }
+    return ('{0} {1} {2}' -f $label,[char]0x00B7,$time)
 }
 
 function Test-HudUserTaskState {
@@ -1037,7 +1123,71 @@ function Get-TaskStatus {
 function Get-TaskStatusText {
     param([string]$Status)
     $key = [string](@{active='statusActive';listening='statusListening';idle='statusIdle';paused='statusPaused';error='statusError';completed='statusCompleted';aborted='statusAborted'}[$Status])
-    return [string]$settingsLocale.$key
+    $statusLocale = if ([string]$config.language -eq 'symbols') { $locale } else { $settingsLocale }
+    return [string]$statusLocale.$key
+}
+
+function Open-HudTaskInCodex {
+    param($State)
+    if (-not [bool]$config.behavior.openTaskOnDoubleClick -or $null -eq $State) { return $false }
+    $threadId = [string]$State.SessionId
+    $deepLink = Get-HudTaskDeepLink $threadId
+    if ([string]::IsNullOrWhiteSpace([string]$deepLink)) { return $false }
+    try {
+        $startInfo = New-Object Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $deepLink
+        $startInfo.UseShellExecute = $true
+        [void][Diagnostics.Process]::Start($startInfo)
+        Write-HudDebug ('Opened Codex task: ' + $threadId)
+        return $true
+    } catch {
+        Write-HudDebug ('Codex task deep link failed: ' + $_.Exception.Message)
+        return $false
+    }
+}
+
+function Open-HudTaskByPath {
+    param([string]$Path)
+    if (-not $sessionStates.ContainsKey($Path)) { return $false }
+    return Open-HudTaskInCodex $sessionStates[$Path]
+}
+
+function Update-HudContextAlertState {
+    param($State)
+    if ($null -eq $State -or $null -eq $State.Snapshot) { return $false }
+    if (-not [bool]$config.behavior.contextAlerts.enabled -or -not [bool]$config.fields.context) { return $false }
+    $nextLevel = Get-HudContextAlertLevel ([double]$State.Snapshot.ContextPercent) $config.behavior.contextAlerts.thresholds
+    $previousLevel = [int]$State.ContextAlertLevel
+    $State.ContextAlertLevel = $nextLevel
+    if ($nextLevel -le $previousLevel) { return $false }
+    $State.ContextAlertPercent = [Math]::Round([double]$State.Snapshot.ContextPercent,1)
+    $State.ContextAlertUntil = [DateTimeOffset]::Now.AddSeconds([int]$config.attention.durationSeconds)
+    $script:attentionSequence++
+    $State.AttentionRevision = $script:attentionSequence
+    $State.AttentionReason = 'context'
+    $State.AttentionUntil = $State.ContextAlertUntil
+    Write-HudDebug ('Context alert: {0} {1}% level={2} r{3}' -f [string]$State.Workspace,[double]$State.ContextAlertPercent,$nextLevel,[int]$State.AttentionRevision)
+    return $true
+}
+
+function Reset-HudContextAlertRuntime {
+    foreach ($state in @($sessionStates.Values)) {
+        $state.ContextAlertLevel = 0
+        $state.ContextAlertPercent = 0.0
+        $state.ContextAlertUntil = [DateTimeOffset]::MinValue
+        if ([string]$state.AttentionReason -eq 'context') {
+            $state.AttentionReason = ''
+            $state.AttentionUntil = [DateTimeOffset]::MinValue
+        }
+    }
+    Stop-HudContextAlertAnimation $contextMetricContainer
+    foreach ($entry in @($splitWindows.Values)) { Stop-HudContextAlertAnimation $entry.ContextMetric }
+}
+
+function Get-HudContextAlertText {
+    param($State)
+    if ($null -eq $State -or $State.ContextAlertUntil -le [DateTimeOffset]::Now) { return '' }
+    return ('{0} {1:0.#}%' -f [string]$settingsLocale.contextAlertBadge,[double]$State.ContextAlertPercent)
 }
 
 function Set-TaskAttention {
@@ -1087,6 +1237,10 @@ function Update-TerminalExitState {
         return $false
     }
     if ([bool]$State.TerminalExitCompleted) { return $false }
+    # A numbered quiet row/column is a memory aid. Keep terminal tasks visible
+    # in their completed/aborted color until the user wakes the HUD, then resume
+    # the configured terminal departure timer on the expanded surface.
+    if ([bool]$script:isMainIndicatorCollapsed -and (Test-HudQuietLayoutShowsTasks)) { return $false }
     $now = [DateTimeOffset]::Now
     if ($State.AgentNoticeUntil -gt $now -or $State.AttentionUntil -gt $now) { return $false }
     $retentionUntil = $State.TerminalAt.AddSeconds([double]$config.statusTiming.terminalHoldSeconds)
@@ -1333,6 +1487,48 @@ function Start-HudAttentionAnimation {
     Start-HudSurfaceAttentionAnimation $Container $Mode
 }
 
+function Get-HudContextAlertVisualSpec {
+    param([int]$Level)
+    switch ($Level) {
+        1 { return [pscustomobject]@{ Color='#FF0A84FF'; Glow=0.42; Blur=14.0; Scale=1.012; CycleMs=760 } }
+        2 { return [pscustomobject]@{ Color='#FFFF9F0A'; Glow=0.74; Blur=28.0; Scale=1.028; CycleMs=580 } }
+        default { return [pscustomobject]@{ Color='#FFFF453A'; Glow=1.00; Blur=42.0; Scale=1.050; CycleMs=420 } }
+    }
+}
+
+function Start-HudContextAlertAnimation {
+    param($Target, [int]$Level)
+    if ($null -eq $Target) { return }
+    $spec = Get-HudContextAlertVisualSpec $Level
+    $profile = Get-HudEffectProfile ([string]$spec.Color) ([double]$spec.Glow) ([double]$spec.Blur)
+    $cycles = [Math]::Max(2,[Math]::Ceiling(([int]$config.attention.durationSeconds * 1000.0) / [double]$spec.CycleMs))
+    $repeat = New-Object Windows.Media.Animation.RepeatBehavior([double]$cycles)
+    $effect = New-Object Windows.Media.Effects.DropShadowEffect
+    try { $effect.Color = [Windows.Media.ColorConverter]::ConvertFromString([string]$profile.Color) } catch { $effect.Color = [Windows.Media.Colors]::DodgerBlue }
+    $effect.ShadowDepth = 0; $effect.BlurRadius = [double]$profile.Blur; $effect.Opacity = 0
+    $Target.Effect = $effect
+    $glow = New-Object Windows.Media.Animation.DoubleAnimation([double]$profile.MinimumOpacity,[double]$profile.PeakOpacity,(New-Object Windows.Duration([TimeSpan]::FromMilliseconds([int]$spec.CycleMs / 2))))
+    $glow.AutoReverse = $true; $glow.RepeatBehavior = $repeat; $glow.FillBehavior = [Windows.Media.Animation.FillBehavior]::Stop
+    $effect.BeginAnimation([Windows.Media.Effects.DropShadowEffect]::OpacityProperty,$glow)
+    $Target.RenderTransformOrigin = New-Object Windows.Point(0.5,0.5)
+    $scale = New-Object Windows.Media.ScaleTransform(1.0,1.0)
+    $Target.RenderTransform = $scale
+    foreach ($property in @([Windows.Media.ScaleTransform]::ScaleXProperty,[Windows.Media.ScaleTransform]::ScaleYProperty)) {
+        $pulse = New-Object Windows.Media.Animation.DoubleAnimation(1.0,[double]$spec.Scale,(New-Object Windows.Duration([TimeSpan]::FromMilliseconds([int]$spec.CycleMs / 2))))
+        $pulse.AutoReverse = $true; $pulse.RepeatBehavior = $repeat; $pulse.FillBehavior = [Windows.Media.Animation.FillBehavior]::Stop
+        $scale.BeginAnimation($property,$pulse)
+    }
+    Write-HudDebug ('Context visual alert: level={0}' -f $Level)
+}
+
+function Stop-HudContextAlertAnimation {
+    param($Target)
+    if ($null -eq $Target) { return }
+    try { if ($null -ne $Target.Effect) { $Target.Effect.BeginAnimation([Windows.Media.Effects.DropShadowEffect]::OpacityProperty,$null) } } catch { }
+    $Target.Effect = $null
+    $Target.RenderTransform = [Windows.Media.Transform]::Identity
+}
+
 function Get-AgentRecipeProperty {
     param($Recipe, [string]$Name, $Fallback)
     if ($null -ne $Recipe -and $null -ne $Recipe.PSObject.Properties[$Name]) { return $Recipe.$Name }
@@ -1436,14 +1632,15 @@ function Get-TaskMetricsText {
     param($State, [ValidateSet('list','bubble')][string]$Surface = 'bubble')
     if ($null -eq $State.Snapshot) { return [string]$settingsLocale.waiting }
     $fields = if ($Surface -eq 'list') { $config.multiTask.listFields } else { $config.multiTask.bubbleFields }
+    $metricLocale = if ([string]$config.language -eq 'symbols') { $locale } else { $settingsLocale }
     $parts = New-Object System.Collections.ArrayList
     [void]$parts.Add((Get-TaskStatusText (Get-TaskStatus $State)))
     if ([bool]$fields.model -and -not [string]::IsNullOrWhiteSpace([string]$State.Snapshot.Model)) { [void]$parts.Add([string]$State.Snapshot.Model) }
-    if ([bool]$fields.callTotal) { [void]$parts.Add(('{0} {1}' -f [string]$settingsLocale.callTotal, (Format-HudNumber ([Int64]$State.Snapshot.CallTotal) ([string]$config.numberFormat)))) }
-    if ([bool]$fields.taskTotal) { [void]$parts.Add(('{0} {1}' -f [string]$settingsLocale.taskTotal, (Format-HudNumber ([Int64]$State.Snapshot.TaskTotal) ([string]$config.numberFormat)))) }
+    if ([bool]$fields.callTotal) { [void]$parts.Add(('{0} {1}' -f [string]$metricLocale.callTotal, (Format-HudNumber ([Int64]$State.Snapshot.CallTotal) ([string]$config.numberFormat)))) }
+    if ([bool]$fields.taskTotal) { [void]$parts.Add(('{0} {1}' -f [string]$metricLocale.taskTotal, (Format-HudNumber ([Int64]$State.Snapshot.TaskTotal) ([string]$config.numberFormat)))) }
     if ([bool]$fields.estimatedCost) {
         $taskCost = if ($null -ne $State.Snapshot.PSObject.Properties['EstimatedCostUsd']) { $State.Snapshot.EstimatedCostUsd } else { $null }
-        [void]$parts.Add(('{0} {1}' -f [string]$settingsLocale.estimatedCost, (Format-HudCost $taskCost)))
+        [void]$parts.Add(('{0} {1}' -f [string]$metricLocale.estimatedCost, (Format-HudCost $taskCost)))
     }
     if ([bool]$fields.updated) { [void]$parts.Add($State.Snapshot.Timestamp.ToString('HH:mm:ss')) }
     $metricsText = ($parts -join (' {0} ' -f [char]0x00B7))
@@ -1451,6 +1648,28 @@ function Get-TaskMetricsText {
     $showNoticeHere = -not [string]::IsNullOrWhiteSpace($noticeText) -and ($Surface -eq 'bubble' -or ([string]$config.multiTask.displayMode -eq 'list' -and -not [bool]$State.Detached))
     if ($showNoticeHere) { return ('✦ {0}  ·  {1}' -f $noticeText,$metricsText) }
     return $metricsText
+}
+
+function Get-TaskListMetricsText {
+    param($State)
+    if ($null -eq $State.Snapshot) { return [string]$settingsLocale.waiting }
+    $snapshot = $State.Snapshot
+    $metricLocale = if ([string]$config.language -eq 'symbols') { $locale } else { $settingsLocale }
+    $detail = [string]$config.multiTask.listDetail
+    $parts = New-Object System.Collections.ArrayList
+    [void]$parts.Add((Get-TaskStatusText (Get-TaskStatus $State)))
+    if ($detail -in @('balanced','detailed')) {
+        [void]$parts.Add(('{0} {1}' -f [string]$metricLocale.input,(Format-HudNumber ([Int64]$snapshot.Input) ([string]$config.numberFormat))))
+        [void]$parts.Add(('{0} {1}' -f [string]$metricLocale.output,(Format-HudNumber ([Int64]$snapshot.Output) ([string]$config.numberFormat))))
+        [void]$parts.Add(('{0} {1}' -f [string]$metricLocale.callTotal,(Format-HudNumber ([Int64]$snapshot.CallTotal) ([string]$config.numberFormat))))
+    }
+    if ($detail -eq 'detailed') {
+        [void]$parts.Add(('{0} {1}' -f [string]$metricLocale.cached,(Format-HudNumber ([Int64]$snapshot.Cached) ([string]$config.numberFormat))))
+        [void]$parts.Add(('{0} {1}' -f [string]$metricLocale.taskTotal,(Format-HudNumber ([Int64]$snapshot.TaskTotal) ([string]$config.numberFormat))))
+        if (-not [string]::IsNullOrWhiteSpace([string]$snapshot.Model)) { [void]$parts.Add([string]$snapshot.Model) }
+        [void]$parts.Add($snapshot.Timestamp.ToString('HH:mm:ss'))
+    }
+    return ($parts -join (' {0} ' -f [char]0x00B7))
 }
 
 function Update-TaskBubble {
@@ -1474,6 +1693,12 @@ function Update-TaskBubble {
     $entry.Number.Foreground = New-HudRoleBrush ([string]$config.accent) '#FF0A84FF' 'primary'
     $entry.Name.Text = Get-TaskDisplayName $State
     $entry.Name.Foreground = New-HudRoleBrush ([string]$config.foreground) '#FF111827' 'primary'
+    $entry.ContextMetric.Visibility = if ([bool]$config.fields.context) { [Windows.Visibility]::Visible } else { [Windows.Visibility]::Collapsed }
+    $entry.ContextText.Text = if ($null -ne $State.Snapshot) { ('{0} {1:0.#}%' -f [string]$settingsLocale.context,[double]$State.Snapshot.ContextPercent) } else { [string]$settingsLocale.waiting }
+    $entry.ContextText.Foreground = New-HudRoleBrush ([string]$config.foreground) '#FF111827' 'primary'
+    $entry.ContextMetric.BorderBrush = New-HudRoleBrush '#330A84FF' '#330A84FF' 'decoration'
+    $entry.ContextMetric.Background = New-HudRoleBrush '#0D0A84FF' '#0D0A84FF' 'decoration'
+    if (-not [bool]$config.fields.context -or [string]$State.AttentionReason -ne 'context' -or $State.ContextAlertUntil -le [DateTimeOffset]::Now) { Stop-HudContextAlertAnimation $entry.ContextMetric }
     $entry.Metrics.Text = Get-TaskMetricsText $State -Surface bubble
     $entry.Metrics.Foreground = New-HudRoleBrush ([string]$config.muted) '#FF667085' 'secondary'
     try {
@@ -1483,10 +1708,12 @@ function Update-TaskBubble {
     $entry.Merge.ToolTip = [string]$settingsLocale.mergeTask
     $entry.Dismiss.ToolTip = [string]$settingsLocale.dismissTask
     $entry.Resize.ToolTip = [string]$settingsLocale.resizeTaskBubble
+    $entry.Shell.ToolTip = if ([bool]$config.behavior.openTaskOnDoubleClick) { [string]$settingsLocale.openTaskTooltip } else { $null }
     if ([int]$State.AttentionRevision -gt [int]$entry.LastAttentionRevision -and $State.AttentionUntil -gt [DateTimeOffset]::Now) {
         $entry.LastAttentionRevision = [int]$State.AttentionRevision
         Write-HudDebug ('Attention surface: bubble {0} r{1} reason={2}' -f [string]$State.Workspace,[int]$State.AttentionRevision,[string]$State.AttentionReason)
         if ([string]$State.AttentionReason -eq 'agent') { Start-HudAgentAnimation $entry.Shell $State.AgentNoticeRecipe }
+        elseif ([string]$State.AttentionReason -eq 'context') { Start-HudContextAlertAnimation $entry.ContextMetric ([int]$State.ContextAlertLevel) }
         else { Start-HudAttentionAnimation $entry.Dot $entry.Shell ([string]$config.attention.taskBubbleMode) }
     }
     if ([int]$State.TerminalExitRevision -gt [int]$entry.LastExitRevision -and $State.TerminalExitUntil -gt [DateTimeOffset]::Now) {
@@ -1509,8 +1736,8 @@ function Position-TaskBubbles {
     $columnWidth = 0.0
     foreach ($entry in $entries) {
         $entry.Window.UpdateLayout()
-        $width = [Math]::Max(220, $entry.Window.ActualWidth)
-        $height = [Math]::Max(54, $entry.Window.ActualHeight)
+        $width = if ([bool]$entry.IsIndicatorCollapsed) { [Math]::Max(1,$entry.Window.ActualWidth) } else { [Math]::Max(220,$entry.Window.ActualWidth) }
+        $height = if ([bool]$entry.IsIndicatorCollapsed) { [Math]::Max(1,$entry.Window.ActualHeight) } else { [Math]::Max(54,$entry.Window.ActualHeight) }
         $columnWidth = [Math]::Max($columnWidth, $width)
         if ($isBottom) {
             $top = $cursorY - $height
@@ -1535,6 +1762,209 @@ function Position-TaskBubbles {
         $entry.Window.Left = [Math]::Max($work.Left + 12, [Math]::Min($left, $work.Right - $width - 12))
         $entry.Window.Top = $top
     }
+}
+
+function Test-HudStateQuiet {
+    param($State, [bool]$AllowTerminal = $false)
+    if ($null -eq $State) { return $false }
+    $status = Get-TaskStatus $State
+    if ($AllowTerminal -and @('completed','aborted') -contains $status) { return $true }
+    if ($status -ne 'idle') { return $false }
+    if ($State.AttentionUntil -gt [DateTimeOffset]::Now -or $State.AgentNoticeUntil -gt [DateTimeOffset]::Now -or $State.ContextAlertUntil -gt [DateTimeOffset]::Now) { return $false }
+    $reference = if ($State.LastUsageAt -ne [DateTimeOffset]::MinValue) { [DateTimeOffset]$State.LastUsageAt } elseif ($null -ne $State.Snapshot) { [DateTimeOffset]$State.Snapshot.Timestamp } else { [DateTimeOffset]::Now }
+    return (([DateTimeOffset]::Now - $reference).TotalMinutes -ge [double]$config.behavior.idleIndicator.afterMinutes)
+}
+
+function Test-HudQuietLayoutShowsTasks {
+    return @('horizontal','vertical') -contains [string]$config.behavior.idleIndicator.layout
+}
+
+function New-HudQuietTaskIndicator {
+    param($State, [string]$Style, [string]$Layout)
+    $status = Get-TaskStatus $State
+    $color = [string]$config.statusColors.$status
+    $item = New-Object Windows.Controls.StackPanel
+    $item.Orientation = [Windows.Controls.Orientation]::Horizontal
+    $item.VerticalAlignment = [Windows.VerticalAlignment]::Center
+    $item.Margin = if ($Layout -eq 'vertical') { New-Object Windows.Thickness(1,3,1,3) } else { New-Object Windows.Thickness(3,0,4,0) }
+    $item.ToolTip = ('{0}  {1}' -f (Get-TaskDisplayName $State -IncludeNumber),(Get-TaskStatusText $status))
+
+    if ($Style -eq 'bar') {
+        $shape = New-Object Windows.Controls.Border
+        $shape.Width = 4
+        $shape.Height = 18
+        $shape.CornerRadius = New-Object Windows.CornerRadius(2)
+        $shape.Background = New-HudBrush $color '#FF8E8E93'
+        $shape.BorderBrush = New-HudBrush '#66000000' '#66000000'
+        $shape.BorderThickness = New-Object Windows.Thickness(0.9)
+    } else {
+        $shape = New-Object Windows.Shapes.Ellipse
+        $taskDotSize = [Math]::Max(7.0,[double]$config.themeStyle.statusDotSize * 0.82)
+        $shape.Width = $taskDotSize
+        $shape.Height = $taskDotSize
+        $shape.Fill = New-HudBrush $color '#FF8E8E93'
+        $shape.Stroke = New-HudBrush '#66000000' '#66000000'
+        $shape.StrokeThickness = 0.9
+    }
+    $shape.VerticalAlignment = [Windows.VerticalAlignment]::Center
+    [void]$item.Children.Add($shape)
+
+    $number = New-Object Windows.Controls.TextBlock
+    $number.Text = ('#{0}' -f [int]$State.Number)
+    $number.Margin = New-Object Windows.Thickness(5,0,0,0)
+    $number.VerticalAlignment = [Windows.VerticalAlignment]::Center
+    $number.FontFamily = New-Object Windows.Media.FontFamily('Segoe UI Variable Text, Microsoft YaHei UI')
+    $number.FontSize = [Math]::Max(10,[double]$config.fontSize - 2)
+    $number.FontWeight = [Windows.FontWeights]::SemiBold
+    $number.Foreground = New-HudRoleBrush ([string]$config.foreground) '#FF111827' 'primary'
+    [void]$item.Children.Add($number)
+    return $item
+}
+
+function Render-HudQuietIndicators {
+    $layout = [string]$config.behavior.idleIndicator.layout
+    $style = [string]$config.behavior.idleIndicator.taskStyle
+    $states = @(Get-HudUserTaskStates | Sort-Object Number)
+    $status = Get-HudStatus
+    $stateSignature = @($states | ForEach-Object { '{0}:{1}' -f [int]$_.Number,(Get-TaskStatus $_) }) -join ','
+    $colorSignature = @('active','listening','idle','paused','error','completed','aborted' | ForEach-Object { [string]$config.statusColors.$_ }) -join ','
+    $signature = '{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}' -f $layout,$style,$status,$stateSignature,$colorSignature,[string]$config.background,[string]$config.foreground,[double]$config.themeStyle.statusDotSize
+    if ([string]$script:lastQuietIndicatorSignature -eq $signature) { return }
+    $script:lastQuietIndicatorSignature = $signature
+    Write-HudDebug ('Quiet task indicators: layout={0} style={1} tasks={2} statuses={3}' -f $layout,$style,$states.Count,$stateSignature)
+    $color = [string]$config.statusColors.$status
+    $overallDotSize = [Math]::Max(12.0,[double]$config.themeStyle.statusDotSize * 1.45)
+    $quietOverallDot.Width = $overallDotSize
+    $quietOverallDot.Height = $overallDotSize
+    $quietOverallDot.Fill = New-HudBrush $color '#FF8E8E93'
+    $quietOverallDot.ToolTip = Get-StatusBilingual $status
+    $quietOverallRing.Width = $overallDotSize + 5
+    $quietOverallRing.Height = $overallDotSize + 5
+    $quietOverallRing.Stroke = New-HudBrush $color '#FF8E8E93'
+    $quietOverallHost.Width = $overallDotSize + 6
+    $quietOverallHost.Height = $overallDotSize + 6
+    $quietIndicatorSeparator.Background = New-HudBrush '#32000000' '#32000000'
+    $quietTaskIndicators.Children.Clear()
+
+    $showTasks = (Test-HudQuietLayoutShowsTasks) -and $states.Count -gt 0
+    $quietIndicatorSeparator.Visibility = if ($showTasks) { [Windows.Visibility]::Visible } else { [Windows.Visibility]::Collapsed }
+    $quietTaskIndicators.Visibility = $quietIndicatorSeparator.Visibility
+    if (-not $showTasks) {
+        $quietIndicatorPanel.Orientation = [Windows.Controls.Orientation]::Horizontal
+        return
+    }
+
+    $isVertical = $layout -eq 'vertical'
+    $quietIndicatorPanel.Orientation = if ($isVertical) { [Windows.Controls.Orientation]::Vertical } else { [Windows.Controls.Orientation]::Horizontal }
+    $quietTaskIndicators.Orientation = $quietIndicatorPanel.Orientation
+    if ($isVertical) {
+        $quietIndicatorSeparator.Width = 30
+        $quietIndicatorSeparator.Height = 1
+        $quietIndicatorSeparator.Margin = New-Object Windows.Thickness(0,8,0,6)
+        $quietIndicatorSeparator.HorizontalAlignment = [Windows.HorizontalAlignment]::Center
+    } else {
+        $quietIndicatorSeparator.Width = 1
+        $quietIndicatorSeparator.Height = 20
+        $quietIndicatorSeparator.Margin = New-Object Windows.Thickness(11,0,8,0)
+        $quietIndicatorSeparator.VerticalAlignment = [Windows.VerticalAlignment]::Center
+    }
+    $visibleLimit = 12
+    foreach ($state in @($states | Select-Object -First $visibleLimit)) {
+        [void]$quietTaskIndicators.Children.Add((New-HudQuietTaskIndicator $state $style $layout))
+    }
+    if ($states.Count -gt $visibleLimit) {
+        $overflow = New-Object Windows.Controls.TextBlock
+        $overflow.Text = ('+{0}' -f ($states.Count - $visibleLimit))
+        $overflow.Margin = if ($isVertical) { New-Object Windows.Thickness(6,3,0,2) } else { New-Object Windows.Thickness(5,0,1,0) }
+        $overflow.VerticalAlignment = [Windows.VerticalAlignment]::Center
+        $overflow.FontWeight = [Windows.FontWeights]::SemiBold
+        $overflow.Foreground = New-HudRoleBrush ([string]$config.muted) '#FF667085' 'secondary'
+        $overflow.ToolTip = [string]$settingsLocale.activeTasks
+        [void]$quietTaskIndicators.Children.Add($overflow)
+    }
+}
+
+function Set-HudIndicatorCollapsed {
+    param([bool]$Collapsed)
+    $changed = $script:isMainIndicatorCollapsed -ne $Collapsed
+    if (-not $changed) {
+        if ($Collapsed) {
+            $previousSignature = [string]$script:lastQuietIndicatorSignature
+            Render-HudQuietIndicators
+            if ([string]$script:lastQuietIndicatorSignature -ne $previousSignature) {
+                $hud.UpdateLayout()
+                if ([string]$config.position -ne 'custom') { Move-HudToConfiguredPosition }
+            }
+        }
+        return
+    }
+    $script:isMainIndicatorCollapsed = $Collapsed
+    if ($changed) { Write-HudDebug ('Main quiet indicator: ' + $(if($Collapsed){'collapsed'}else{'expanded'})) }
+    if ($Collapsed) {
+        Render-HudQuietIndicators
+        $hudContentPanel.Visibility = [Windows.Visibility]::Collapsed
+        $quietIndicatorPanel.Visibility = [Windows.Visibility]::Visible
+        $hudShell.Padding = if ([string]$config.behavior.idleIndicator.layout -eq 'vertical') { New-Object Windows.Thickness(9,10,9,9) } else { New-Object Windows.Thickness(10,9,10,9) }
+        $hudShell.CornerRadius = New-Object Windows.CornerRadius(16)
+    } else {
+        $quietIndicatorPanel.Visibility = [Windows.Visibility]::Collapsed
+        $hudContentPanel.Visibility = [Windows.Visibility]::Visible
+        $statusDot.Margin = New-Object Windows.Thickness(0,0,12,0)
+        $script:lastHudAppearanceSignature = ''
+        [void](Apply-HudAppearance)
+        $taskListToggleButton.Visibility = if (@(Get-HudUserTaskStates).Count -gt 0) { [Windows.Visibility]::Visible } else { [Windows.Visibility]::Collapsed }
+        $script:lastTaskListRenderSignature = ''
+        Render-TaskList
+    }
+    $hud.UpdateLayout()
+    if ([string]$config.position -ne 'custom') { Move-HudToConfiguredPosition }
+}
+
+function Set-TaskBubbleIndicatorCollapsed {
+    param($Entry, $State, [bool]$Collapsed)
+    if ($null -eq $Entry -or [bool]$Entry.IsIndicatorCollapsed -eq $Collapsed) { return }
+    $Entry.IsIndicatorCollapsed = $Collapsed
+    Write-HudDebug ('Task quiet indicator: #{0} {1}' -f [int]$Entry.TaskNumber,$(if($Collapsed){'collapsed'}else{'expanded'}))
+    $visibility = if ($Collapsed) { [Windows.Visibility]::Collapsed } else { [Windows.Visibility]::Visible }
+    $Entry.Content.Visibility = $visibility
+    $Entry.Merge.Visibility = $visibility
+    $Entry.Dismiss.Visibility = $visibility
+    $Entry.Resize.Visibility = $visibility
+    if ($Collapsed) {
+        $Entry.Dot.Margin = New-Object Windows.Thickness(0)
+        $Entry.Shell.Padding = New-Object Windows.Thickness(10)
+        $Entry.Window.Width = [double]::NaN
+        $Entry.Window.Height = [double]::NaN
+        $Entry.Window.SizeToContent = [Windows.SizeToContent]::WidthAndHeight
+    } else {
+        $Entry.Dot.Margin = New-Object Windows.Thickness(0,0,9,0)
+        $Entry.Shell.Padding = New-Object Windows.Thickness(12,9,12,9)
+        if ($null -ne $State -and [double]$State.BubbleWidth -gt 0 -and [double]$State.BubbleHeight -gt 0) {
+            $Entry.Window.SizeToContent = [Windows.SizeToContent]::Manual
+            $Entry.Window.Width = [double]$State.BubbleWidth
+            $Entry.Window.Height = [double]$State.BubbleHeight
+        } else {
+            $Entry.Window.Width = [double]::NaN
+            $Entry.Window.Height = [double]::NaN
+            $Entry.Window.SizeToContent = [Windows.SizeToContent]::WidthAndHeight
+        }
+    }
+    $Entry.Window.UpdateLayout()
+}
+
+function Update-HudIdleIndicatorMode {
+    $states = @(Get-HudUserTaskStates)
+    $keepTerminalTaskLights = [bool]$script:isMainIndicatorCollapsed -and (Test-HudQuietLayoutShowsTasks)
+    $mainShouldCollapse = [bool]$config.behavior.idleIndicator.enabled -and $states.Count -gt 0 -and -not $hud.IsMouseOver -and @($states | Where-Object { -not (Test-HudStateQuiet $_ $keepTerminalTaskLights) }).Count -eq 0
+    Set-HudIndicatorCollapsed $mainShouldCollapse
+    foreach ($entry in @($splitWindows.Values)) {
+        if (-not $sessionStates.ContainsKey([string]$entry.Path)) { continue }
+        $state = $sessionStates[[string]$entry.Path]
+        $keepBubbleTerminalLight = (Test-HudQuietLayoutShowsTasks) -and [bool]$entry.IsIndicatorCollapsed
+        $bubbleShouldCollapse = [bool]$config.behavior.idleIndicator.enabled -and [bool]$config.behavior.idleIndicator.includeTaskBubbles -and -not $entry.Window.IsMouseOver -and (Test-HudStateQuiet $state $keepBubbleTerminalLight)
+        Set-TaskBubbleIndicatorCollapsed $entry $state $bubbleShouldCollapse
+    }
+    Position-TaskBubbles
 }
 
 function Close-TaskBubble {
@@ -1562,7 +1992,10 @@ function Show-TaskBubble {
         NumberBadge = Find-Control $window 'TaskBubbleNumberBadge'
         Number = Find-Control $window 'TaskBubbleNumber'
         Name = Find-Control $window 'TaskBubbleName'
+        ContextMetric = Find-Control $window 'TaskBubbleContextMetric'
+        ContextText = Find-Control $window 'TaskBubbleContextText'
         Metrics = Find-Control $window 'TaskBubbleMetrics'
+        Content = Find-Control $window 'TaskBubbleContent'
         Merge = Find-Control $window 'TaskBubbleMergeButton'
         Dismiss = Find-Control $window 'TaskBubbleDismissButton'
         Resize = Find-Control $window 'TaskBubbleResizeThumb'
@@ -1571,6 +2004,7 @@ function Show-TaskBubble {
         InternalClosing = $false
         LastAttentionRevision = 0
         LastExitRevision = 0
+        IsIndicatorCollapsed = $false
     }
     $script:splitWindows[$path] = $entry
     $entryRecord = $entry
@@ -1580,6 +2014,10 @@ function Show-TaskBubble {
     $window.Add_SourceInitialized(({ $entryRecord.Handle=(New-Object Windows.Interop.WindowInteropHelper($entryRecord.Window)).Handle;if($entryRecord.Handle-ne[IntPtr]::Zero){$entryRecord.BaseStyle=[HudNativeMethods]::GetWindowLong($entryRecord.Handle,-20);Set-WindowMousePassthrough $entryRecord.Handle $entryRecord.BaseStyle ([bool]$config.mousePassthrough)} }).GetNewClosure())
     $entry.Merge.Add_Click(({ Set-SessionDetached $taskPath $false }).GetNewClosure())
     $entry.Dismiss.Add_Click(({ Dismiss-HudTask $taskPath }).GetNewClosure())
+    $window.Add_MouseLeftButtonDown(({ param($sender,$eventArgs)
+        if ($eventArgs.ClickCount -ge 2 -and (Open-HudTaskByPath $taskPath)) { $eventArgs.Handled = $true }
+    }).GetNewClosure())
+    $window.Add_MouseEnter(({ if ($entryRecord.IsIndicatorCollapsed -and $sessionStateMap.ContainsKey($taskPath)) { Set-TaskBubbleIndicatorCollapsed $entryRecord $sessionStateMap[$taskPath] $false; Position-TaskBubbles } }).GetNewClosure())
     $entry.Resize.Add_DragDelta(({ param($sender,$eventArgs)
         $currentWidth = [Math]::Max(280.0, [double]$entryRecord.Window.ActualWidth)
         $currentHeight = [Math]::Max(84.0, [double]$entryRecord.Window.ActualHeight)
@@ -1722,10 +2160,21 @@ function Get-TaskListDensityMetrics {
 }
 
 function Render-TaskList {
-    $taskListPanel.Children.Clear()
     $density = Get-TaskListDensityMetrics
     $states = @(Get-HudUserTaskStates | Sort-Object Number)
     $visible = ([string]$config.multiTask.displayMode -eq 'list')
+    if ($isMainIndicatorCollapsed) { return }
+    $signatureNow = [DateTimeOffset]::Now
+    $stateSignature = if ($visible) { @($states | ForEach-Object {
+        $state = $_
+        $snapshotContext = if ($null -ne $state.Snapshot) { [double]$state.Snapshot.ContextPercent } else { -1.0 }
+        $identity = if (-not [string]::IsNullOrWhiteSpace([string]$state.SessionId)) { [string]$state.SessionId } else { [string]$state.Path }
+        '{0}:{1}:{2}:{3}:{4}:{5}:{6}:{7}:{8}:{9}:{10}:{11}:{12}' -f $identity,[int]$state.Number,(Get-TaskStatus $state),[bool]$state.Detached,(Get-TaskProjectName $state),(Get-TaskListSubtitle $state -IncludeConversationTitle),$snapshotContext,(Get-TaskListMetricsText $state),[int]$state.AttentionRevision,[int]$state.TerminalExitRevision,[string]$state.AgentNoticeText,($state.AttentionUntil-gt$signatureNow),($state.ContextAlertUntil-gt$signatureNow)
+    }) -join ';' } else { '' }
+    $renderSignature = '{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}' -f $visible,[string]$config.multiTask.listStyle,[string]$config.multiTask.listDensity,[string]$config.multiTask.listDetail,[string]$config.multiTask.nameMode,[bool]$config.fields.context,[string]$script:lastHudAppearanceSignature,$stateSignature
+    if ([string]$script:lastTaskListRenderSignature -eq $renderSignature) { return }
+    $script:lastTaskListRenderSignature = $renderSignature
+    $taskListPanel.Children.Clear()
     $taskListScroller.Visibility = if ($visible -and $states.Count -gt 0) { [Windows.Visibility]::Visible } else { [Windows.Visibility]::Collapsed }
     $taskListDivider.Visibility = $taskListScroller.Visibility
     if (-not $visible) { return }
@@ -1746,14 +2195,23 @@ function Render-TaskList {
         $badge=New-Object Windows.Controls.Border;$badge.CornerRadius=New-Object Windows.CornerRadius([double]$density.BadgeRadius);$badge.Background=New-HudBrush '#120A84FF';$badge.Padding=$density.BadgePadding;$badge.Margin=$density.BadgeMargin;$badge.ToolTip=Get-TaskDisplayName $state -IncludeNumber
         $badgeText=New-Object Windows.Controls.TextBlock;$badgeText.Text=('#{0}'-f[int]$state.Number);$badgeText.FontWeight='SemiBold';$badgeText.Foreground=New-HudRoleBrush ([string]$config.accent) '#FF0A84FF' 'primary';$badge.Child=$badgeText
         [Windows.Controls.Grid]::SetColumn($badge,1);[void]$row.Children.Add($badge)
-        $projectName = Get-TaskBaseIdentity $state
+        $projectName = Get-TaskProjectName $state
         $fullName = Get-TaskDisplayName $state
-        $name=New-Object Windows.Controls.TextBlock;$name.Text=if([string]$config.multiTask.nameMode-eq'always'){$fullName}else{$projectName};$name.VerticalAlignment='Center';$name.Margin=New-Object Windows.Thickness(0,0,10,0);$name.MaxWidth=260;$name.TextTrimming=[Windows.TextTrimming]::CharacterEllipsis;$name.ToolTip=$fullName;$name.Foreground=New-HudRoleBrush ([string]$config.foreground) '#FF111827' 'primary'
-        $name.Visibility=[Windows.Visibility]::Visible
-        [Windows.Controls.Grid]::SetColumn($name,2);[void]$row.Children.Add($name)
-        if([string]$config.multiTask.nameMode-eq'hover'){$row.Add_MouseEnter(({ $name.Text=$fullName }).GetNewClosure());$row.Add_MouseLeave(({ $name.Text=$projectName }).GetNewClosure())}
-        $metrics=New-Object Windows.Controls.TextBlock;$metrics.Text=Get-TaskMetricsText $state -Surface list;$metrics.VerticalAlignment='Center';$metrics.Foreground=New-HudRoleBrush ([string]$config.muted) '#FF667085' 'secondary';$metrics.TextTrimming='CharacterEllipsis'
-        [Windows.Controls.Grid]::SetColumn($metrics,3);[void]$row.Children.Add($metrics)
+        $collapsedSubtitle = Get-TaskListSubtitle $state
+        $expandedSubtitle = Get-TaskListSubtitle $state -IncludeConversationTitle
+        $identityHost=New-Object Windows.Controls.StackPanel;$identityHost.Orientation=[Windows.Controls.Orientation]::Vertical;$identityHost.VerticalAlignment='Center';$identityHost.Margin=New-Object Windows.Thickness(0,2,12,2);$identityHost.MaxWidth=280;$identityHost.ToolTip=$fullName
+        $name=New-Object Windows.Controls.TextBlock;$name.Text=$projectName;$name.FontWeight=[Windows.FontWeights]::SemiBold;$name.TextTrimming=[Windows.TextTrimming]::CharacterEllipsis;$name.Foreground=New-HudRoleBrush ([string]$config.foreground) '#FF111827' 'primary'
+        $subtitle=New-Object Windows.Controls.TextBlock;$subtitle.Text=if([string]$config.multiTask.nameMode-eq'always'){$expandedSubtitle}else{$collapsedSubtitle};$subtitle.Margin=New-Object Windows.Thickness(0,1,0,0);$subtitle.FontSize=[Math]::Max(9,[double]$config.fontSize-3);$subtitle.TextTrimming=[Windows.TextTrimming]::CharacterEllipsis;$subtitle.Foreground=New-HudRoleBrush ([string]$config.muted) '#FF667085' 'secondary'
+        [void]$identityHost.Children.Add($name);[void]$identityHost.Children.Add($subtitle)
+        [Windows.Controls.Grid]::SetColumn($identityHost,2);[void]$row.Children.Add($identityHost)
+        if([string]$config.multiTask.nameMode-eq'hover'-and$expandedSubtitle-ne$collapsedSubtitle){$row.Add_MouseEnter(({ $subtitle.Text=$expandedSubtitle }).GetNewClosure());$row.Add_MouseLeave(({ $subtitle.Text=$collapsedSubtitle }).GetNewClosure())}
+        $metricsHost=New-Object Windows.Controls.StackPanel;$metricsHost.Orientation=[Windows.Controls.Orientation]::Horizontal;$metricsHost.VerticalAlignment='Center'
+        $contextMetric=New-Object Windows.Controls.Border;$contextMetric.CornerRadius=New-Object Windows.CornerRadius(7);$contextMetric.Padding=New-Object Windows.Thickness(6,2,6,2);$contextMetric.Margin=New-Object Windows.Thickness(0,0,7,0);$contextMetric.BorderThickness=New-Object Windows.Thickness(1);$contextMetric.BorderBrush=New-HudRoleBrush '#330A84FF' '#330A84FF' 'decoration';$contextMetric.Background=New-HudRoleBrush '#0D0A84FF' '#0D0A84FF' 'decoration'
+        $contextText=New-Object Windows.Controls.TextBlock;$contextText.Text=if($null-ne$state.Snapshot){('{0} {1:0.#}%' -f [string]$settingsLocale.context,[double]$state.Snapshot.ContextPercent)}else{[string]$settingsLocale.waiting};$contextText.FontWeight='SemiBold';$contextText.Foreground=New-HudRoleBrush ([string]$config.foreground) '#FF111827' 'primary';$contextMetric.Child=$contextText
+        if ([bool]$config.fields.context) { [void]$metricsHost.Children.Add($contextMetric) }
+        $metrics=New-Object Windows.Controls.TextBlock;$metrics.Text=Get-TaskListMetricsText $state;$metrics.VerticalAlignment='Center';$metrics.Foreground=New-HudRoleBrush ([string]$config.muted) '#FF667085' 'secondary';$metrics.TextTrimming='CharacterEllipsis';$metrics.ToolTip=$metrics.Text
+        [void]$metricsHost.Children.Add($metrics)
+        [Windows.Controls.Grid]::SetColumn($metricsHost,3);[void]$row.Children.Add($metricsHost)
         $action=New-Object Windows.Controls.Button;$action.Content=New-HudTaskActionIcon ([bool]$state.Detached);$action.Style=$hud.FindResource('HudIconButton');$action.Width=[double]$density.ActionSize;$action.Height=[double]$density.ActionSize;$action.Tag=$path;$action.Margin=$density.ActionMargin;$action.ToolTip=if([bool]$state.Detached){[string]$settingsLocale.mergeTask}else{[string]$settingsLocale.detachTask}
         $action.Add_Click(({ Set-SessionDetached $path (-not [bool]$sessionStates[$path].Detached) }).GetNewClosure())
         [Windows.Controls.Grid]::SetColumn($action,4);[void]$row.Children.Add($action)
@@ -1767,10 +2225,10 @@ function Render-TaskList {
                 $row.RowDefinitions.Add((New-Object Windows.Controls.RowDefinition))
                 $row.RowDefinitions.Add((New-Object Windows.Controls.RowDefinition))
                 [Windows.Controls.Grid]::SetRowSpan($dot,2)
-                [Windows.Controls.Grid]::SetRow($metrics,1)
-                [Windows.Controls.Grid]::SetColumn($metrics,1)
-                [Windows.Controls.Grid]::SetColumnSpan($metrics,3)
-                $metrics.Margin = $density.MetricsMargin
+                [Windows.Controls.Grid]::SetRow($metricsHost,1)
+                [Windows.Controls.Grid]::SetColumn($metricsHost,1)
+                [Windows.Controls.Grid]::SetColumnSpan($metricsHost,3)
+                $metricsHost.Margin = $density.MetricsMargin
                 $metrics.TextWrapping = [Windows.TextWrapping]::Wrap
                 $card = New-Object Windows.Controls.Border
                 $card.CornerRadius = New-Object Windows.CornerRadius([double]$density.CardRadius)
@@ -1810,12 +2268,17 @@ function Render-TaskList {
         $attentionSurface.CornerRadius = New-Object Windows.CornerRadius([Math]::Max(9,[double]$density.CardRadius))
         $attentionSurface.BorderThickness = New-Object Windows.Thickness(0)
         $attentionSurface.Child = $listItem
+        $attentionSurface.ToolTip = if ([bool]$config.behavior.openTaskOnDoubleClick) { [string]$settingsLocale.openTaskTooltip } else { $null }
+        $attentionSurface.Add_MouseLeftButtonDown(({ param($sender,$eventArgs)
+            if ($eventArgs.ClickCount -ge 2 -and (Open-HudTaskByPath $path)) { $eventArgs.Handled = $true }
+        }).GetNewClosure())
         [void]$taskListPanel.Children.Add($attentionSurface)
         if ([int]$state.AttentionRevision -gt [int]$state.LastListAttentionRevision) {
             $state.LastListAttentionRevision = [int]$state.AttentionRevision
             if (-not [bool]$state.Detached -and $state.AttentionUntil -gt [DateTimeOffset]::Now) {
                 Write-HudDebug ('Attention surface: list {0} r{1} reason={2}' -f [string]$state.Workspace,[int]$state.AttentionRevision,[string]$state.AttentionReason)
                 if ([string]$state.AttentionReason -eq 'agent') { Start-HudAgentAnimation $attentionSurface $state.AgentNoticeRecipe }
+                elseif ([string]$state.AttentionReason -eq 'context') { Start-HudContextAlertAnimation $contextMetric ([int]$state.ContextAlertLevel) }
                 else { Start-HudAttentionAnimation $dot $attentionSurface ([string]$config.attention.listMode) }
             }
         }
@@ -1846,12 +2309,17 @@ function Get-StatusBilingual {
     param([string]$Status)
     $keys = @{ active='statusActive'; listening='statusListening'; idle='statusIdle'; paused='statusPaused'; error='statusError'; completed='statusCompleted'; aborted='statusAborted' }
     $key = [string]$keys[$Status]
-    $zh = Get-HudLocale $paths 'zh-CN'
-    $en = Get-HudLocale $paths 'en'
+    $zh = Get-RuntimeHudLocale 'zh-CN'
+    $en = Get-RuntimeHudLocale 'en'
     return ('{0} ({1})' -f [string]$zh.$key, [string]$en.$key)
 }
 
 function Update-ContextMenuText {
+    param([switch]$Force)
+    $status = Get-HudStatus
+    $signature = '{0}|{1}|{2}|{3}|{4}' -f [string]$config.language,[bool]$config.mousePassthrough,[bool]$paused,[string]$config.multiTask.displayMode,$status
+    if (-not $Force -and [string]$script:lastContextMenuSignature -eq $signature) { return }
+    $script:lastContextMenuSignature = $signature
     foreach($pair in @(
         @('settingsItem','openSettings'),
         @('passthroughItem',$(if([bool]$config.mousePassthrough){'disableMousePassthrough'}else{'enableMousePassthrough'})),
@@ -1872,18 +2340,19 @@ function Update-ContextMenuText {
     if ($null -ne $splitModeItem) { $splitModeItem.IsChecked = [string]$config.multiTask.displayMode -eq 'split' }
     $statusVariable=Get-Variable -Name statusItem -Scope Script -ErrorAction SilentlyContinue
     if($null-ne$statusVariable -and $null-ne$statusVariable.Value){
-        $zh = Get-HudLocale $paths 'zh-CN'
-        $en = Get-HudLocale $paths 'en'
-        $statusVariable.Value.Header = ('{0} / {1}: {2}' -f [string]$zh.statusLabel, [string]$en.statusLabel, (Get-StatusBilingual (Get-HudStatus)))
+        $zh = Get-RuntimeHudLocale 'zh-CN'
+        $en = Get-RuntimeHudLocale 'en'
+        $statusVariable.Value.Header = ('{0} / {1}: {2}' -f [string]$zh.statusLabel, [string]$en.statusLabel, (Get-StatusBilingual $status))
     }
-    Update-HudTrayMenu
+    Update-HudTrayMenu $status
 }
 
 function Update-HudTrayMenu {
+    param([string]$Status = (Get-HudStatus))
     if ($null -eq $trayIcon) { return }
-    $trayZh = Get-HudLocale $paths 'zh-CN'
-    $trayEn = Get-HudLocale $paths 'en'
-    $trayStatusItem.Text = ('{0} / {1}: {2}' -f [string]$trayZh.statusLabel, [string]$trayEn.statusLabel, (Get-StatusBilingual (Get-HudStatus)))
+    $trayZh = Get-RuntimeHudLocale 'zh-CN'
+    $trayEn = Get-RuntimeHudLocale 'en'
+    $trayStatusItem.Text = ('{0} / {1}: {2}' -f [string]$trayZh.statusLabel, [string]$trayEn.statusLabel, (Get-StatusBilingual $Status))
     $trayOpenSettingsItem.Text = ('{0} / {1}' -f [string]$trayZh.openSettings, [string]$trayEn.openSettings)
     $trayViewModeItem.Text = ('{0} / {1}' -f [string]$trayZh.displayMode, [string]$trayEn.displayMode)
     $traySummaryModeItem.Text = ('{0} / {1}' -f [string]$trayZh.showSummary, [string]$trayEn.showSummary)
@@ -1955,10 +2424,32 @@ function Add-HudAgentNotice {
     [void]$metricsPanel.Children.Add($card)
 }
 
+function Add-HudContextAlert {
+    param($State)
+    $alertText = Get-HudContextAlertText $State
+    if ([string]::IsNullOrWhiteSpace($alertText)) { return }
+    $colors = @('#FF0A84FF','#FFFF9F0A','#FFFF453A')
+    $color = $colors[[Math]::Max(0,[Math]::Min(2,[int]$State.ContextAlertLevel-1))]
+    $card = New-Object Windows.Controls.Border
+    $card.CornerRadius = New-Object Windows.CornerRadius([Math]::Max(8,[double]$config.cornerRadius-8))
+    $card.Padding = New-Object Windows.Thickness(10,6,10,6)
+    $card.Margin = New-Object Windows.Thickness(7,0,0,0)
+    $card.BorderThickness = New-Object Windows.Thickness(1)
+    $card.BorderBrush = New-HudBrush $color '#FFFF9F0A'
+    $card.Background = New-HudRoleBrush '#12FF9F0A' '#12FF9F0A' 'decoration'
+    $text = New-Object Windows.Controls.TextBlock
+    $text.Text = $alertText
+    $text.FontWeight = [Windows.FontWeights]::SemiBold
+    $text.Foreground = New-HudRoleBrush ([string]$config.foreground) '#FF111827' 'primary'
+    $card.Child = $text
+    [void]$metricsPanel.Children.Add($card)
+}
+
 function Process-HudAgentNotifications {
     $changed = $false
-    if (-not (Test-Path -LiteralPath $notificationsRoot)) { return $false }
-    foreach ($file in @(Get-ChildItem -LiteralPath $notificationsRoot -File -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object CreationTimeUtc)) {
+    if (-not [IO.Directory]::Exists($notificationsRoot)) { return $false }
+    $noticeFiles = @([IO.Directory]::EnumerateFiles($notificationsRoot,'*.json',[IO.SearchOption]::TopDirectoryOnly) | ForEach-Object { [IO.FileInfo]::new($_) } | Sort-Object CreationTimeUtc)
+    foreach ($file in $noticeFiles) {
         if (-not [bool]$config.agentNotifications.enabled) {
             Remove-Item -LiteralPath $file.FullName -Force -ErrorAction SilentlyContinue
             continue
@@ -2001,20 +2492,67 @@ function Process-HudAgentNotifications {
     return $changed
 }
 
+function Render-HudMetrics {
+    $metrics = if ($paused -or $null -eq $snapshot) { @() } else { @(Get-HudMetrics $snapshot $config $locale) }
+    $isWaiting = $paused -or $null -eq $snapshot -or $metrics.Count -eq 0
+    if ($isWaiting) {
+        $waitingText = if ($paused) { [string]$locale.paused } elseif ($initialSessionScanComplete -and @(Get-HudUserTaskStates).Count -eq 0) { [string]$locale.noActiveTasks } else { [string]$locale.waiting }
+        $structureSignature = 'waiting|{0}|{1}|{2}|{3}' -f [string]$config.language,[string]$config.layout,[double]$config.fontSize,[string]$script:lastHudAppearanceSignature
+        if ([string]$script:lastHudMetricsStructureSignature -eq $structureSignature -and $hudMetricControls.ContainsKey('__waiting')) {
+            $hudMetricControls['__waiting'].Text = $waitingText
+            return $false
+        }
+        $metricsPanel.Children.Clear()
+        $script:hudMetricControls = @{}
+        $script:contextMetricContainer = $null
+        $script:hudMetricControls['__waiting'] = Add-WaitingMetric
+        $script:lastHudMetricsStructureSignature = $structureSignature
+        return $true
+    }
+
+    $metricIdentity = @($metrics | ForEach-Object { '{0}:{1}' -f [string]$_.Key,[string]$_.Label }) -join ';'
+    $structureSignature = 'metrics|{0}|{1}|{2}|{3}|{4}' -f [string]$config.language,[string]$config.layout,[double]$config.fontSize,$metricIdentity,[string]$script:lastHudAppearanceSignature
+    if ([string]$script:lastHudMetricsStructureSignature -eq $structureSignature) {
+        $complete = $true
+        foreach ($metric in $metrics) {
+            if (-not $hudMetricControls.ContainsKey([string]$metric.Key)) { $complete=$false;break }
+            $entry = $hudMetricControls[[string]$metric.Key]
+            $entry.Label.Text = [string]$metric.Label
+            $entry.Value.Text = [string]$metric.Value
+        }
+        if ($complete) { return $false }
+    }
+
+    $metricsPanel.Children.Clear()
+    $script:hudMetricControls = @{}
+    $script:contextMetricContainer = $null
+    foreach ($metric in $metrics) { $script:hudMetricControls[[string]$metric.Key] = Add-HudMetric $metric }
+    $script:lastHudMetricsStructureSignature = $structureSignature
+    return $true
+}
+
 function Apply-HudAppearance {
-    $script:locale = Get-HudLocale $paths ([string]$config.language)
+    $nextStatus = Get-HudStatus
+    $summaryFlowActive = @(Get-HudUserTaskStates | Where-Object { $_.AttentionUntil -gt [DateTimeOffset]::Now -and ([string]$config.attention.summaryMode -eq 'flow' -or [string]$_.AttentionReason -eq 'agent') }).Count -gt 0
+    $themeStyleSignature = @($config.themeStyle.PSObject.Properties | Sort-Object Name | ForEach-Object { '{0}={1}' -f [string]$_.Name,[string]$_.Value }) -join ','
+    $appearanceSignature = @(
+        [string]$config.language,[string]$config.preset,[string]$config.layout,[string]$config.background,[string]$config.foreground,[string]$config.muted,[string]$config.border,[string]$config.accent,
+        [double]$config.fontSize,[int]$config.cornerRadius,[double]$config.opacity,[string]$config.transparencyMode,[bool]$config.alwaysOnTop,[bool]$config.mousePassthrough,[bool]$config.showStatusDot,
+        $themeStyleSignature,$nextStatus,[string]$config.statusColors.$nextStatus,$summaryFlowActive
+    ) -join '|'
+    $script:currentStatus = $nextStatus
+    if ([string]$script:lastHudAppearanceSignature -eq $appearanceSignature) { return }
+    $script:lastHudAppearanceSignature = $appearanceSignature
     $hud.Topmost = [bool]$config.alwaysOnTop
     try { $hud.FontFamily = New-Object Windows.Media.FontFamily([string]$config.themeStyle.fontFamily) } catch { }
     Set-HudMousePassthrough ([bool]$config.mousePassthrough)
     $hud.Opacity = if ([string]$config.transparencyMode -eq 'uniform') { [double]$config.opacity } else { 1.0 }
     $hudShell.CornerRadius = New-Object Windows.CornerRadius([double]$config.cornerRadius)
-    $summaryFlowActive = @(Get-HudUserTaskStates | Where-Object { $_.AttentionUntil -gt [DateTimeOffset]::Now -and ([string]$config.attention.summaryMode -eq 'flow' -or [string]$_.AttentionReason -eq 'agent') }).Count -gt 0
     if (-not $summaryFlowActive) {
         $hudShell.BorderBrush = New-HudRoleBrush ([string]$config.border) '#22FFFFFF' 'decoration'
         $hudShell.BorderThickness = New-Object Windows.Thickness([double]$config.themeStyle.borderWidth)
     }
     $hudShell.Background = New-HudSurfaceBrush
-    $script:currentStatus = Get-HudStatus
     $statusColor = [string]$config.statusColors.$currentStatus
     $statusDot.Fill = New-HudBrush $statusColor '#FF8E8E93'
     $statusDot.Width = [double]$config.themeStyle.statusDotSize
@@ -2026,20 +2564,13 @@ function Apply-HudAppearance {
 }
 
 function Render-Hud {
-    Apply-HudAppearance
-    $metricsPanel.Children.Clear()
-    if ($paused -or $null -eq $snapshot) {
-        Add-WaitingMetric
-    } else {
-        $metrics = @(Get-HudMetrics $snapshot $config $locale)
-        if ($metrics.Count -eq 0) { Add-WaitingMetric } else {
-            foreach ($metric in $metrics) { Add-HudMetric $metric }
-        }
-    }
-    if ([string]$config.multiTask.displayMode -eq 'summary') {
-        $summaryNotice = Get-HudUserTaskStates | Where-Object { $_.AgentNoticeUntil -gt [DateTimeOffset]::Now -and -not [string]::IsNullOrWhiteSpace([string]$_.AgentNoticeText) } | Sort-Object AttentionRevision -Descending | Select-Object -First 1
-        if ($null -ne $summaryNotice) { Add-HudAgentNotice $summaryNotice }
-    }
+    [void](Apply-HudAppearance)
+    $summaryNotice = if ([string]$config.multiTask.displayMode -eq 'summary') { Get-HudUserTaskStates | Where-Object { $_.AgentNoticeUntil -gt [DateTimeOffset]::Now -and -not [string]::IsNullOrWhiteSpace([string]$_.AgentNoticeText) } | Sort-Object AttentionRevision -Descending | Select-Object -First 1 } else { $null }
+    $hasSummaryNotice = $null -ne $summaryNotice
+    if ([bool]$script:summaryNoticeVisible -ne $hasSummaryNotice -or $hasSummaryNotice) { $script:lastHudMetricsStructureSignature = '' }
+    $script:summaryNoticeVisible = $hasSummaryNotice
+    [void](Render-HudMetrics)
+    if ($hasSummaryNotice) { Add-HudAgentNotice $summaryNotice }
     $taskStates = @(Get-HudUserTaskStates)
     $taskCount = $taskStates.Count
     $taskPhaseSignature = @($taskStates | Sort-Object Number | ForEach-Object {
@@ -2061,12 +2592,14 @@ function Render-Hud {
         if ([string]$config.multiTask.displayMode -eq 'summary') {
             Write-HudDebug ('Attention surface: summary {0} r{1} reason={2}' -f [string]$mainAttention.Workspace,[int]$mainAttention.AttentionRevision,[string]$mainAttention.AttentionReason)
             if ([string]$mainAttention.AttentionReason -eq 'agent') { Start-HudAgentAnimation $hudShell $mainAttention.AgentNoticeRecipe }
+            elseif ([string]$mainAttention.AttentionReason -eq 'context') { Start-HudContextAlertAnimation $contextMetricContainer ([int]$mainAttention.ContextAlertLevel) }
             else { Start-HudAttentionAnimation $statusDot $hudShell ([string]$config.attention.summaryMode) }
         }
     }
     $hud.UpdateLayout()
     if ([string]$config.position -ne 'custom') { Move-HudToConfiguredPosition }
     Position-TaskBubbles
+    Update-HudIdleIndicatorMode
     $shouldAnimateUpdate = -not $interactivePreview -and
         -not [string]::IsNullOrWhiteSpace([string]$lastUpdateAnimationSignature) -and
         [string]$lastUpdateAnimationSignature -ne $updateAnimationSignature -and
@@ -2088,6 +2621,14 @@ function Export-HudPreview {
     $script:config.multiTask.displayMode = $PreviewHudMode
     $script:config.multiTask.listStyle = $PreviewListStyle
     $script:config.multiTask.listDensity = $PreviewListDensity
+    $script:config.multiTask.nameMode = $PreviewTaskNameMode
+    if ($PreviewQuietLayout -ne 'none') {
+        $script:config.behavior.idleIndicator.enabled = $true
+        $script:config.behavior.idleIndicator.layout = $PreviewQuietLayout
+        $script:config.behavior.idleIndicator.taskStyle = $PreviewQuietTaskStyle
+        foreach ($key in $statusPalettes.codexMicro.Keys) { $script:config.statusColors.$key = [string]$statusPalettes.codexMicro[$key] }
+        $script:config.statusPalette = 'codexMicro'
+    }
     if ($PreviewAttentionMode -ne 'none') {
         $script:config.attention.summaryMode = $PreviewAttentionMode
         $script:config.attention.listMode = $PreviewAttentionMode
@@ -2097,8 +2638,8 @@ function Export-HudPreview {
     if ($PreviewOpacity -gt 0) { $script:config.opacity = [Math]::Max(0.15, [Math]::Min(1.0, $PreviewOpacity)) }
     if ($PreviewFontSize -gt 0) { $script:config.fontSize = [Math]::Round($PreviewFontSize, 1) }
     $script:config.fields.weeklyRemaining = $true
-    $script:locale = Get-HudLocale $paths ([string]$config.language)
-    $script:settingsLocale = if ([string]$config.language -eq 'symbols') { Get-HudLocale $paths 'en' } else { $locale }
+    $script:locale = Get-RuntimeHudLocale ([string]$config.language)
+    $script:settingsLocale = if ([string]$config.language -eq 'symbols') { Get-RuntimeHudLocale 'en' } else { $locale }
     $script:snapshot = [pscustomobject]@{
         Timestamp = [DateTimeOffset]::Now
         Input = [Int64]128742
@@ -2116,7 +2657,7 @@ function Export-HudPreview {
         ActiveTasks = 4
     }
     $script:sessionStates = @{}
-    if ($PreviewHudMode -eq 'list') {
+    if ($PreviewHudMode -eq 'list' -or $PreviewQuietLayout -ne 'none') {
         $workspaces = @('api-gateway','desktop-client','release-checks','docs-refresh')
         $conversationTitles = if ($PreviewLanguage -eq 'zh-CN') {
             @('5L+u5aSN55m75b2V6LaF5pe2','5LyY5YyW5qGM6Z2i5Lqk5LqS','5qC45a+55Y+R5biD5riF5Y2V','5pu05paw5Y+M6K+t5paH5qGj') |
@@ -2145,12 +2686,13 @@ function Export-HudPreview {
                 StartedAt = [DateTimeOffset]::Now.AddMinutes(-42 + ($index * 7))
                 Workspace = $workspaces[$index]
                 ConversationLabel = $conversationTitles[$index]
+                SessionId = ('preview-thread-{0}' -f ($index + 1))
                 Snapshot = $taskSnapshot
-                LastUsageAt = if ($index -lt 2) { [DateTimeOffset]::Now.AddSeconds(-$index) } elseif ($index -eq 2) { [DateTimeOffset]::Now.AddSeconds(-36) } else { [DateTimeOffset]::Now.AddMinutes(-5) }
+                LastUsageAt = if ($PreviewQuietLayout -ne 'none') { [DateTimeOffset]::Now.AddMinutes(-20) } elseif ($index -lt 2) { [DateTimeOffset]::Now.AddSeconds(-$index) } elseif ($index -eq 2) { [DateTimeOffset]::Now.AddSeconds(-36) } else { [DateTimeOffset]::Now.AddMinutes(-5) }
                 LastReadErrorAt = [DateTimeOffset]::MinValue
                 LastRenderedStatus = ''
-                TerminalStatus = ''
-                TerminalAt = [DateTimeOffset]::MinValue
+                TerminalStatus = if ($PreviewQuietLayout -ne 'none' -and $index -eq 1) { 'completed' } elseif ($PreviewQuietLayout -ne 'none' -and $index -eq 2) { 'aborted' } else { '' }
+                TerminalAt = if ($PreviewQuietLayout -ne 'none' -and @(1,2) -contains $index) { [DateTimeOffset]::Now.AddMinutes(-1) } else { [DateTimeOffset]::MinValue }
                 TerminalSilent = $false
                 TerminalExitStarted = $false
                 TerminalExitCompleted = $false
@@ -2165,6 +2707,9 @@ function Export-HudPreview {
                 AgentNoticeText = ''
                 AgentNoticeUntil = [DateTimeOffset]::MinValue
                 AgentNoticeRecipe = $null
+                ContextAlertLevel = 0
+                ContextAlertPercent = 0.0
+                ContextAlertUntil = [DateTimeOffset]::MinValue
                 ActiveTurnId = ''
                 PendingCompletionTurnId = ''
                 PendingCompletionDueAt = [DateTimeOffset]::MinValue
@@ -2176,6 +2721,7 @@ function Export-HudPreview {
         }
     }
     Render-Hud
+    if ($PreviewQuietLayout -ne 'none') { Set-HudIndicatorCollapsed $true }
     $content = $hud.Content
     $content.Measure((New-Object Windows.Size([double]::PositiveInfinity, [double]::PositiveInfinity)))
     $size = $content.DesiredSize
@@ -2374,6 +2920,7 @@ function Set-StatusPalette {
 }
 
 function Sync-ControlsFromConfig {
+    if (-not $loadSettingsUi) { return }
     $script:syncingControls = $true
     try {
         Select-ComboTag $languageCombo ([string]$config.language)
@@ -2387,6 +2934,7 @@ function Sync-ControlsFromConfig {
         Select-ComboTag $displayModeCombo ([string]$config.multiTask.displayMode)
         Select-ComboTag $listStyleCombo ([string]$config.multiTask.listStyle)
         Select-ComboTag $listDensityCombo ([string]$config.multiTask.listDensity)
+        Select-ComboTag $listDetailCombo ([string]$config.multiTask.listDetail)
         Select-ComboTag $taskNameModeCombo ([string]$config.multiTask.nameMode)
         Select-ComboTag $maxSplitCombo ([string][int]$config.multiTask.maxSplitBubbles)
         Select-ComboTag $numberCooldownCombo ([string][int]$config.multiTask.numberCooldownSeconds)
@@ -2403,6 +2951,14 @@ function Sync-ControlsFromConfig {
         Select-ComboTag $agentNotificationIntensityCombo ([string]$config.agentNotifications.intensity)
         Select-ComboTag $agentNotificationDurationCombo ([string][int]$config.agentNotifications.durationSeconds)
         Select-ComboTag $transparencyModeCombo ([string]$config.transparencyMode)
+        Select-ComboTag $idleIndicatorDelayCombo ([string][int]$config.behavior.idleIndicator.afterMinutes)
+        Select-ComboTag $idleIndicatorLayoutCombo ([string]$config.behavior.idleIndicator.layout)
+        Select-ComboTag $idleIndicatorTaskStyleCombo ([string]$config.behavior.idleIndicator.taskStyle)
+        $contextThresholdControls = @($contextThreshold1Text,$contextThreshold2Text,$contextThreshold3Text)
+        $contextThresholdValues = @($config.behavior.contextAlerts.thresholds)
+        for ($index = 0; $index -lt $contextThresholdControls.Count; $index++) {
+            $contextThresholdControls[$index].Text = if ($index -lt $contextThresholdValues.Count) { [string][int]$contextThresholdValues[$index] } else { '' }
+        }
         Apply-SettingsLanguage
         foreach ($key in $fieldControls.Keys) { $fieldControls[$key].IsChecked = [bool]$config.fields.$key }
         $fontSizeSlider.Value = [double]$config.fontSize
@@ -2419,7 +2975,11 @@ function Sync-ControlsFromConfig {
         $agentNotificationEnabledCheck.IsChecked = [bool]$config.agentNotifications.enabled
         $dotAttentionEnabledCheck.IsChecked = [bool]$config.attention.dotEnabled
         $dotBreathingCheck.IsChecked = [bool]$config.attention.dotBreathing
-        foreach ($key in $listFieldControls.Keys) { $listFieldControls[$key].IsChecked = [bool]$config.multiTask.listFields.$key }
+        $openTaskOnDoubleClickCheck.IsChecked = [bool]$config.behavior.openTaskOnDoubleClick
+        $idleIndicatorEnabledCheck.IsChecked = [bool]$config.behavior.idleIndicator.enabled
+        $idleIndicatorBubblesCheck.IsChecked = [bool]$config.behavior.idleIndicator.includeTaskBubbles
+        $contextMetricVisibleCheck.IsChecked = [bool]$config.fields.context
+        $contextAlertsEnabledCheck.IsChecked = [bool]$config.behavior.contextAlerts.enabled
         foreach ($key in $bubbleFieldControls.Keys) { $bubbleFieldControls[$key].IsChecked = [bool]$config.multiTask.bubbleFields.$key }
         $pricingPathText.Text = [string]$config.pricing.path
         $pricingName = if ([string]$pricingCatalog.Kind -eq 'built-in') { [string]$settingsLocale.pricingBuiltIn } else { [IO.Path]::GetFileName([string]$pricingCatalog.Path) }
@@ -2445,7 +3005,7 @@ function Export-SettingsPreview {
     $script:config.language = $PreviewLanguage
     Build-ThemeButtons
     Sync-ControlsFromConfig
-    $tabMap = @{ general='GeneralTab'; multi='MultiTaskTab'; metrics='MetricsTab'; appearance='AppearanceTab' }
+    $tabMap = @{ general='GeneralTab'; multi='MultiTaskTab'; behavior='BehaviorTab'; metrics='MetricsTab'; appearance='AppearanceTab' }
     $settingsTabs.SelectedItem = $settingsTabControls[[string]$tabMap[$PreviewSettingsTab]]
     if ($PreviewSettingsAdvanced) {
         $settingsTabs.SelectedItem = $settingsTabControls['AppearanceTab']
@@ -2494,6 +3054,7 @@ function Apply-ControlsToConfig {
     $displayMode = Get-ComboTag $displayModeCombo
     $listStyle = Get-ComboTag $listStyleCombo
     $listDensity = Get-ComboTag $listDensityCombo
+    $listDetail = Get-ComboTag $listDetailCombo
     $taskNameMode = Get-ComboTag $taskNameModeCombo
     $maxSplitBubbles = Get-ComboTag $maxSplitCombo
     $numberCooldown = Get-ComboTag $numberCooldownCombo
@@ -2510,8 +3071,16 @@ function Apply-ControlsToConfig {
     $agentNotificationIntensity = Get-ComboTag $agentNotificationIntensityCombo
     $agentNotificationDuration = Get-ComboTag $agentNotificationDurationCombo
     $transparencyMode = Get-ComboTag $transparencyModeCombo
+    $idleIndicatorDelay = Get-ComboTag $idleIndicatorDelayCombo
+    $idleIndicatorLayout = Get-ComboTag $idleIndicatorLayoutCombo
+    $idleIndicatorTaskStyle = Get-ComboTag $idleIndicatorTaskStyleCombo
+    $contextThresholdControls = @($contextThreshold1Text,$contextThreshold2Text,$contextThreshold3Text)
+    $contextThresholds = Get-HudContextAlertThresholds @($contextThresholdControls | ForEach-Object { [string]$_.Text })
+    $contextThresholdsValid = $null -ne $contextThresholds
     $previousDisplayMode = [string]$config.multiTask.displayMode
     $previousMaxSplitBubbles = [int]$config.multiTask.maxSplitBubbles
+    $previousContextAlertsEnabled = [bool]$config.behavior.contextAlerts.enabled
+    $previousContextVisible = [bool]$config.fields.context
     if ($language) { $config.language = $language }
     if ($layout) { $config.layout = $layout }
     if ($number) { $config.numberFormat = $number }
@@ -2523,6 +3092,7 @@ function Apply-ControlsToConfig {
     if ($displayMode) { $config.multiTask.displayMode = $displayMode }
     if ($listStyle) { $config.multiTask.listStyle = $listStyle }
     if ($listDensity) { $config.multiTask.listDensity = $listDensity }
+    if ($listDetail) { $config.multiTask.listDetail = $listDetail }
     if ($taskNameMode) { $config.multiTask.nameMode = $taskNameMode }
     if ($maxSplitBubbles) { $config.multiTask.maxSplitBubbles = [int]$maxSplitBubbles }
     if ($numberCooldown) { $config.multiTask.numberCooldownSeconds = [int]$numberCooldown }
@@ -2541,6 +3111,15 @@ function Apply-ControlsToConfig {
     if ($agentNotificationIntensity) { $config.agentNotifications.intensity = $agentNotificationIntensity }
     if ($agentNotificationDuration) { $config.agentNotifications.durationSeconds = [int]$agentNotificationDuration }
     if ($transparencyMode) { $config.transparencyMode = $transparencyMode }
+    if ($idleIndicatorDelay) { $config.behavior.idleIndicator.afterMinutes = [int]$idleIndicatorDelay }
+    if ($idleIndicatorLayout) { $config.behavior.idleIndicator.layout = $idleIndicatorLayout }
+    if ($idleIndicatorTaskStyle) { $config.behavior.idleIndicator.taskStyle = $idleIndicatorTaskStyle }
+    if ($contextThresholdsValid) {
+        $config.behavior.contextAlerts.thresholds = @($contextThresholds)
+        for ($index = 0; $index -lt $contextThresholdControls.Count; $index++) {
+            $contextThresholdControls[$index].Text = if ($index -lt $contextThresholds.Count) { [string][int]$contextThresholds[$index] } else { '' }
+        }
+    }
     Apply-SettingsLanguage
     foreach ($key in $fieldControls.Keys) { $config.fields.$key = [bool]$fieldControls[$key].IsChecked }
     $config.fontSize = [Math]::Round([double]$fontSizeSlider.Value, 1)
@@ -2557,7 +3136,12 @@ function Apply-ControlsToConfig {
     $config.agentNotifications.enabled = [bool]$agentNotificationEnabledCheck.IsChecked
     $config.attention.dotEnabled = [bool]$dotAttentionEnabledCheck.IsChecked
     $config.attention.dotBreathing = [bool]$dotBreathingCheck.IsChecked
-    foreach ($key in $listFieldControls.Keys) { $config.multiTask.listFields.$key = [bool]$listFieldControls[$key].IsChecked }
+    $config.behavior.openTaskOnDoubleClick = [bool]$openTaskOnDoubleClickCheck.IsChecked
+    $config.behavior.idleIndicator.enabled = [bool]$idleIndicatorEnabledCheck.IsChecked
+    $config.behavior.idleIndicator.includeTaskBubbles = [bool]$idleIndicatorBubblesCheck.IsChecked
+    $config.behavior.contextAlerts.enabled = [bool]$contextAlertsEnabledCheck.IsChecked -and [bool]$config.fields.context
+    if (-not [bool]$config.fields.context) { $contextAlertsEnabledCheck.IsChecked = $false }
+    $contextMetricVisibleCheck.IsChecked = [bool]$config.fields.context
     foreach ($key in $bubbleFieldControls.Keys) { $config.multiTask.bubbleFields.$key = [bool]$bubbleFieldControls[$key].IsChecked }
     $config.pricing.path = [string]$pricingPathText.Text.Trim()
     $script:pricingCatalog = Get-HudPricingCatalog $pluginRoot ([string]$config.pricing.path)
@@ -2585,6 +3169,13 @@ function Apply-ControlsToConfig {
     $opacityValue.Text = ('{0:P0}' -f [double]$config.opacity)
     Update-ColorSwatches
     $config.preset = 'custom'
+    if (($previousContextAlertsEnabled -and -not [bool]$config.behavior.contextAlerts.enabled) -or ($previousContextVisible -and -not [bool]$config.fields.context)) {
+        Reset-HudContextAlertRuntime
+    } else {
+        foreach ($state in @($sessionStates.Values)) {
+            if ($null -ne $state.Snapshot) { $state.ContextAlertLevel = Get-HudContextAlertLevel ([double]$state.Snapshot.ContextPercent) $config.behavior.contextAlerts.thresholds }
+        }
+    }
     if ($previousDisplayMode -ne [string]$config.multiTask.displayMode -or $previousMaxSplitBubbles -ne [int]$config.multiTask.maxSplitBubbles) {
         if ([string]$config.multiTask.displayMode -eq 'summary') {
             foreach ($path in @($splitWindows.Keys)) { Close-TaskBubble ([string]$path) }
@@ -2599,10 +3190,14 @@ function Apply-ControlsToConfig {
     }
     Save-HudConfig $paths $config
     Update-DisplaySnapshot
-    $saveStatus.Text = ('{0}  {1}' -f [string]$settingsLocale.savedAt, (Get-Date).ToString('HH:mm:ss'))
+    $saveStatus.Text = if ($contextThresholdsValid) { ('{0}  {1}' -f [string]$settingsLocale.savedAt, (Get-Date).ToString('HH:mm:ss')) } else { [string]$settingsLocale.contextThresholdsInvalid }
 }
 
 function Show-HudSettings {
+    if (-not $loadSettingsUi) {
+        Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-SettingsHost') -WindowStyle Hidden | Out-Null
+        return
+    }
     Sync-ControlsFromConfig
     if (-not $settings.IsVisible) { $settings.Show() }
     $settings.Activate() | Out-Null
@@ -2700,11 +3295,12 @@ function Refresh-HudSessionIndex {
 function Initialize-SessionFile {
     param([System.IO.FileInfo]$File)
     if ($sessionStates.ContainsKey($File.FullName)) { return $false }
-    $initialSnapshot = Get-LatestHudSnapshot $File
     $identity = Get-HudSessionIdentity $File
+    $initialSnapshot = if ([bool]$identity.IsInternalSession) { $null } else { Get-LatestHudSnapshot $File }
     $sessionId = [string]$identity.SessionId
     $sessionStates[$File.FullName] = [pscustomobject]@{
         Path = $File.FullName
+        FileInfo = $File
         Number = Get-NextTaskNumber
         StartedAt = [DateTimeOffset]$File.CreationTime
         Offset = [Int64]$File.Length
@@ -2735,6 +3331,9 @@ function Initialize-SessionFile {
         AgentNoticeText = ''
         AgentNoticeUntil = [DateTimeOffset]::MinValue
         AgentNoticeRecipe = $null
+        ContextAlertLevel = 0
+        ContextAlertPercent = 0.0
+        ContextAlertUntil = [DateTimeOffset]::MinValue
         ActiveTurnId = ''
         PendingCompletionTurnId = ''
         PendingCompletionDueAt = [DateTimeOffset]::MinValue
@@ -2754,8 +3353,9 @@ function Initialize-SessionFile {
 function Refresh-HudSessionIdentity {
     param([Parameter(Mandatory = $true)]$State)
     if ($null -ne $State.PSObject.Properties['IdentityMetadataFound'] -and [bool]$State.IdentityMetadataFound) { return $false }
-    $file = Get-Item -LiteralPath ([string]$State.Path) -ErrorAction SilentlyContinue
-    if ($null -eq $file) { return $false }
+    $file = if ($null -ne $State.PSObject.Properties['FileInfo'] -and $null -ne $State.FileInfo) { $State.FileInfo } else { [IO.FileInfo]::new([string]$State.Path) }
+    $file.Refresh()
+    if (-not $file.Exists) { return $false }
     $identity = Get-HudSessionIdentity $file
     if (-not [bool]$identity.MetadataFound) { return $false }
     $State.IdentityMetadataFound = $true
@@ -2803,10 +3403,12 @@ function Set-HudSessionIdentityFromRecord {
 
 function Read-AppendedSessionData {
     param([Parameter(Mandatory = $true)]$State)
-    if ([string]::IsNullOrWhiteSpace([string]$State.Path) -or -not (Test-Path -LiteralPath $State.Path)) { return $false }
+    if ([string]::IsNullOrWhiteSpace([string]$State.Path)) { return $false }
     try {
         $identityChanged = Refresh-HudSessionIdentity $State
-        $file = Get-Item -LiteralPath $State.Path
+        $file = if ($null -ne $State.PSObject.Properties['FileInfo'] -and $null -ne $State.FileInfo) { $State.FileInfo } else { [IO.FileInfo]::new([string]$State.Path) }
+        $file.Refresh()
+        if (-not $file.Exists) { return $identityChanged }
         $State.LastWriteTimeUtc = $file.LastWriteTimeUtc
         if ($file.Length -lt $State.Offset) {
             $State.Offset = [Int64]0
@@ -2827,10 +3429,15 @@ function Read-AppendedSessionData {
         $State.PendingText = [string]$split.PendingText
         $updated = $identityChanged
         foreach ($line in @($split.CompleteLines)) {
-            try {
-                $rawRecord = $line | ConvertFrom-Json -ErrorAction Stop
-                if (Set-HudSessionIdentityFromRecord $State $rawRecord) { $updated = $true }
-            } catch { }
+            if (-not [bool]$State.IdentityMetadataFound) {
+                $identityPrefix = $line.Substring(0,[Math]::Min(512,$line.Length))
+                if ($identityPrefix -match '"type"\s*:\s*"session_meta"') {
+                    try {
+                        $rawRecord = $line | ConvertFrom-Json -ErrorAction Stop
+                        if (Set-HudSessionIdentityFromRecord $State $rawRecord) { $updated = $true }
+                    } catch { }
+                }
+            }
             $item = Convert-HudRecord $line
             if ($null -eq $item) { continue }
             if ($item.Kind -eq 'context') {
@@ -2853,6 +3460,7 @@ function Read-AppendedSessionData {
                 if ([string]::IsNullOrWhiteSpace([string]$State.ActiveTurnId) -or [string]$item.TurnId -eq [string]$State.ActiveTurnId) {
                     $State.PendingCompletionTurnId = [string]$item.TurnId
                     $State.PendingCompletionDueAt = [DateTimeOffset]::Now.AddSeconds([int]$config.attention.completionGraceSeconds)
+                    Write-HudDebug ('Pending completion scheduled: {0} turn={1}' -f [string]$State.Workspace,[string]$item.TurnId)
                     if ([int]$config.attention.completionGraceSeconds -eq 0) { [void](Confirm-PendingTaskCompletion $State) }
                 }
                 $updated = $true
@@ -2901,6 +3509,7 @@ function Read-AppendedSessionData {
                 $State.LastReadErrorAt = [DateTimeOffset]::MinValue
                 $State.HasObservedActivity = $true
                 $script:lastUsageAt = [DateTimeOffset]::Now
+                [void](Update-HudContextAlertState $State)
                 $updated = $true
             }
         }
@@ -2926,6 +3535,28 @@ function Write-HudTaskRegistry {
         $registry = [ordered]@{ version=1; generated_at=[DateTimeOffset]::Now.ToString('O'); tasks=$tasks }
         [IO.File]::WriteAllText((Join-Path $paths.StateRoot 'task-registry.json'),($registry | ConvertTo-Json -Depth 4),(New-Object Text.UTF8Encoding($false)))
     } catch { Write-HudDebug ('Task registry update failed: ' + $_.Exception.Message) }
+}
+
+function Invoke-HudIdleMemoryTrim {
+    $now = [DateTimeOffset]::Now
+    if (-not $memoryTrimPending) { return }
+    $quietEnough = ($now - $lastMaterialUpdateAt).TotalSeconds -ge 5
+    $activeTrimDue = ($now - $lastWorkingSetTrimAt).TotalSeconds -ge 5
+    if (-not $quietEnough -and -not $activeTrimDue) { return }
+    try {
+        $process = [Diagnostics.Process]::GetCurrentProcess()
+        if ($process.WorkingSet64 -lt 220MB) { $script:memoryTrimPending = $false; return }
+        if (($now - $lastFullGcAt).TotalMinutes -ge 2) {
+            [GC]::Collect(2,[GCCollectionMode]::Optimized)
+            [GC]::WaitForPendingFinalizers()
+            [GC]::Collect(2,[GCCollectionMode]::Optimized)
+            $script:lastFullGcAt = $now
+        }
+        [void][HudNativeMethods]::SetProcessWorkingSetSize([HudNativeMethods]::GetCurrentProcess(),[IntPtr](-1),[IntPtr](-1))
+        $script:lastWorkingSetTrimAt = $now
+        $script:memoryTrimPending = $false
+        Write-HudDebug ('Idle memory trim completed; workingSetMB=' + [Math]::Round($process.WorkingSet64/1MB,1))
+    } catch { Write-HudDebug ('Idle memory trim skipped: ' + $_.Exception.Message) }
 }
 
 function Update-DisplaySnapshot {
@@ -3001,6 +3632,7 @@ if (-not [string]::IsNullOrWhiteSpace($ImportThemeFile)) {
     exit 0
 }
 
+if ($loadSettingsUi) {
 Build-ThemeButtons
 
 $sliderPreviewTimer = New-Object Windows.Threading.DispatcherTimer
@@ -3042,16 +3674,42 @@ function Apply-SliderPreview {
 
 $liveControls = @(
     $languageCombo,$layoutCombo,$numberCombo,$positionCombo,$monitorScopeCombo,$activeWindowCombo,$taskRetentionCombo,$terminalExitModeCombo,
-    $displayModeCombo,$listStyleCombo,$listDensityCombo,$taskNameModeCombo,$maxSplitCombo,$numberCooldownCombo,
+    $displayModeCombo,$listStyleCombo,$listDensityCombo,$listDetailCombo,$taskNameModeCombo,$maxSplitCombo,$numberCooldownCombo,
     $summaryAttentionModeCombo,$listAttentionModeCombo,$taskBubbleAttentionModeCombo,$dotPatternCombo,$dotBrightnessCombo,$dotSpeedCombo,$attentionDurationCombo,$transparencyModeCombo,
     $agentNotificationPermissionCombo,$agentNotificationModeCombo,$agentNotificationIntensityCombo,$agentNotificationDurationCombo,
+    $idleIndicatorDelayCombo,$idleIndicatorLayoutCombo,$idleIndicatorTaskStyleCombo,
     $alwaysOnTopCheck,$mousePassthroughCheck,$statusDotCheck,$animateCheck,$autoSplitCheck,
-    $attentionCompletedCheck,$attentionErrorCheck,$attentionSettledCheck,$dotAttentionEnabledCheck,$dotBreathingCheck,$agentNotificationEnabledCheck
-) + @($fieldControls.Values) + @($listFieldControls.Values) + @($bubbleFieldControls.Values)
+    $attentionCompletedCheck,$attentionErrorCheck,$attentionSettledCheck,$dotAttentionEnabledCheck,$dotBreathingCheck,$agentNotificationEnabledCheck,
+    $openTaskOnDoubleClickCheck,$idleIndicatorEnabledCheck,$idleIndicatorBubblesCheck
+) + @($fieldControls.GetEnumerator() | Where-Object { [string]$_.Key -ne 'context' } | ForEach-Object { $_.Value }) + @($bubbleFieldControls.Values)
 foreach ($control in $liveControls) {
     if ($control -is [Windows.Controls.ComboBox]) { $control.Add_SelectionChanged({ Apply-ControlsToConfig }) }
     else { $control.Add_Click({ Apply-ControlsToConfig }) }
 }
+foreach ($control in @($contextThreshold1Text,$contextThreshold2Text,$contextThreshold3Text)) { $control.Add_LostFocus({ Apply-ControlsToConfig }) }
+$contextAlertsEnabledCheck.Add_Click({
+    if($syncingControls){return}
+    $enabled = [bool]$contextAlertsEnabledCheck.IsChecked
+    if($enabled){$fieldControls['context'].IsChecked=$true;$contextMetricVisibleCheck.IsChecked=$true}
+    Apply-ControlsToConfig
+    if($enabled){$saveStatus.Text=[string]$settingsLocale.contextDependencyEnabled}
+})
+$contextMetricVisibleCheck.Add_Click({
+    if($syncingControls){return}
+    $visible = [bool]$contextMetricVisibleCheck.IsChecked
+    $fieldControls['context'].IsChecked=$visible
+    $contextAlertsEnabledCheck.IsChecked=$visible
+    Apply-ControlsToConfig
+    $saveStatus.Text=if($visible){[string]$settingsLocale.contextDependencyEnabled}else{[string]$settingsLocale.contextDependencyDisabled}
+})
+$fieldControls['context'].Add_Click({
+    if($syncingControls){return}
+    $visible = [bool]$fieldControls['context'].IsChecked
+    $contextMetricVisibleCheck.IsChecked=$visible
+    if(-not $visible){$contextAlertsEnabledCheck.IsChecked=$false}
+    Apply-ControlsToConfig
+    if(-not $visible){$saveStatus.Text=[string]$settingsLocale.contextDependencyDisabled}
+})
 $agentNotificationGlowPresetCombo.Add_SelectionChanged({
     if($syncingControls){return}
     $preset=Get-ComboTag $agentNotificationGlowPresetCombo
@@ -3104,8 +3762,14 @@ $themeWorkshopDropZone.Add_Drop($themeDrop)
 $settings.AllowDrop = $true
 $settings.Add_DragOver($themeDragOver)
 $settings.Add_Drop($themeDrop)
-$closeSettingsButton.Add_Click({ Save-HudConfig $paths $config; $settings.Hide() })
-$saveButton.Add_Click({ Apply-ControlsToConfig; $settings.Hide() })
+$closeSettingsButton.Add_Click({
+    Save-HudConfig $paths $config
+    if ($SettingsHost) { $script:closingApp=$true; $settings.Close() } else { $settings.Hide() }
+})
+$saveButton.Add_Click({
+    Apply-ControlsToConfig
+    if ($SettingsHost) { $script:closingApp=$true; $settings.Close() } else { $settings.Hide() }
+})
 $resetButton.Add_Click({
     $script:config = Get-Content -Raw -Encoding UTF8 -LiteralPath $paths.DefaultConfigPath | ConvertFrom-Json
     $script:pricingCatalog = Get-HudPricingCatalog $pluginRoot ([string]$config.pricing.path)
@@ -3114,8 +3778,21 @@ $resetButton.Add_Click({
     Update-DisplaySnapshot
 })
 $settings.Add_Closing({
-    if (-not $closingApp) { $_.Cancel = $true; Save-HudConfig $paths $config; $settings.Hide() }
+    Save-HudConfig $paths $config
+    if ($SettingsHost) {
+        [IO.File]::WriteAllText($reloadSettingsSignal,[DateTime]::UtcNow.ToString('O'))
+        $script:closingApp = $true
+    } elseif (-not $closingApp) { $_.Cancel = $true; $settings.Hide() }
 })
+}
+
+if ($SettingsHost) {
+    Sync-ControlsFromConfig
+    $settingsApplication = [Windows.Application]::new()
+    $settings.Add_Loaded({ $settings.Activate() | Out-Null })
+    try { $settingsApplication.Run($settings) | Out-Null } finally { Release-HudMutex }
+    exit 0
+}
 
 $taskListToggleButton.Add_Click({
     if ([string]$config.multiTask.displayMode -eq 'list') { Set-MultiTaskDisplayMode 'summary' }
@@ -3136,6 +3813,7 @@ $hud.Add_MouseLeftButtonDown({
         } catch { }
     }
 })
+$hud.Add_MouseEnter({ if ($isMainIndicatorCollapsed) { Set-HudIndicatorCollapsed $false } })
 
 $contextMenu = New-Object Windows.Controls.ContextMenu
 $statusItem = New-Object Windows.Controls.MenuItem
@@ -3208,7 +3886,7 @@ $statusItem.IsEnabled = $false
 [void]$contextMenu.Items.Add((New-Object Windows.Controls.Separator))
 [void]$contextMenu.Items.Add($exitItem)
 $hud.ContextMenu = $contextMenu
-Update-ContextMenuText
+Update-ContextMenuText -Force
 $settingsItem.Add_Click({ Show-HudSettings })
 $passthroughItem.Add_Click({
     $enablingPassthrough = $false
@@ -3260,20 +3938,33 @@ $timer.Add_Tick({
             Stop-HudApplication; return
         }
     }
-    if (Test-Path -LiteralPath $openSignal) { Remove-Item -LiteralPath $openSignal -Force -ErrorAction SilentlyContinue; Show-HudSettings }
-    if (Test-Path -LiteralPath $showSignal) { Remove-Item -LiteralPath $showSignal -Force -ErrorAction SilentlyContinue; $hud.Show() }
-    if (Test-Path -LiteralPath $hideSignal) { Remove-Item -LiteralPath $hideSignal -Force -ErrorAction SilentlyContinue; $hud.Hide() }
-    if (Test-Path -LiteralPath $pauseSignal) {
+    if ([IO.File]::Exists($reloadSettingsSignal)) {
+        Remove-Item -LiteralPath $reloadSettingsSignal -Force -ErrorAction SilentlyContinue
+        $script:config = Get-HudConfig $paths
+        $script:locale = Get-RuntimeHudLocale ([string]$config.language)
+        $script:settingsLocale = if ([string]$config.language -eq 'symbols') { Get-RuntimeHudLocale 'en' } else { $locale }
+        $script:pricingCatalog = Get-HudPricingCatalog $pluginRoot ([string]$config.pricing.path)
+        $script:lastHudAppearanceSignature = ''
+        $script:lastHudMetricsStructureSignature = ''
+        $script:lastTaskListRenderSignature = ''
+        [void](Apply-HudAppearance)
+        Update-DisplaySnapshot
+        Update-ContextMenuText -Force
+    }
+    if ([IO.File]::Exists($openSignal)) { Remove-Item -LiteralPath $openSignal -Force -ErrorAction SilentlyContinue; Show-HudSettings }
+    if ([IO.File]::Exists($showSignal)) { Remove-Item -LiteralPath $showSignal -Force -ErrorAction SilentlyContinue; $hud.Show() }
+    if ([IO.File]::Exists($hideSignal)) { Remove-Item -LiteralPath $hideSignal -Force -ErrorAction SilentlyContinue; $hud.Hide() }
+    if ([IO.File]::Exists($pauseSignal)) {
         Remove-Item -LiteralPath $pauseSignal -Force -ErrorAction SilentlyContinue
         $script:paused = -not $paused
         Update-ContextMenuText
         Render-Hud
     }
-    if (Test-Path -LiteralPath $passthroughOffSignal) {
+    if ([IO.File]::Exists($passthroughOffSignal)) {
         Remove-Item -LiteralPath $passthroughOffSignal -Force -ErrorAction SilentlyContinue
         Disable-HudMousePassthrough
     }
-    if (Test-Path -LiteralPath $exitSignal) { Remove-Item -LiteralPath $exitSignal -Force -ErrorAction SilentlyContinue; Stop-HudApplication; return }
+    if ([IO.File]::Exists($exitSignal)) { Remove-Item -LiteralPath $exitSignal -Force -ErrorAction SilentlyContinue; Stop-HudApplication; return }
     $changed = Process-HudAgentNotifications
     foreach ($state in @($sessionStates.Values)) {
         if ($state.AgentNoticeUntil -ne [DateTimeOffset]::MinValue -and $state.AgentNoticeUntil -le [DateTimeOffset]::Now) {
@@ -3283,6 +3974,11 @@ $timer.Add_Tick({
             if ([string]$state.AttentionReason -eq 'agent') { $state.AttentionUntil = [DateTimeOffset]::MinValue }
             $changed = $true
         }
+        if ($state.ContextAlertUntil -ne [DateTimeOffset]::MinValue -and $state.ContextAlertUntil -le [DateTimeOffset]::Now) {
+            $state.ContextAlertUntil = [DateTimeOffset]::MinValue
+            if ([string]$state.AttentionReason -eq 'context') { $state.AttentionUntil = [DateTimeOffset]::MinValue }
+            $changed = $true
+        }
     }
     if ($paused) { if ($changed) { Update-DisplaySnapshot }; return }
     if (((Get-Date) - $lastFolderScan).TotalSeconds -ge 1.5) {
@@ -3290,17 +3986,24 @@ $timer.Add_Tick({
         if (Refresh-ActiveSessions) { $changed = $true }
     }
     foreach ($state in @($sessionStates.Values)) {
-        if (Read-AppendedSessionData $state) { $changed = $true }
+        $confirmedInternal = $null -ne $state.PSObject.Properties['IdentityMetadataFound'] -and [bool]$state.IdentityMetadataFound -and $null -ne $state.PSObject.Properties['IsInternalSession'] -and [bool]$state.IsInternalSession
+        if (-not $confirmedInternal -and (Read-AppendedSessionData $state)) { $changed = $true }
         if (Confirm-PendingTaskCompletion $state) { $changed = $true }
         if (Update-TerminalExitState $state) { $changed = $true }
         $taskStatus = Update-TaskStatusTransition $state
         if ([string]$state.LastRenderedStatus -ne $taskStatus) { $changed = $true }
     }
-    if ($changed) { Update-DisplaySnapshot }
+    if ($changed) {
+        $script:lastMaterialUpdateAt = [DateTimeOffset]::Now
+        $script:memoryTrimPending = $true
+        Update-DisplaySnapshot
+    }
     else {
         $nextStatus = Get-HudStatus
         if ($nextStatus -ne $currentStatus) { Render-Hud; Update-ContextMenuText }
+        else { Update-HudIdleIndicatorMode }
     }
+    Invoke-HudIdleMemoryTrim
 })
 
 $hud.Add_SourceInitialized({

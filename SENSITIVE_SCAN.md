@@ -1,5 +1,16 @@
 # Sensitive information scan
 
+## 2.1.0 source scan - 2026-07-16
+
+- Scanned 92 public source/package candidates after excluding `.git`, `artifacts`, `.test-output`, `private`, local workflow files and other installer exclusions.
+- Local username, machine profile/repository path and host-name hits: 0.
+- Credential, bearer token, private-key and common GitHub/OpenAI secret-pattern hits: 0.
+- Included `.jsonl`, logs, databases, keys, certificates or ZIP archives: 0.
+- Hidden bidi, zero-width and directional-control hits: 0.
+- Behavior and context runtime fixtures use only `C:\Synthetic` workspaces, synthetic technical thread IDs and synthetic Token/context values. The refreshed behavior screenshots and quiet row/column visual previews are generated from default/synthetic state and contain no real task, account, session or machine data.
+- `LOCALIZATION.md` contains language-tag examples only. The installer classifies no saved prompt or session text; Codex supplies `zh-CN` or `en` from the current install request.
+- This is a source-candidate scan. A final staged ZIP and checksum still require a separate scan after the last package-affecting edit and before publication.
+
 ## 2.0.2-preview source scan - 2026-07-15
 
 - Public candidates contain no local profile/repository paths, credentials, session JSONL, databases, logs, settings, archives, real task names or real Token values.

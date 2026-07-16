@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.1.0 - 2026-07-16
+
+- Restore a two-line task-list identity with project/workspace as the main title and official Codex conversation title plus time in the subtitle behavior.
+- Cache unchanged locale, appearance, metric, list, quiet-indicator and menu projections instead of rebuilding them on every 800 ms dispatcher tick.
+- Stream bounded session tails, reject irrelevant records before full JSON parsing, reuse file identities and stop tailing confirmed internal sessions.
+- Move Settings and Color Picker into an on-demand process and hot-reload saved configuration in the resident HUD.
+- Return unused working-set pages to Windows after updates while rate-limiting full managed collections; document the separate PowerShell/WPF committed-memory high-water mark.
+- Prevent a fully populated top metric row from clipping the task-count toggle by using explicit header columns and a minimum expanded-list width.
+- Promote the v2 line from preview to stable and make English the safe fallback for manual or unsupported-language installs.
+- Let Codex's install prompt select Simplified Chinese or English on first install without overwriting an existing language preference.
+- Add an opt-in, official `codex://threads/<thread-id>` double-click path from task rows and independent bubbles.
+- Redesign symbol-only HUD metrics and task status labels as a consistent geometric vocabulary.
+- Expand the optional quiet indicator from one overall status light to a choice of one large overall light or a separated horizontal/vertical strip of numbered task lights. Task markers support dots and rounded bars; completed/aborted markers remain visible while the strip sleeps, then normal departure resumes after wake-up.
+- Keep every existing status-color scheme and add a Codex Micro display-reference scheme using five values sampled from OpenAI's public product page. Reuse those values for the HUD's two additional lifecycle states; the mapping is local, unofficial, and not a color-match guarantee. See `COLOR_ATTRIBUTION.md`.
+- Add directly editable context-usage alert thresholds with calmer 75% / 90% / 98% defaults. One to three values are accepted, automatically deduplicated and sorted, with one reminder per upward crossing and automatic rearming after compaction or lower usage.
+- Restrict context-alert motion and glow to the context-usage metric itself: level 1 uses a soft blue pulse, level 2 an amber glow, and level 3 a stronger red pulse/glow. Alerts now depend on context visibility and shut down immediately if that metric is hidden.
+- Replace per-field task-list toggles with calm Compact, Balanced, and Detailed information-density presets; context usage remains visible in every row.
+- Add a dedicated Behavior settings page so interaction and safeguards do not crowd layout, metric, or appearance controls.
+- Add human-localization guidance based on BCP 47 language tags and community-standard language names.
+
 ## 2.0.2-preview - 2026-07-15
 
 - Wait for bounded session identity metadata before rendering a newly discovered task, refresh delayed official titles, recover workspace names from `session_meta.cwd`, and keep internal auto-review sessions from appearing transiently as duplicate user tasks.
@@ -14,7 +34,7 @@
 - Remove persistent drop shadows from the always-on-top summary HUD and independent task bubbles to reduce visual interference with other applications.
 - Add synthetic regressions for multi-date active-session discovery, completed-task retention settings, high-DPI text rendering and shadow-free persistent surfaces.
 
-## Unreleased - local acceptance work
+## Development work incorporated into 2.1.0
 
 - Stop replaying the whole-window fade for every Token refresh. Update animation is now keyed to task membership, display mode, and status-phase changes, uses a subtle 96%-to-100% fade, and yields to explicit attention effects.
 - Separate broad session discovery from the visible task set: keep scanning every creation-date folder so resumed work is never lost, but hide internal subagent sessions, silent/internal stops and user tasks whose completion hold has expired.
@@ -42,7 +62,7 @@
 
 ## 2.0.0 - 2026-07-15
 
-- Rename the product to Codex Monitor HUD to make its purpose explicit: lightweight, real-time monitoring for Codex tasks running in the background.
+- Rename the product to Codex Monitor HUD to make its purpose explicit: local, real-time monitoring for Codex tasks running in the background.
 - Use a new plugin, MCP server, Skill, runtime path, settings directory, mutex, shortcut and repository identity.
 - Treat v2 as a fresh installation. The installer detects the legacy `codex-token-strip` plugin and stops without importing or deleting legacy settings.
 - Reorganize the bilingual documentation around live task awareness, high-concurrency Pro workflows and the boundary between monitoring and retrospective analytics.
@@ -84,7 +104,7 @@
 - Reduce new-session discovery latency from three seconds to roughly 1.5 seconds while preserving incremental byte-tail reads.
 - Add isolated Windows runtime validation with 80 synthetic concurrent tasks and repeated task replacement in both list and split modes.
 - Reposition split bubbles intelligently around top, bottom, left, right and custom HUD placements.
-- Rewrite the English and Chinese README positioning for lightweight, high-concurrency Pro workflows.
+- Rewrite the English and Chinese README positioning for high-concurrency Codex workflows.
 - Clarify the README language-switch order and add a short, scope-aware recommendation for users who need Codex Usage Tracker's deeper retrospective analytics.
 
 ## 1.3.1 - 2026-07-14

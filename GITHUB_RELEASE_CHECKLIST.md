@@ -3,6 +3,11 @@
 - [ ] Confirm product, plugin, MCP, Skill, runtime paths, shortcuts, icon and repository all use Codex Monitor HUD / `codex-monitor-hud`.
 - [ ] Confirm v2 is a fresh identity: old `codex-token-strip` detection stops before any write and no legacy settings are imported or deleted.
 - [ ] Run `scripts/test.ps1`.
+- [ ] Run `scripts/test-behavior-isolated.ps1` and both list/split modes of `scripts/test-runtime-isolated.ps1` and `scripts/test-terminal-exit-isolated.ps1`.
+- [ ] Verify double-click task navigation only after explicitly enabling it; confirm main-HUD double-click still opens settings.
+- [ ] Verify quiet-indicator hover/activity expansion and all three context thresholds with synthetic sessions.
+- [ ] Render a fully populated list header and confirm the task-count toggle has complete right padding at 100%, 125%, and 150% display scale where available.
+- [ ] Verify project main titles and official conversation subtitles in `hover`, `always`, and `hidden` modes.
 - [ ] Validate `.codex-plugin/plugin.json`.
 - [ ] Confirm locale key sets match.
 - [ ] Confirm screenshots contain synthetic values only.
@@ -15,7 +20,9 @@
 - [ ] Test real click and wheel pass-through on Windows 10/11 where available.
 - [ ] Test disabling click-through from the notification-area menu, settings shortcut and `monitor_hud_disable_click_through`.
 - [ ] Test multiple monitors and mixed DPI before calling click-through fully validated.
-- [ ] Confirm font size persists with 0.1 precision and all four status color schemes remain editable.
+- [ ] Confirm font size persists with 0.1 precision and all five status color schemes remain editable.
+- [ ] Confirm the settings label says `Codex Micro display reference` (not “official”), and that `COLOR_ATTRIBUTION.md`, the release body, and screenshots retain the source, non-affiliation, and non-matching disclaimer.
+- [ ] Record private committed bytes and working set separately; do not present a working-set trim as elimination of PowerShell/WPF heap commitment.
 - [ ] Do not commit `~/.codex/sessions`, SQLite files or `%LOCALAPPDATA%\CodexMonitorHUD`.
-- [ ] Confirm GitHub Desktop is on `main`, the tag is `v2.0.2-preview`, and the GitHub Release is marked as a pre-release.
-- [ ] Regenerate the final ZIP, SHA-256 and copy-ready GitHub fields with the local release-preparation procedure after the last package-affecting edit.
+- [ ] Confirm GitHub Desktop is on `main`, the tag is `v2.1.0`, and the GitHub Release is **not** marked as a pre-release.
+- [ ] After the last package-affecting edit, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-release.ps1`; attach its ZIP and `SHA256SUMS.txt`, and use its `RELEASE_UPLOAD.md` with `GITHUB_RELEASE_DRAFT_2.1.0.md`.

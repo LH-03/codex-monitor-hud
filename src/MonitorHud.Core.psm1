@@ -97,6 +97,39 @@ function Get-HudSurfaceEffectProfile {
     }
 }
 
+function Get-HudContextAlertLevel {
+    param(
+        [double]$ContextPercent,
+        [Parameter(Mandatory = $true)]$Thresholds
+    )
+    $ordered = @($Thresholds | ForEach-Object { [double]$_ } | Sort-Object)
+    $level = 0
+    foreach ($threshold in $ordered) {
+        if ($ContextPercent -ge $threshold) { $level++ }
+    }
+    return [Math]::Min(3,$level)
+}
+
+function Get-HudContextAlertThresholds {
+    param([string[]]$Values)
+    $thresholds = New-Object System.Collections.ArrayList
+    foreach ($rawValue in @($Values)) {
+        $text = ([string]$rawValue).Trim().TrimEnd('%').Trim()
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+        $value = 0
+        if (-not [int]::TryParse($text,[ref]$value) -or $value -lt 1 -or $value -gt 99) { return $null }
+        if (-not $thresholds.Contains($value)) { [void]$thresholds.Add($value) }
+    }
+    if ($thresholds.Count -lt 1 -or $thresholds.Count -gt 3) { return $null }
+    return @($thresholds | Sort-Object)
+}
+
+function Get-HudTaskDeepLink {
+    param([string]$SessionId)
+    if ([string]::IsNullOrWhiteSpace($SessionId) -or $SessionId -notmatch '^[A-Za-z0-9._-]+$') { return $null }
+    return 'codex://threads/' + [Uri]::EscapeDataString($SessionId)
+}
+
 function Get-HudThemes {
     param([Parameter(Mandatory = $true)][string]$PluginRoot)
     $themeRoots = @(
@@ -203,9 +236,26 @@ function Get-HudConfig {
     if (@('summary','list','split') -notcontains [string]$result.multiTask.displayMode) { $result.multiTask.displayMode = 'summary' }
     if (@('rows','cards','rail') -notcontains [string]$result.multiTask.listStyle) { $result.multiTask.listStyle = 'rows' }
     if (@('compact','balanced','relaxed') -notcontains [string]$result.multiTask.listDensity) { $result.multiTask.listDensity = 'compact' }
+    if (@('compact','balanced','detailed') -notcontains [string]$result.multiTask.listDetail) { $result.multiTask.listDetail = 'balanced' }
     if (@('hover','always','hidden') -notcontains [string]$result.multiTask.nameMode) { $result.multiTask.nameMode = 'hover' }
     $result.multiTask.maxSplitBubbles = [Math]::Max(1, [Math]::Min(12, [int]$result.multiTask.maxSplitBubbles))
     $result.multiTask.numberCooldownSeconds = [Math]::Max(0, [Math]::Min(3600, [int]$result.multiTask.numberCooldownSeconds))
+    $languageAvailable = @('zh-CN','en','symbols') -contains [string]$result.language
+    if (-not $languageAvailable -and $null -ne $Paths.PSObject.Properties['LocaleRoot']) {
+        $languagePath = Join-Path ([string]$Paths.LocaleRoot) (([string]$result.language) + '.json')
+        $languageAvailable = Test-Path -LiteralPath $languagePath -PathType Leaf
+    }
+    if (-not $languageAvailable) { $result.language = 'en' }
+    $result.behavior.openTaskOnDoubleClick = [bool]$result.behavior.openTaskOnDoubleClick
+    $result.behavior.idleIndicator.enabled = [bool]$result.behavior.idleIndicator.enabled
+    $result.behavior.idleIndicator.includeTaskBubbles = [bool]$result.behavior.idleIndicator.includeTaskBubbles
+    $result.behavior.idleIndicator.afterMinutes = [Math]::Max(0.01,[Math]::Min(1440,[double]$result.behavior.idleIndicator.afterMinutes))
+    if (@('overall','horizontal','vertical') -notcontains [string]$result.behavior.idleIndicator.layout) { $result.behavior.idleIndicator.layout = 'overall' }
+    if (@('dot','bar') -notcontains [string]$result.behavior.idleIndicator.taskStyle) { $result.behavior.idleIndicator.taskStyle = 'dot' }
+    $result.behavior.contextAlerts.enabled = [bool]$result.behavior.contextAlerts.enabled -and [bool]$result.fields.context
+    $thresholds = Get-HudContextAlertThresholds @($result.behavior.contextAlerts.thresholds)
+    if ($null -eq $thresholds) { $thresholds = @(75,90,98) }
+    $result.behavior.contextAlerts.thresholds = $thresholds
     foreach ($modeProperty in @('summaryMode','listMode','taskBubbleMode')) {
         $legacyMode = [string]$result.attention.$modeProperty
         if ($legacyMode -eq 'dot') {
@@ -338,6 +388,15 @@ function Get-ActiveHudSessionFiles {
 function Convert-HudRecord {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Line)
     if ([string]::IsNullOrWhiteSpace($Line)) { return $null }
+    # Codex session logs also contain large messages, tool results and
+    # compaction payloads. Their record type is at the start of the JSON line,
+    # so reject them before ConvertFrom-Json allocates an object graph that the
+    # HUD will immediately discard.
+    $prefixLength = [Math]::Min(1024,$Line.Length)
+    $prefix = $Line.Substring(0,$prefixLength)
+    $isContext = $prefix -match '"type"\s*:\s*"turn_context"'
+    $isRelevantEvent = $prefix -match '"type"\s*:\s*"event_msg"' -and $prefix -match '"type"\s*:\s*"(?:task_started|task_complete|turn_aborted|token_count)"'
+    if (-not $isContext -and -not $isRelevantEvent) { return $null }
     try { $record = $Line | ConvertFrom-Json } catch { return $null }
     if ($record.type -eq 'turn_context') {
         $workspace = ''
@@ -464,10 +523,9 @@ function Split-HudJsonLines {
     $pending = ''
     if (-not $combined.EndsWith("`n")) {
         $candidate = $parts[-1].TrimEnd("`r")
-        try {
-            $parsed = $candidate | ConvertFrom-Json -ErrorAction Stop
-            if ($null -ne $parsed) { [void]$complete.Add($candidate) } else { $pending = $parts[-1] }
-        } catch { $pending = $parts[-1] }
+        $trimmedCandidate = $candidate.TrimEnd()
+        if ($trimmedCandidate.StartsWith('{') -and $trimmedCandidate.EndsWith('}')) { [void]$complete.Add($candidate) }
+        else { $pending = $parts[-1] }
     }
     return [pscustomobject]@{ CompleteLines = @($complete); PendingText = $pending }
 }
@@ -482,12 +540,19 @@ function Get-LatestHudSnapshot {
         $window = [Math]::Min([Int64](8MB),$stream.Length)
         $startsMidFile = ($window -lt $stream.Length)
         [void]$stream.Seek(-$window,[IO.SeekOrigin]::End)
-        $buffer = New-Object byte[] $window
-        $read = $stream.Read($buffer,0,[int]$window)
-        $tailText = [Text.Encoding]::UTF8.GetString($buffer,0,$read)
-        $parts = @($tailText -split "`n" | ForEach-Object { [string]$_.TrimEnd("`r") })
-        if ($startsMidFile -and $parts.Count -gt 0) { $parts = @($parts | Select-Object -Skip 1) }
-        $lines = @($parts | Select-Object -Last ([Math]::Max(1,$Tail)))
+        $reader = New-Object IO.StreamReader($stream,[Text.Encoding]::UTF8,$true,4096,$true)
+        try {
+            if ($startsMidFile) { [void]$reader.ReadLine() }
+            $lineQueue = [Collections.Generic.Queue[string]]::new()
+            $tailLimit = [Math]::Max(1,$Tail)
+            while (-not $reader.EndOfStream) {
+                $line = $reader.ReadLine()
+                if ($null -eq $line) { break }
+                $lineQueue.Enqueue($line)
+                if ($lineQueue.Count -gt $tailLimit) { [void]$lineQueue.Dequeue() }
+            }
+            $lines = @($lineQueue.ToArray())
+        } finally { $reader.Dispose() }
     } finally { $stream.Dispose() }
     $usage = $null
     $allowance = $null
@@ -631,4 +696,4 @@ function Test-HudAccounting {
     (($Snapshot.Cached + $Snapshot.Uncached) -eq $Snapshot.Input) -and (($Snapshot.Input + $Snapshot.Output) -eq $Snapshot.CallTotal)
 }
 
-Export-ModuleMember -Function Get-HudPaths, Get-HudConfig, Save-HudConfig, New-HudTaskNumberPool, Get-HudTaskNumber, Add-HudReleasedTaskNumber, Get-HudLocale, Get-HudThemes, Get-HudPricingCatalog, Get-HudCostEstimate, Format-HudCost, Get-LatestHudSessionFile, Get-ActiveHudSessionFiles, Convert-HudRecord, Split-HudJsonLines, Get-LatestHudSnapshot, Get-LatestHudAllowanceSnapshot, Format-HudNumber, Get-HudMetrics, Merge-HudSnapshots, Test-HudAccounting, Get-HudSurfaceEffectProfile
+Export-ModuleMember -Function Get-HudPaths, Get-HudConfig, Save-HudConfig, New-HudTaskNumberPool, Get-HudTaskNumber, Add-HudReleasedTaskNumber, Get-HudLocale, Get-HudThemes, Get-HudPricingCatalog, Get-HudCostEstimate, Format-HudCost, Get-LatestHudSessionFile, Get-ActiveHudSessionFiles, Convert-HudRecord, Split-HudJsonLines, Get-LatestHudSnapshot, Get-LatestHudAllowanceSnapshot, Format-HudNumber, Get-HudMetrics, Merge-HudSnapshots, Test-HudAccounting, Get-HudSurfaceEffectProfile, Get-HudContextAlertLevel, Get-HudContextAlertThresholds, Get-HudTaskDeepLink

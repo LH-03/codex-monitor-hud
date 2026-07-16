@@ -3,8 +3,10 @@ Add-Type -AssemblyName PresentationCore
 $root = Split-Path -Parent $PSScriptRoot
 $main = Join-Path $root 'src\CodexMonitorHUD.ps1'
 $core = Join-Path $root 'src\MonitorHud.Core.psm1'
+$behaviorRuntimeTest = Join-Path $root 'scripts\test-behavior-isolated.ps1'
+$parsePaths = @($main,$core) + @(Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -File -Filter '*.ps1' | ForEach-Object FullName)
 
-foreach ($path in @($main, $core)) {
+foreach ($path in $parsePaths) {
     $errors = $null
     [void][Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)
     if ($errors.Count) { throw ($errors | ForEach-Object { $_.ToString() } | Out-String) }
@@ -21,6 +23,10 @@ if (($result.cached + $result.uncached) -ne $result.input) { throw 'Input split 
 if (($result.input + $result.output) -ne $result.call_total) { throw 'Call total self-test failed.' }
 
 Import-Module $core -Force
+$contextThresholds = @(75,90,98)
+if ((Get-HudContextAlertLevel 74.9 $contextThresholds) -ne 0 -or (Get-HudContextAlertLevel 75 $contextThresholds) -ne 1 -or (Get-HudContextAlertLevel 90 $contextThresholds) -ne 2 -or (Get-HudContextAlertLevel 98 $contextThresholds) -ne 3) { throw 'Three-stage context threshold self-test failed.' }
+if ((@(Get-HudContextAlertThresholds @('98','75','90')) -join ',') -ne '75,90,98' -or (@(Get-HudContextAlertThresholds @('90','','')) -join ',') -ne '90' -or (@(Get-HudContextAlertThresholds @('96','76','96')) -join ',') -ne '76,96' -or $null -ne (Get-HudContextAlertThresholds @('0','',''))) { throw 'Editable context threshold normalization self-test failed.' }
+if ((Get-HudTaskDeepLink '019f69dc-91bf-7c33-b47b-604b9eaa04b6') -ne 'codex://threads/019f69dc-91bf-7c33-b47b-604b9eaa04b6' -or $null -ne (Get-HudTaskDeepLink '../unsafe')) { throw 'Codex task deep-link validation self-test failed.' }
 $darkEffect = Get-HudSurfaceEffectProfile -Background '#EE111827' -Foreground '#FFF8FAFC' -Surface solid -EffectColor '#FF0A84FF' -BaseOpacity 0.72 -BaseBlur 20
 $lightEffect = Get-HudSurfaceEffectProfile -Background '#F4F8FAFC' -Foreground '#FF172033' -Surface solid -EffectColor '#FF0A84FF' -BaseOpacity 0.72 -BaseBlur 20
 $gradientEffect = Get-HudSurfaceEffectProfile -Background '#FFFFFFFF' -Foreground '#FFF8FAFC' -Surface gradient -GradientStart '#FF101426' -GradientEnd '#FF222B45' -EffectColor '#FF7C3AED' -BaseOpacity 0.70 -BaseBlur 30
@@ -144,11 +150,16 @@ if ([string]$defaultConfig.themeStyle.surface -ne 'solid' -or [string]$defaultCo
 if ([bool]$defaultConfig.fields.estimatedCost -or [bool]$defaultConfig.multiTask.listFields.estimatedCost -or [bool]$defaultConfig.multiTask.bubbleFields.estimatedCost) { throw 'API-equivalent cost must remain opt-in on every surface.' }
 if ([bool]$defaultConfig.agentNotifications.enabled -or [string]$defaultConfig.agentNotifications.permission -ne 'text') { throw 'Codex proactive notifications must remain opt-in with text-only permission by default.' }
 if (@('violet','aqua','amber','custom') -notcontains [string]$defaultConfig.agentNotifications.glowPreset -or [string]$defaultConfig.agentNotifications.color -notmatch '^#[0-9A-Fa-f]{8}$') { throw 'Codex notification glow preset or color default is invalid.' }
-if ([bool]$defaultConfig.multiTask.listFields.taskTotal -or -not [bool]$defaultConfig.multiTask.bubbleFields.taskTotal) { throw 'List and task-bubble field defaults are not independent.' }
+if ([string]$defaultConfig.multiTask.listDetail -ne 'balanced' -or -not [bool]$defaultConfig.multiTask.bubbleFields.taskTotal) { throw 'List detail or task-bubble field defaults are invalid.' }
+if ([string]$defaultConfig.language -ne 'en' -or [bool]$defaultConfig.behavior.openTaskOnDoubleClick -or [bool]$defaultConfig.behavior.idleIndicator.enabled -or [bool]$defaultConfig.behavior.contextAlerts.enabled -or [bool]$defaultConfig.fields.context) { throw 'Prompt-language fallback or dependent lightweight behavior defaults are invalid.' }
+if ([string]$defaultConfig.behavior.idleIndicator.layout -ne 'overall' -or [string]$defaultConfig.behavior.idleIndicator.taskStyle -ne 'dot') { throw 'Backward-compatible quiet-indicator layout defaults are invalid.' }
+if ((@($defaultConfig.behavior.contextAlerts.thresholds) -join ',') -ne '75,90,98') { throw 'Default context alert thresholds are invalid.' }
 $mainText = Get-Content -Raw -Encoding UTF8 -LiteralPath $main
 $mcpText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\mcp-server.mjs')
 $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\SettingsWindow.xaml')
 $installText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install.ps1')
+$manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.codex-plugin\plugin.json') | ConvertFrom-Json
+if ([string]$manifest.version -ne '2.1.0' -or $mcpText -notmatch 'version: "2\.1\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v2.1.0 manifest and MCP version are not aligned.' }
 if ($mcpText -notmatch 'monitor_hud_disable_click_through' -or $mainText -notmatch 'passthrough-off\.signal') { throw 'Click-through recovery tool or signal is missing.' }
 if ($mainText -notmatch 'System\.Windows\.Forms\.NotifyIcon' -or $mainText -notmatch 'Disable-HudMousePassthrough' -or $mainText -notmatch '\$trayZh\.disableMousePassthrough' -or $mainText -notmatch '\$trayIcon\.Text') { throw 'Localized click-through tray recovery entry is missing.' }
 if ($settingsXaml -notmatch 'MousePassthroughCheck' -or $settingsXaml -notmatch 'TickFrequency="0\.1"' -or $settingsXaml -notmatch 'OpacitySlider[^>]+Minimum="0\.15"') { throw 'Click-through setting or low/smooth opacity controls are missing.' }
@@ -160,22 +171,32 @@ foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','scripts/prepare-del
     if ($installText -notmatch [regex]::Escape("'$localOnlyPath'")) { throw "Installer must exclude local-only '$localOnlyPath' material." }
 }
 if ($installText -notmatch '\$excludedRootNames' -or $installText -notmatch '\$excludedRelativePaths') { throw 'Installer exclusion boundary is missing.' }
+if ($installText -notmatch 'DefaultLanguage' -or $installText -notmatch 'Test-Path -LiteralPath \$settingsPath') { throw 'First-install prompt-language selection or upgrade-preservation guard is missing.' }
 foreach ($required in @('ThemeWorkshopDropZone','ThemeImportButton','AttentionHelp','ToolTipService.InitialShowDelay')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Polished settings affordance '$required' is missing." } }
-foreach ($required in @('MultiTaskTab','DisplayModeCombo','ListStyleCombo','ListDensityCombo','TaskNameModeCombo','MaxSplitCombo','AutoSplitCheck','ListFieldModel','BubbleFieldModel','PositionCustomItem','SummaryAttentionModeCombo','ListAttentionModeCombo','TaskBubbleAttentionModeCombo','SummaryAttentionFlowItem','SummaryAttentionFocusItem','DotAttentionEnabledCheck','DotPatternCombo','DotBrightnessCombo','DotSpeedCombo','DotBreathingCheck','TransparencyModeCombo')) {
+foreach ($required in @('MultiTaskTab','DisplayModeCombo','ListStyleCombo','ListDensityCombo','ListDetailCombo','TaskNameModeCombo','MaxSplitCombo','AutoSplitCheck','BubbleFieldModel','PositionCustomItem','SummaryAttentionModeCombo','ListAttentionModeCombo','TaskBubbleAttentionModeCombo','SummaryAttentionFlowItem','SummaryAttentionFocusItem','DotAttentionEnabledCheck','DotPatternCombo','DotBrightnessCombo','DotSpeedCombo','DotBreathingCheck','TransparencyModeCombo')) {
     if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Multi-task setting '$required' is missing." }
 }
-foreach ($required in @('FieldEstimatedCost','ListFieldEstimatedCost','BubbleFieldEstimatedCost','PricingPathText','PricingStatusText')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Cost-estimate setting '$required' is missing." } }
+foreach ($required in @('FieldEstimatedCost','BubbleFieldEstimatedCost','PricingPathText','PricingStatusText')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Cost-estimate setting '$required' is missing." } }
 foreach ($required in @('AgentNotificationEnabledCheck','AgentNotificationPermissionCombo','AgentNotificationModeCombo','AgentNotificationGlowPresetCombo','AgentNotificationIntensityCombo','AgentNotificationDurationCombo','AgentNotificationColorText')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Codex notification setting '$required' is missing." } }
+foreach ($required in @('BehaviorTab','OpenTaskOnDoubleClickCheck','IdleIndicatorEnabledCheck','IdleIndicatorDelayCombo','IdleIndicatorLayoutCombo','IdleIndicatorTaskStyleCombo','IdleIndicatorBubblesCheck','ContextMetricVisibleCheck','ContextAlertsEnabledCheck','ContextThreshold1Text','ContextThreshold2Text','ContextThreshold3Text')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Behavior setting '$required' is missing." } }
+foreach ($required in @('Open-HudTaskInCodex','Get-HudTaskDeepLink','Get-HudContextAlertThresholds','Get-HudContextAlertVisualSpec','Start-HudContextAlertAnimation','Stop-HudContextAlertAnimation','Reset-HudContextAlertRuntime','Update-HudIdleIndicatorMode','Set-TaskBubbleIndicatorCollapsed','Update-HudContextAlertState','ContextAlertLevel')) { if ($mainText -notmatch [regex]::Escape($required) -and (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch [regex]::Escape($required)) { throw "Behavior runtime path '$required' is missing." } }
 foreach ($required in @('monitor_hud_notify','boundedAnimation','notificationPermission','notificationsRoot','maxLength: 160','permission === "expressive"')) { if ($mcpText -notmatch [regex]::Escape($required)) { throw "Bounded Codex notification MCP path '$required' is missing." } }
 foreach ($required in @('Process-HudAgentNotifications','Start-HudAgentAnimation','AgentNoticeText','AgentNoticeRecipe','agentNotificationBadge','AttentionReason -eq ''agent''')) { if ($mainText -notmatch [regex]::Escape($required)) { throw "Targeted Codex notification runtime path '$required' is missing." } }
-foreach ($required in @('Show-TaskBubble','Render-TaskList','Get-TaskListDensityMetrics','Split-AllTaskBubbles','Merge-AllTaskBubbles','TaskBubbleResizeThumb','trayViewModeItem')) {
+foreach ($required in @('Show-TaskBubble','Render-TaskList','Get-TaskListDensityMetrics','Get-TaskListMetricsText','Split-AllTaskBubbles','Merge-AllTaskBubbles','TaskBubbleResizeThumb','trayViewModeItem')) {
     if ($mainText -notmatch [regex]::Escape($required)) { throw "Multi-task runtime path '$required' is missing." }
 }
 if ($mainText -notmatch '\$taskCount -gt 0' -or $mainText -notmatch 'PreviewListDensity') { throw 'Persistent list toggle or density preview path is missing.' }
+foreach ($required in @('Get-TaskListSubtitle','$identityHost.Children.Add($name)','$identityHost.Children.Add($subtitle)')) { if ($mainText -notmatch [regex]::Escape($required)) { throw "List item title/subtitle hierarchy '$required' is missing." } }
+foreach ($required in @('Get-RuntimeHudLocale','lastContextMenuSignature','if (-not $changed) {','previousSignature','FileInfo = $File','[IO.File]::Exists($openSignal)','Render-HudMetrics','lastHudAppearanceSignature','hudMetricControls','lastTaskListRenderSignature','SettingsHost','reload-settings.signal','Invoke-HudIdleMemoryTrim','SetProcessWorkingSetSize')) { if ($mainText -notmatch [regex]::Escape($required)) { throw "Idle-render or locale-cache optimization '$required' is missing." } }
+$coreText = Get-Content -Raw -Encoding UTF8 -LiteralPath $core
+foreach ($required in @('[Collections.Generic.Queue[string]]::new()','isRelevantEvent','trimmedCandidate.EndsWith')) { if ($coreText -notmatch [regex]::Escape($required)) { throw "Streaming session filter '$required' is missing." } }
 if ($mainText -notmatch 'lastUpdateAnimationSignature' -or $mainText -notmatch 'Update animation:' -or $mainText -match 'DoubleAnimation\(0\.58, 1\.0') { throw 'Event-bound non-flashing update animation guard is missing.' }
 $hudXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\HudWindow.xaml')
+if ($hudXaml -notmatch 'TaskListScroller[^>]+MinWidth="900"') { throw 'Task-list minimum width guard is missing; the right-side count toggle can be clipped by a fully populated metric row.' }
 $bubbleXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\TaskBubbleWindow.xaml')
 if ($hudXaml -notmatch 'HudListToggleButton' -or $bubbleXaml -notmatch 'TaskBubbleResizeThumb') { throw 'Custom list toggle or task-bubble resize affordance is missing.' }
+foreach ($required in @('QuietIndicatorPanel','QuietOverallDot','QuietOverallRing','QuietIndicatorSeparator','QuietTaskIndicators')) { if ($hudXaml -notmatch [regex]::Escape($required)) { throw "Quiet task-light surface '$required' is missing." } }
+foreach ($required in @('StatusPaletteCodexMicro','StatusPaletteCodexMicroSource','#FF9CD5FE','#FFFFD0B8','#FFFF7373','#FF9BF396','PreviewQuietLayout','PreviewQuietTaskStyle','Quiet task indicators:')) { if ($settingsXaml -notmatch [regex]::Escape($required) -and $mainText -notmatch [regex]::Escape($required)) { throw "Codex Micro palette or quiet-preview path '$required' is missing." } }
 foreach ($windowXaml in @($hudXaml,$bubbleXaml,$settingsXaml)) {
     foreach ($required in @('UseLayoutRounding="True"','SnapsToDevicePixels="True"','TextOptions.TextFormattingMode="Display"','TextOptions.TextRenderingMode="ClearType"')) {
         if ($windowXaml -notmatch [regex]::Escape($required)) { throw "High-DPI text rendering option '$required' is missing." }
@@ -183,6 +204,7 @@ foreach ($windowXaml in @($hudXaml,$bubbleXaml,$settingsXaml)) {
 }
 if ($hudXaml -match 'DropShadowEffect' -or $bubbleXaml -match 'DropShadowEffect' -or $mainText -notmatch 'SetProcessDpiAwarenessContext') { throw 'Persistent HUD shadow removal or per-monitor DPI awareness is missing.' }
 foreach ($required in @('TaskBubbleDismissButton','Dismiss-HudTask','Dismissed = $false','state.Dismissed = $false','session_index.jsonl','thread_name','Refresh-HudSessionIndex')) { if ($bubbleXaml -notmatch [regex]::Escape($required) -and $mainText -notmatch [regex]::Escape($required)) { throw "Task dismissal or official thread-title path '$required' is missing." } }
+if ($bubbleXaml -notmatch 'TaskBubbleContextMetric' -or $mainText -notmatch 'Start-HudContextAlertAnimation \$contextMetricContainer' -or $mainText -notmatch 'Start-HudContextAlertAnimation \$entry\.ContextMetric' -or $mainText -notmatch 'contextAlerts\.enabled = \[bool\]\$contextAlertsEnabledCheck\.IsChecked -and \[bool\]\$config\.fields\.context') { throw 'Context-metric-only alert routing or display dependency is missing.' }
 foreach ($localeFile in @('locales\zh-CN.json','locales\en.json','locales\symbols.json')) { if ((Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root $localeFile)) -notmatch 'noActiveTasks') { throw "Deleted/no-active task copy is missing from '$localeFile'." } }
 $shortcutText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\create-shortcuts.ps1')
 if (-not (Test-Path -LiteralPath (Join-Path $root 'assets\codex-monitor-hud.ico')) -or $mainText -notmatch 'SetCurrentProcessExplicitAppUserModelID' -or $mainText -notmatch 'SendMessage\(' -or $mainText -notmatch 'Set-HudWindowIcon' -or $shortcutText -notmatch 'IconLocation' -or $shortcutText -notmatch 'safeVersion' -or $shortcutText -notmatch 'ie4uinit') { throw 'Native taskbar and cache-busted shortcut icon path is missing.' }
@@ -192,12 +214,13 @@ try {
     if (Test-Path -LiteralPath $migrationRoot) { Remove-Item -LiteralPath $migrationRoot -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $migrationRoot | Out-Null
     $legacySettingsPath = Join-Path $migrationRoot 'settings.json'
-    [ordered]@{ multiTask=[ordered]@{ taskFields=[ordered]@{ model=$false; callTotal=$true; taskTotal=$false; updated=$false }; listDensity='invalid' }; statusTiming=[ordered]@{ terminalExitMode='invalid' } } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $legacySettingsPath -Encoding UTF8
+    [ordered]@{ fields=[ordered]@{context=$false}; behavior=[ordered]@{contextAlerts=[ordered]@{enabled=$true;thresholds=@(75,90,98)}}; multiTask=[ordered]@{ taskFields=[ordered]@{ model=$false; callTotal=$true; taskTotal=$false; updated=$false }; listDensity='invalid' }; statusTiming=[ordered]@{ terminalExitMode='invalid' } } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $legacySettingsPath -Encoding UTF8
     $migrationPaths = [pscustomobject]@{ DefaultConfigPath=(Join-Path $root 'config.default.json'); ConfigPath=$legacySettingsPath }
     $migratedConfig = Get-HudConfig $migrationPaths
     if ([string]$migratedConfig.multiTask.listDensity -ne 'compact' -or [bool]$migratedConfig.multiTask.bubbleFields.model -or -not [bool]$migratedConfig.multiTask.bubbleFields.callTotal) { throw 'Legacy task-field or list-density migration self-test failed.' }
     if (-not [bool]$migratedConfig.multiTask.listFields.model -or [bool]$migratedConfig.multiTask.listFields.taskTotal) { throw 'Legacy settings unexpectedly replaced compact list-field defaults.' }
     if ([string]$migratedConfig.statusTiming.terminalExitMode -ne 'gentle') { throw 'Invalid legacy terminal-exit mode did not migrate to the gentle default.' }
+    if ([bool]$migratedConfig.behavior.contextAlerts.enabled) { throw 'Context alerts must normalize off when the context metric is hidden.' }
 } finally {
     if (Test-Path -LiteralPath $migrationRoot) { Remove-Item -LiteralPath $migrationRoot -Recurse -Force }
 }
@@ -207,7 +230,7 @@ foreach ($surfaceMode in @('summaryMode','listMode','taskBubbleMode')) {
 foreach ($required in @('completed_silent','PendingCompletionTurnId','completionGraceSeconds','LastListAttentionRevision','config.multiTask.displayMode -eq ''summary''')) { if ($mainText -notmatch [regex]::Escape($required) -and $required -ne 'completed_silent') { throw "Low-false-positive or per-surface routing path '$required' is missing." } }
 if ((Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\MonitorHud.Core.psm1')) -notmatch 'completed_silent') { throw 'Silent completion filtering is missing.' }
 foreach ($path in @('docs\AI_PORTING_AND_CUSTOMIZATION_GUIDE.md','skills\create-monitor-hud-theme\SKILL.md','skills\create-monitor-hud-theme\references\theme-format.md')) { if (-not (Test-Path -LiteralPath (Join-Path $root $path))) { throw "Customization artifact '$path' is missing." } }
-if (-not (Test-Path -LiteralPath (Join-Path $root 'scripts\test-terminal-exit-isolated.ps1'))) { throw 'Terminal departure runtime regression is missing.' }
+if (-not (Test-Path -LiteralPath (Join-Path $root 'scripts\test-terminal-exit-isolated.ps1')) -or -not (Test-Path -LiteralPath $behaviorRuntimeTest)) { throw 'Terminal departure or behavior runtime regression is missing.' }
 foreach ($required in @('Import-HudThemeFile','Assert-HudThemeDefinition','\.cmhud-theme','System\.IO\.Compression','New-HudSurfaceBrush')) { if ($mainText -notmatch $required) { throw "Theme workshop runtime path '$required' is missing." } }
 foreach ($required in @('Start-HudDotAttentionAnimation','Start-HudSurfaceAttentionAnimation','dotEnabled','dotBreathing','dotBrightness','dotPattern','dotSpeed')) {
     if ($mainText -notmatch [regex]::Escape($required)) { throw "Stackable attention path '$required' is missing." }
@@ -371,6 +394,7 @@ Write-Output 'Rich theme bounds and safe visual behavior: OK'
 Write-Output 'Status palette: OK (7 states)'
 Write-Output 'Mouse click-through defaults, tray and recovery: OK'
 Write-Output 'Multi-task modes, density, field separation, resizing and guardrails: OK'
+Write-Output 'Behavior architecture: OK (task deep links, quiet indicator, three context stages)'
 Write-Output 'Stackable dot and surface reminders: OK'
 Write-Output 'Opt-in targeted Codex notices and bounded live choreography: OK'
 Write-Output 'Native taskbar, tray and cache-busted shortcut icon: OK'

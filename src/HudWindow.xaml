@@ -94,16 +94,22 @@
             Padding="16,11"
             BorderThickness="1"
             SnapsToDevicePixels="True">
-      <StackPanel>
-        <DockPanel LastChildFill="True">
+      <Grid>
+      <StackPanel x:Name="HudContentPanel">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
           <Ellipse x:Name="StatusDot"
-                   DockPanel.Dock="Left"
+                   Grid.Column="0"
                    Width="8"
                    Height="8"
                    Margin="0,0,12,0"
                    VerticalAlignment="Center" />
           <Button x:Name="TaskListToggleButton"
-                  DockPanel.Dock="Right"
+                  Grid.Column="2"
                   Visibility="Collapsed"
                   Margin="8,0,0,0"
                   Style="{StaticResource HudListToggleButton}"
@@ -111,15 +117,29 @@
                   FontSize="12"
                   Cursor="Hand" />
           <WrapPanel x:Name="MetricsPanel"
+                     Grid.Column="1"
                      Orientation="Horizontal"
                      VerticalAlignment="Center"
                      MaxWidth="1480" />
-        </DockPanel>
+        </Grid>
         <Border x:Name="TaskListDivider" Height="1" Background="#16000000" Margin="0,7,0,4" Visibility="Collapsed" />
-        <ScrollViewer x:Name="TaskListScroller" MaxHeight="420" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
+        <ScrollViewer x:Name="TaskListScroller" MinWidth="900" MaxHeight="420" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
           <StackPanel x:Name="TaskListPanel" />
         </ScrollViewer>
       </StackPanel>
+      <StackPanel x:Name="QuietIndicatorPanel"
+                  Visibility="Collapsed"
+                  Orientation="Horizontal"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center">
+        <Grid x:Name="QuietOverallHost" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Ellipse x:Name="QuietOverallRing" Width="17" Height="17" StrokeThickness="1.5" Opacity="0.48" />
+          <Ellipse x:Name="QuietOverallDot" Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Grid>
+        <Border x:Name="QuietIndicatorSeparator" Width="1" Height="18" Margin="10,0,9,0" VerticalAlignment="Center" Visibility="Collapsed" />
+        <StackPanel x:Name="QuietTaskIndicators" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed" />
+      </StackPanel>
+      </Grid>
     </Border>
   </Grid>
 </Window>
