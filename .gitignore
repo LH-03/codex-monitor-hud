@@ -20,3 +20,6 @@ node_modules/
 bin/
 obj/
 runtime/
+
+!src-dotnet/CodexMonitorHud.Core/Sessions/
+!src-dotnet/CodexMonitorHud.Core/Sessions/**
