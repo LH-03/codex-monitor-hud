@@ -1,4 +1,4 @@
-name: Unsigned macOS portability
+﻿name: Unsigned macOS portability
 
 on:
   workflow_dispatch:
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d
         with:
           dotnet-version: 10.0.302
-          cache: true
+          cache: false
           cache-dependency-path: '**/*.csproj'
       - name: Core and Windows static regressions
         shell: pwsh
@@ -49,7 +49,7 @@ jobs:
       - uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d
         with:
           dotnet-version: 10.0.302
-          cache: true
+          cache: false
           cache-dependency-path: '**/*.csproj'
       - name: Portable Core tests
         run: dotnet run --project tests-dotnet/CodexMonitorHud.Core.Tests/CodexMonitorHud.Core.Tests.csproj -c Release
@@ -99,3 +99,4 @@ jobs:
             artifacts/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
+

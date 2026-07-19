@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('summary','list','split','quiet','settings','notifications')][string]$Mode = 'list',
     [ValidateRange(1,12)][int]$TaskCount = 5,
     [string]$TestOutputRoot = '',
@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($TestOutputRoot)) {
-    $TestOutputRoot = Join-Path $env:TEMP 'CodexMonitorHudMacHostTests'
+    $TestOutputRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'CodexMonitorHudMacHostTests'
 }
 elseif (-not [IO.Path]::IsPathRooted($TestOutputRoot)) {
     $TestOutputRoot = Join-Path $root $TestOutputRoot
@@ -99,3 +99,4 @@ try {
 } finally {
     if ($null -ne $process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
 }
+
