@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "product": "Codex Monitor HUD",
+  "version": "3.0.0",
+  "repository": "https://github.com/LH-03/codex-monitor-hud",
+  "releaseTag": "v3.0.0",
+  "checksumAsset": "SHA256SUMS.txt",
+  "platforms": {
+    "windows-x64": {
+      "asset": "CodexMonitorHUD-windows-x64.zip",
+      "entrypoint": "scripts/install-windows-from-repository.ps1",
+      "stateRoot": "%LOCALAPPDATA%\\CodexMonitorHUD"
+    },
+    "macos-arm64": {
+      "asset": "CodexMonitorHUD-macos-arm64.zip",
+      "entrypoint": "scripts/install-macos.sh",
+      "stateRoot": "~/Library/Application Support/CodexMonitorHUD"
+    },
+    "macos-x64": {
+      "asset": "CodexMonitorHUD-macos-x64.zip",
+      "entrypoint": "scripts/install-macos.sh",
+      "stateRoot": "~/Library/Application Support/CodexMonitorHUD"
+    }
+  },
+  "rules": {
+    "preferVerifiedRelease": true,
+    "sourceFallbackOnlyWhenReleaseMissing": true,
+    "stopOnChecksumMismatch": true,
+    "userLocalInstall": true,
+    "preserveSettings": true,
+    "retainRollback": true,
+    "readSessionContent": false,
+    "uploadLocalData": false
+  },
+  "operations": [
+    "install",
+    "repair",
+    "rollback",
+    "uninstall"
+  ],
+  "sourceBuild": {
+    "sdkVersion": "10.0.302",
+    "macos": "scripts/build-macos.sh",
+    "windows": "scripts/build-dotnet.ps1"
+  },
+  "health": {
+    "file": "hud.heartbeat",
+    "fields": [
+      "version",
+      "platform",
+      "architecture",
+      "installRoot",
+      "pluginRoot",
+      "config",
+      "heartbeat",
+      "rollbackPath",
+      "pluginRollbackPath"
+    ]
+  }
+}

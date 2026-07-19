@@ -1,9 +1,28 @@
+param(
+    [string]$TestOutputRoot,
+    [string]$NodePath
+)
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationCore
 $root = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($TestOutputRoot)) {
+    $TestOutputRoot = Join-Path $root '.test-output'
+}
+if ([string]::IsNullOrWhiteSpace($NodePath)) {
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    if ($null -ne $nodeCommand) {
+        $NodePath = $nodeCommand.Source
+    } else {
+        $bundledNode = Get-ChildItem -Path (Join-Path $HOME '.cache\codex-runtimes\*\dependencies\node\bin\node.exe') -File -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -eq $bundledNode) { throw 'Node.js is required for the MCP regression test. Pass -NodePath when node is not on PATH.' }
+        $NodePath = $bundledNode.FullName
+    }
+}
 $main = Join-Path $root 'src\CodexMonitorHUD.ps1'
 $core = Join-Path $root 'src\MonitorHud.Core.psm1'
 $behaviorRuntimeTest = Join-Path $root 'scripts\test-behavior-isolated.ps1'
+$installTransactionTest = Join-Path $root 'scripts\test-install-transaction.ps1'
 $parsePaths = @($main,$core) + @(Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -File -Filter '*.ps1' | ForEach-Object FullName)
 
 foreach ($path in $parsePaths) {
@@ -17,7 +36,28 @@ foreach ($path in $parsePaths) {
 [xml](Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\ColorPickerWindow.xaml')) | Out-Null
 [xml](Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\TaskBubbleWindow.xaml')) | Out-Null
 
-$result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $main -SelfTest | ConvertFrom-Json
+$legacySelfTestRoot = Join-Path $TestOutputRoot 'legacy-self-test'
+try {
+    if (Test-Path -LiteralPath $legacySelfTestRoot) { Remove-Item -LiteralPath $legacySelfTestRoot -Recurse -Force }
+    $legacySessionRoot = Join-Path $legacySelfTestRoot 'sessions\2026\07\18'
+    New-Item -ItemType Directory -Force -Path $legacySessionRoot | Out-Null
+    $legacyRecord = [ordered]@{
+        timestamp = '2026-07-18T00:00:00Z'
+        type = 'event_msg'
+        payload = [ordered]@{
+            type = 'token_count'
+            info = [ordered]@{
+                last_token_usage = [ordered]@{ input_tokens=100; cached_input_tokens=60; output_tokens=20; reasoning_output_tokens=5; total_tokens=120 }
+                total_token_usage = [ordered]@{ total_tokens=1000 }
+                model_context_window = 1000
+            }
+        }
+    } | ConvertTo-Json -Compress -Depth 8
+    [IO.File]::WriteAllText((Join-Path $legacySessionRoot 'synthetic-self-test.jsonl'), $legacyRecord, (New-Object Text.UTF8Encoding($false)))
+    $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $main -SelfTest -SelfTestSessionsRoot (Join-Path $legacySelfTestRoot 'sessions') | ConvertFrom-Json
+} finally {
+    if (Test-Path -LiteralPath $legacySelfTestRoot) { Remove-Item -LiteralPath $legacySelfTestRoot -Recurse -Force }
+}
 if (-not $result.accounting_ok) { throw 'Token accounting self-test failed.' }
 if (($result.cached + $result.uncached) -ne $result.input) { throw 'Input split self-test failed.' }
 if (($result.input + $result.output) -ne $result.call_total) { throw 'Call total self-test failed.' }
@@ -159,7 +199,95 @@ $mcpText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\mc
 $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\SettingsWindow.xaml')
 $installText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install.ps1')
 $manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.codex-plugin\plugin.json') | ConvertFrom-Json
-if ([string]$manifest.version -ne '2.1.0' -or $mcpText -notmatch 'version: "2\.1\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v2.1.0 manifest and MCP version are not aligned.' }
+if ([string]$manifest.version -ne '3.0.0' -or $mcpText -notmatch 'version: "3\.0\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v3.0.0 manifest and MCP version are not aligned.' }
+$installManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'install-manifest.json') | ConvertFrom-Json
+if ([string]$installManifest.version -ne '3.0.0' -or [string]$installManifest.releaseTag -ne 'v3.0.0' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback) { throw 'Deterministic v3 repository-install manifest is invalid.' }
+$macProject = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Mac\CodexMonitorHud.Mac.csproj')
+$macInfo = [xml](Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Mac\Info.plist'))
+$macInstaller = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install-macos.sh')
+$macWorkflow = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.github\workflows\unsigned-macos.yml')
+foreach ($required in @('MacHudController','SettingsWindow','TaskBubbleWindow','MacNotificationService','MacWindowInterop','scripts/test-macos-host-isolated.ps1','scripts/test-macos-install-transaction.sh','scripts/measure-macos-runtime.sh','docs/MACOS_CLOUD_VALIDATION.md')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $root ($required -replace '^(MacHudController|SettingsWindow|TaskBubbleWindow|MacNotificationService|MacWindowInterop)$','src-dotnet/CodexMonitorHud.Mac/$1.cs')))) { throw "macOS v3 host file is missing: $required" }
+}
+foreach ($required in @('CODEX_MONITOR_HUD_TEST_CANDIDATE_APP','CODEX_MONITOR_HUD_TEST_FAIL_AFTER_SWITCH','CODEX_MONITOR_HUD_TEST_FAIL_ROLLBACK','pluginRollbackPath','update-marketplace.mjs','--health-check')) {
+    if ($macInstaller -notmatch [regex]::Escape($required)) { throw "macOS transactional installer path is missing: $required" }
+}
+$macController = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Mac\MacHudController.cs')
+$macInterop = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Mac\MacWindowInterop.cs')
+foreach ($required in @('passthrough-off.signal','Disable click-through','SetMousePassthrough(false)')) {
+    if ($macController -notmatch [regex]::Escape($required)) { throw "macOS click-through recovery path is missing: $required" }
+}
+if ($macInterop -notmatch 'setIgnoresMouseEvents:' -or $macInterop -notmatch 'HandleDescriptor.*NSWindow') { throw 'macOS native click-through adapter is missing or not restricted to NSWindow.' }
+foreach ($required in @('macos-15','macos-15-intel','Functional host smoke matrix','Isolated app/plugin/settings/marketplace transaction','SHA256SUMS.txt')) {
+    if ($macWorkflow -notmatch [regex]::Escape($required)) { throw "Unsigned macOS workflow gate is missing: $required" }
+}
+if ($macProject -notmatch '<Version>3\.0\.0</Version>' -or $macProject -notmatch 'Avalonia\.Desktop' -or $macInfo.plist.dict.string -notcontains '3.0.0') { throw 'macOS project, Avalonia host, or bundle version is not aligned to v3.0.0.' }
+if ($macProject -notmatch 'codex-monitor-hud-256\.png' -or -not (Test-Path -LiteralPath (Join-Path $root 'assets\codex-monitor-hud-256.png'))) { throw 'macOS PNG status-item asset is missing.' }
+$dotnetRequired = @(
+    'CodexMonitorHud.slnx',
+    'src-dotnet/CodexMonitorHud.Core/CodexMonitorHud.Core.csproj',
+    'src-dotnet/CodexMonitorHud.App/CodexMonitorHud.App.csproj',
+    'src-dotnet/CodexMonitorHud.Core/State/SessionMonitorEngine.cs',
+    'src-dotnet/CodexMonitorHud.App/HudApplicationController.cs',
+    'src-dotnet/CodexMonitorHud.App/HudAnimations.cs',
+    'tests-dotnet/CodexMonitorHud.Core.Tests/CodexMonitorHud.Core.Tests.csproj',
+    'scripts/build-dotnet.ps1',
+    'scripts/test-dotnet.ps1',
+    'scripts/compare-runtime-performance.ps1'
+)
+foreach ($relativePath in $dotnetRequired) {
+    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v3.0.0 compiled architecture file is missing: $relativePath" }
+}
+$coreProjectText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core\CodexMonitorHud.Core.csproj')
+$coreSourceText = (Get-ChildItem -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core') -Recurse -Filter *.cs | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_.FullName }) -join "`n"
+$appSourceText = (Get-ChildItem -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.App') -Filter *.cs | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_.FullName }) -join "`n"
+$compiledSourceText = $coreSourceText + "`n" + $appSourceText
+if ($coreProjectText -match 'net10\.0-windows' -or $coreSourceText -match 'System\.Windows|user32\.dll|WindowsBase') { throw 'Platform-neutral Core acquired a Windows-only dependency.' }
+$programText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.App\Program.cs')
+$healthLiteral = [regex]::Match($programText, 'HudRecordParser\.Parse\("(?<json>\{.*?\})"\);')
+if (-not $healthLiteral.Success) { throw 'Compiled health-check parser fixture is missing.' }
+try { $null = ([regex]::Unescape($healthLiteral.Groups['json'].Value) | ConvertFrom-Json) }
+catch { throw 'Compiled health-check parser fixture is invalid JSON.' }
+$appLocaleKeys = @([regex]::Matches($appSourceText, '(?<![\.\w])Get\([^,]+,\s*"([^"]+)"\)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+foreach ($localePath in @('locales\en.json','locales\zh-CN.json','locales\symbols.json')) {
+    $localeObject = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root $localePath) | ConvertFrom-Json
+    foreach ($key in $appLocaleKeys) {
+        if ($null -eq $localeObject.PSObject.Properties[$key]) { throw "Compiled HUD locale key '$key' is missing from $localePath." }
+    }
+}
+foreach ($xamlPath in @('src\HudWindow.xaml','src\TaskBubbleWindow.xaml')) {
+    $xamlText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root $xamlPath)
+    $controlNames = @([regex]::Matches($xamlText, 'x:Name="([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    foreach ($name in $controlNames) {
+        if ($name -in @('HudWindow','TaskBubbleWindow','IconChrome','ToggleChrome','TaskBubbleNumberBadge')) { continue }
+        if ($appSourceText -notmatch ('"' + [regex]::Escape($name) + '"')) { throw "Compiled HUD does not bind required XAML control '$name' from $xamlPath." }
+    }
+}
+$compiledControlTypes = @{}
+foreach ($xamlPath in @('src\HudWindow.xaml','src\TaskBubbleWindow.xaml')) {
+    [xml]$compiledXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root $xamlPath)
+    $namespaceManager = New-Object Xml.XmlNamespaceManager($compiledXaml.NameTable)
+    $namespaceManager.AddNamespace('x','http://schemas.microsoft.com/winfx/2006/xaml')
+    foreach ($node in $compiledXaml.SelectNodes('//*[@x:Name]',$namespaceManager)) {
+        $name = $node.GetAttribute('Name','http://schemas.microsoft.com/winfx/2006/xaml')
+        $compiledControlTypes[$name] = $node.LocalName
+    }
+}
+foreach ($binding in [regex]::Matches($appSourceText, 'Require<(?<type>\w+)>\(Window,\s*"(?<name>[^"]+)"\)')) {
+    $name = $binding.Groups['name'].Value
+    $type = $binding.Groups['type'].Value
+    if (-not $compiledControlTypes.ContainsKey($name) -or [string]$compiledControlTypes[$name] -ne $type) {
+        throw "Compiled HUD XAML binding '$name' does not match required control type '$type'."
+    }
+}
+$startText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\start.ps1')
+if ($startText -notmatch 'runtime\\win-x64' -or $startText -notmatch 'CodexMonitorHud\.dll' -or $startText -notmatch 'CodexMonitorHUD\.ps1' -or $startText -notmatch '\$compiledStarted') { throw 'Compiled-first startup with legacy rollback is not intact.' }
+foreach ($required in @('eventArgs.Handled = true','TimeSpan.FromMilliseconds(1500)','PollBacklog','HasTitleBacklog','GlobalReadBudgetBytes','SessionChangeTracker(Path.GetDirectoryName(_sessionIndexPath)','ChangeAvailable += QueueWake','DecodePixelWidth = 1920','_surfaceCache','_appearanceSignature != appearanceSignature','ResetSummaryAttentionVisual','ResetAttention','Agent notice accepted for task #')) {
+    if ($compiledSourceText -notmatch [regex]::Escape($required)) { throw "Compiled stability or adaptive-runtime path '$required' is missing." }
+}
+foreach ($required in @('hudHeartbeatIsFresh','hudRestartAttempts.length >= 3','5 * 60 * 1000','setInterval(maintainHud, 5000)')) {
+    if ($mcpText -notmatch [regex]::Escape($required)) { throw "Bounded MCP HUD restart path '$required' is missing." }
+}
 if ($mcpText -notmatch 'monitor_hud_disable_click_through' -or $mainText -notmatch 'passthrough-off\.signal') { throw 'Click-through recovery tool or signal is missing.' }
 if ($mainText -notmatch 'System\.Windows\.Forms\.NotifyIcon' -or $mainText -notmatch 'Disable-HudMousePassthrough' -or $mainText -notmatch '\$trayZh\.disableMousePassthrough' -or $mainText -notmatch '\$trayIcon\.Text') { throw 'Localized click-through tray recovery entry is missing.' }
 if ($settingsXaml -notmatch 'MousePassthroughCheck' -or $settingsXaml -notmatch 'TickFrequency="0\.1"' -or $settingsXaml -notmatch 'OpacitySlider[^>]+Minimum="0\.15"') { throw 'Click-through setting or low/smooth opacity controls are missing.' }
@@ -167,11 +295,23 @@ if ($settingsXaml -notmatch 'TaskRetentionCombo' -or $settingsXaml -notmatch 'Re
 foreach ($localOnlyName in @('private','AGENTS.md','WORKSPACE_STATE.md')) {
     if ($installText -notmatch [regex]::Escape("'$localOnlyName'")) { throw "Installer must exclude local-only '$localOnlyName' material." }
 }
+foreach ($localOnlyName in @('.agents','.codex','node_modules','sessions','logs','archive')) {
+    if ($installText -notmatch [regex]::Escape("'$localOnlyName'")) { throw "Installer must exclude local-only '$localOnlyName' material." }
+}
 foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','scripts/prepare-delivery.ps1')) {
     if ($installText -notmatch [regex]::Escape("'$localOnlyPath'")) { throw "Installer must exclude local-only '$localOnlyPath' material." }
 }
 if ($installText -notmatch '\$excludedRootNames' -or $installText -notmatch '\$excludedRelativePaths') { throw 'Installer exclusion boundary is missing.' }
+$releaseText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\prepare-release.ps1')
+foreach ($required in @("[string]`$Version = '3.0.0'",'$excludedDirectoryNames',"'.agents'","'.codex'","'bin'","'obj'",'$excludedRelativePaths')) {
+    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 3.0.0 default '$required' is missing." }
+}
 if ($installText -notmatch 'DefaultLanguage' -or $installText -notmatch 'Test-Path -LiteralPath \$settingsPath') { throw 'First-install prompt-language selection or upgrade-preservation guard is missing.' }
+foreach ($required in @('RollbackVersion','Switch-InstalledTree','.codex-monitor-hud-stage-','.codex-monitor-hud-rollback-','compare-runtime-performance.ps1')) {
+    if ($installText -notmatch [regex]::Escape($required)) { throw "Transactional install or rollback path '$required' is missing." }
+}
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installTransactionTest -TestOutputRoot $TestOutputRoot
+if ($LASTEXITCODE -ne 0) { throw 'Transactional install rollback self-test failed.' }
 foreach ($required in @('ThemeWorkshopDropZone','ThemeImportButton','AttentionHelp','ToolTipService.InitialShowDelay')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Polished settings affordance '$required' is missing." } }
 foreach ($required in @('MultiTaskTab','DisplayModeCombo','ListStyleCombo','ListDensityCombo','ListDetailCombo','TaskNameModeCombo','MaxSplitCombo','AutoSplitCheck','BubbleFieldModel','PositionCustomItem','SummaryAttentionModeCombo','ListAttentionModeCombo','TaskBubbleAttentionModeCombo','SummaryAttentionFlowItem','SummaryAttentionFocusItem','DotAttentionEnabledCheck','DotPatternCombo','DotBrightnessCombo','DotSpeedCombo','DotBreathingCheck','TransparencyModeCombo')) {
     if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Multi-task setting '$required' is missing." }
@@ -188,6 +328,8 @@ foreach ($required in @('Show-TaskBubble','Render-TaskList','Get-TaskListDensity
 if ($mainText -notmatch '\$taskCount -gt 0' -or $mainText -notmatch 'PreviewListDensity') { throw 'Persistent list toggle or density preview path is missing.' }
 foreach ($required in @('Get-TaskListSubtitle','$identityHost.Children.Add($name)','$identityHost.Children.Add($subtitle)')) { if ($mainText -notmatch [regex]::Escape($required)) { throw "List item title/subtitle hierarchy '$required' is missing." } }
 foreach ($required in @('Get-RuntimeHudLocale','lastContextMenuSignature','if (-not $changed) {','previousSignature','FileInfo = $File','[IO.File]::Exists($openSignal)','Render-HudMetrics','lastHudAppearanceSignature','hudMetricControls','lastTaskListRenderSignature','SettingsHost','reload-settings.signal','Invoke-HudIdleMemoryTrim','SetProcessWorkingSetSize')) { if ($mainText -notmatch [regex]::Escape($required)) { throw "Idle-render or locale-cache optimization '$required' is missing." } }
+if ([regex]::Matches($mainText, '\[IO\.File\]::WriteAllText\(\$reloadSettingsSignal').Count -lt 2) { throw 'Settings-host live preview no longer notifies the compiled HUD before the window closes.' }
+if ($compiledSourceText -notmatch [regex]::Escape('!state.IdentityMetadataFound || state.IsInternalSession || state.Dismissed')) { throw 'Confirmed user sessions without an initial token snapshot are no longer visible as waiting tasks.' }
 $coreText = Get-Content -Raw -Encoding UTF8 -LiteralPath $core
 foreach ($required in @('[Collections.Generic.Queue[string]]::new()','isRelevantEvent','trimmedCandidate.EndsWith')) { if ($coreText -notmatch [regex]::Escape($required)) { throw "Streaming session filter '$required' is missing." } }
 if ($mainText -notmatch 'lastUpdateAnimationSignature' -or $mainText -notmatch 'Update animation:' -or $mainText -match 'DoubleAnimation\(0\.58, 1\.0') { throw 'Event-bound non-flashing update animation guard is missing.' }
@@ -209,7 +351,7 @@ foreach ($localeFile in @('locales\zh-CN.json','locales\en.json','locales\symbol
 $shortcutText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\create-shortcuts.ps1')
 if (-not (Test-Path -LiteralPath (Join-Path $root 'assets\codex-monitor-hud.ico')) -or $mainText -notmatch 'SetCurrentProcessExplicitAppUserModelID' -or $mainText -notmatch 'SendMessage\(' -or $mainText -notmatch 'Set-HudWindowIcon' -or $shortcutText -notmatch 'IconLocation' -or $shortcutText -notmatch 'safeVersion' -or $shortcutText -notmatch 'ie4uinit') { throw 'Native taskbar and cache-busted shortcut icon path is missing.' }
 
-$migrationRoot = Join-Path $root '.test-output\config-migration'
+$migrationRoot = Join-Path $TestOutputRoot 'config-migration'
 try {
     if (Test-Path -LiteralPath $migrationRoot) { Remove-Item -LiteralPath $migrationRoot -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $migrationRoot | Out-Null
@@ -242,7 +384,7 @@ foreach ($mode in @('halo','breathe','flow','focus')) {
     if ($mainText -notmatch [regex]::Escape("'$mode'")) { throw "Surface attention mode '$mode' is missing." }
 }
 
-$mcpTestRoot = Join-Path $root '.test-output\mcp-notice'
+$mcpTestRoot = Join-Path $TestOutputRoot 'mcp-notice'
 $previousLocalAppData = $env:LOCALAPPDATA
 $previousDisableAutoStart = $env:CODEX_MONITOR_HUD_DISABLE_AUTO_START
 try {
@@ -257,8 +399,8 @@ try {
     $env:LOCALAPPDATA = $mcpTestRoot
     $env:CODEX_MONITOR_HUD_DISABLE_AUTO_START = '1'
     $processInfo = New-Object Diagnostics.ProcessStartInfo
-    $processInfo.FileName = $env:ComSpec
-    $processInfo.Arguments = ('/d /s /c "set LOCALAPPDATA={0}&&set CODEX_MONITOR_HUD_DISABLE_AUTO_START=1&&node ""{1}"""' -f $mcpTestRoot,(Join-Path $root 'src\mcp-server.mjs'))
+    $processInfo.FileName = $NodePath
+    $processInfo.Arguments = ('"{0}"' -f (Join-Path $root 'src\mcp-server.mjs'))
     $processInfo.WorkingDirectory = $root
     $processInfo.UseShellExecute = $false
     $processInfo.RedirectStandardInput = $true
@@ -313,9 +455,20 @@ for ($cycle = 0; $cycle -lt 10000; $cycle++) {
 }
 if (@($activeNumbers.Keys | Sort-Object -Unique).Count -ne 64) { throw 'Visible task numbers are not unique after churn.' }
 
-$activeFiles = @(Get-ActiveHudSessionFiles (Join-Path $HOME '.codex\sessions') 60)
-if ($activeFiles.Count -lt 1) { throw 'Active session discovery self-test failed.' }
-$capRoot = Join-Path $root '.test-output\session-cap'
+$discoveryRoot = Join-Path $TestOutputRoot 'session-discovery'
+try {
+    if (Test-Path -LiteralPath $discoveryRoot) { Remove-Item -LiteralPath $discoveryRoot -Recurse -Force }
+    $discoveryNow = Get-Date
+    $discoveryDay = Join-Path (Join-Path (Join-Path $discoveryRoot $discoveryNow.Year.ToString('0000')) $discoveryNow.Month.ToString('00')) $discoveryNow.Day.ToString('00')
+    New-Item -ItemType Directory -Force -Path $discoveryDay | Out-Null
+    $syntheticSession = Join-Path $discoveryDay 'synthetic-active.jsonl'
+    [IO.File]::WriteAllText($syntheticSession, '{}')
+    $activeFiles = @(Get-ActiveHudSessionFiles $discoveryRoot 60)
+    if ($activeFiles.Count -ne 1 -or [string]$activeFiles[0].FullName -ne [string]$syntheticSession) { throw 'Active session discovery self-test failed.' }
+} finally {
+    if (Test-Path -LiteralPath $discoveryRoot) { Remove-Item -LiteralPath $discoveryRoot -Recurse -Force }
+}
+$capRoot = Join-Path $TestOutputRoot 'session-cap'
 $capNow = Get-Date
 $capDay = Join-Path (Join-Path (Join-Path $capRoot $capNow.Year.ToString('0000')) $capNow.Month.ToString('00')) $capNow.Day.ToString('00')
 try {
@@ -327,7 +480,7 @@ try {
     if (Test-Path -LiteralPath $capRoot) { Remove-Item -LiteralPath $capRoot -Recurse -Force }
 }
 
-$resumedRoot = Join-Path $root '.test-output\resumed-old-thread'
+$resumedRoot = Join-Path $TestOutputRoot 'resumed-old-thread'
 try {
     if (Test-Path -LiteralPath $resumedRoot) { Remove-Item -LiteralPath $resumedRoot -Recurse -Force }
     $oldFolder = Join-Path $resumedRoot '2025\01\02'
@@ -349,7 +502,7 @@ try {
 # Regression for GitHub issue #2: date-format shortcuts once produced folders
 # such as 2026M7d15 and then fell back to a single session. Discovery must use
 # the real yyyy\MM\dd layout and retain every recent session across old folders.
-$multiDateRoot = Join-Path $root '.test-output\multi-date-active-tasks'
+$multiDateRoot = Join-Path $TestOutputRoot 'multi-date-active-tasks'
 try {
     if (Test-Path -LiteralPath $multiDateRoot) { Remove-Item -LiteralPath $multiDateRoot -Recurse -Force }
     $sessionFolders = @(
@@ -380,9 +533,11 @@ try {
     if (Test-Path -LiteralPath $multiDateRoot) { Remove-Item -LiteralPath $multiDateRoot -Recurse -Force }
 }
 
+& (Join-Path $root 'scripts\test-install-protocol.ps1')
+
 Write-Output 'PowerShell syntax: OK'
 Write-Output 'XAML syntax: OK'
-Write-Output 'Live Codex log parse: OK'
+Write-Output 'Synthetic Codex log parse: OK'
 Write-Output 'Token accounting: OK'
 Write-Output 'Concurrent task aggregation: OK'
 Write-Output 'Observed remaining allowance: OK (5h and weekly)'

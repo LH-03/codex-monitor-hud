@@ -1,8 +1,13 @@
+param(
+    [string]$TestOutputRoot
+)
+
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-$testRoot = Join-Path $root '.test-output\behavior-isolated'
-$expectedRoot = [IO.Path]::GetFullPath((Join-Path $root '.test-output'))
+$outputRoot = if ([string]::IsNullOrWhiteSpace($TestOutputRoot)) { Join-Path $root '.test-output' } else { $TestOutputRoot }
+$testRoot = Join-Path $outputRoot 'behavior-isolated'
+$expectedRoot = [IO.Path]::GetFullPath($outputRoot)
 $resolvedTarget = [IO.Path]::GetFullPath($testRoot)
 if (-not $resolvedTarget.StartsWith($expectedRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing to reset a behavior-test folder outside .test-output.' }
 if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
@@ -12,7 +17,7 @@ $profileRoot = Join-Path $testRoot 'profile'
 $sessionRoot = Join-Path $profileRoot ('.codex\sessions\{0}\{1}\{2}' -f (Get-Date).ToString('yyyy'),(Get-Date).ToString('MM'),(Get-Date).ToString('dd'))
 $stateRoot = Join-Path $localAppData 'CodexMonitorHUD'
 $sessionIndexPath = Join-Path $profileRoot '.codex\session_index.jsonl'
-$runtimeLog = Join-Path $root '.test-output\runtime.log'
+$runtimeLog = Join-Path $outputRoot 'runtime.log'
 New-Item -ItemType Directory -Force -Path $sessionRoot,$stateRoot | Out-Null
 if (Test-Path -LiteralPath $runtimeLog) { Remove-Item -LiteralPath $runtimeLog -Force }
 $encoding = New-Object Text.UTF8Encoding($false)
@@ -45,10 +50,10 @@ $config.fields.context = $true
 $config.behavior.contextAlerts.enabled = $true
 [IO.File]::WriteAllText((Join-Path $stateRoot 'settings.json'),($config | ConvertTo-Json -Depth 10),$encoding)
 
-$savedLocalAppData=$env:LOCALAPPDATA;$savedUserProfile=$env:USERPROFILE;$savedHome=$env:HOME;$savedModuleAnalysisCache=$env:PSModuleAnalysisCachePath
+$savedLocalAppData=$env:LOCALAPPDATA;$savedUserProfile=$env:USERPROFILE;$savedHome=$env:HOME;$savedModuleAnalysisCache=$env:PSModuleAnalysisCachePath;$savedDebugPath=$env:CODEX_MONITOR_HUD_DEBUG_PATH
 $process = $null
 try {
-    $env:LOCALAPPDATA=$localAppData;$env:USERPROFILE=$profileRoot;$env:HOME=$profileRoot;$env:PSModuleAnalysisCachePath=Join-Path $testRoot 'ModuleAnalysisCache'
+    $env:LOCALAPPDATA=$localAppData;$env:USERPROFILE=$profileRoot;$env:HOME=$profileRoot;$env:PSModuleAnalysisCachePath=Join-Path $testRoot 'ModuleAnalysisCache';$env:CODEX_MONITOR_HUD_DEBUG_PATH=$runtimeLog
     $process = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $root 'src\CodexMonitorHUD.ps1'),'-InstanceId','behavior-isolated','-DebugLog') -PassThru -WindowStyle Hidden
     $heartbeat = Join-Path $stateRoot 'hud.heartbeat'
     $deadline = [DateTime]::UtcNow.AddSeconds(20)
@@ -98,5 +103,5 @@ try {
     Write-Output 'Isolated behavior runtime: OK (numbered quiet-task bars, terminal retention, activity expansion, three context stages)'
 } finally {
     if ($null -ne $process -and -not $process.HasExited) { try{$process.Kill()}catch{} }
-    $env:LOCALAPPDATA=$savedLocalAppData;$env:USERPROFILE=$savedUserProfile;$env:HOME=$savedHome;$env:PSModuleAnalysisCachePath=$savedModuleAnalysisCache
+    $env:LOCALAPPDATA=$savedLocalAppData;$env:USERPROFILE=$savedUserProfile;$env:HOME=$savedHome;$env:PSModuleAnalysisCachePath=$savedModuleAnalysisCache;$env:CODEX_MONITOR_HUD_DEBUG_PATH=$savedDebugPath
 }

@@ -1,5 +1,25 @@
 # Sensitive information scan
 
+## macOS v3 candidate - 2026-07-19
+
+- Built an ignored final `3.0.0` audit stage/ZIP containing 682 public files after the functional Mac host, native click-through adapter, Mac PNG icon, cloud checklist and installer changes.
+- Package entries under `private/`, local settings, session JSONL, logs, databases and ignored test output: 0.
+- Maintainer profile/repository path and common private-key header hits in the staged package: 0.
+- Mac bundle audit rejects JSONL, logs, databases, local `~/.codex` profile paths and common private-key markers before artifact upload.
+- Avalonia and .NET build telemetry are explicitly disabled in repository build entrypoints and CI.
+- No real session content was read, copied, packaged or uploaded; all new path/title/watcher fixtures are synthetic.
+- Relative package paths contain no private/state/test directories or forbidden local-data extensions. A 165-text-file marker scan found no maintainer machine paths, common private-key headers, OpenAI-style secret prefix or GitHub token prefix.
+- Current six-mode Mac host fixtures use synthetic `/Users/synthetic/...` paths only. This remains Windows-local evidence; no GitHub Actions artifact or native macOS bundle has been uploaded yet.
+
+## 2.2.0 locally verified source - 2026-07-18
+
+- Enumerated 144 public source candidates after excluding `.git`, `private`, `artifacts`, `.test-output`, compiled `bin/obj`, and the private staged runtime.
+- Local username and machine repository/profile path hits: 0.
+- OpenAI/GitHub credential prefixes and private-key header hits: 0.
+- Candidate settings, `.env`, logs, session JSONL, databases, archives, certificates, and private keys: 0.
+- Source tests now use synthetic session JSONL only. The install transaction gate redirects HOME/USERPROFILE/LOCALAPPDATA, proves post-switch failure recovery, and verifies `.agents`, `.codex`, `bin/obj`, settings, environment files, logs, archives, databases, and JSONL cannot enter the installed tree.
+- The private `runtime/win-x64` was staged and installed only after the compiled gate passed. Source/install parity found no differences in the 144 non-runtime package files; key runtime hashes and installed health also passed. This is not a public-release ZIP scan and no ZIP or GitHub artifact was produced.
+
 ## 2.1.0 source scan - 2026-07-16
 
 - Scanned 92 public source/package candidates after excluding `.git`, `artifacts`, `.test-output`, `private`, local workflow files and other installer exclusions.

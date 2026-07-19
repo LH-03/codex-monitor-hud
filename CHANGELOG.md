@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.0.0 - cross-platform candidate, not released
+
+- Keep the verified Windows 2.2 host behavior as the Windows v3 implementation and add an independent Avalonia macOS host over the same platform-neutral `CodexMonitorHud.Core`.
+- Implement macOS summary, list, split and quiet projections, settings with guarded live preview, window-position persistence, tray/menu recovery, native NSWindow click-through with independent recovery, single-instance wake-up, validated task deep links, privacy-safe heartbeat/task registry, bounded notices and managed lifecycle checks.
+- Add explicit macOS session/state paths, case-sensitive non-Windows path identity, UTF-8/atomic-index/watcher regressions, and isolated six-mode synthetic host smoke tests.
+- Add unsigned `osx-arm64` and `osx-x64` app-bundle construction, mechanical bundle/privacy audits, checksums, and GitHub Actions jobs on native Apple-silicon and Intel runners.
+- Define a deterministic repository-link installation protocol that detects the platform, prefers an exact checksummed Release, falls back to pinned source build only when the Release is missing, preserves settings, installs both app and plugin, updates the personal marketplace atomically, verifies health, and retains paired rollback trees.
+- Add isolated macOS install/repair/rollback/uninstall transaction tests, including forced post-switch and rollback-verification failures.
+- Keep distribution unsigned and free: the installer does not remove quarantine or weaken Gatekeeper, and instructs the user to use macOS's manual Open/Open Anyway approval when required.
+- Windows and Windows-hosted synthetic/cross-publish gates are local evidence only. Native Actions evidence and interactive Gatekeeper, visual, notification, Spaces, multi-display, sleep/wake, deep-link and longevity validation remain separate gates.
+
+## 2.2.0 - locally verified, not released
+
+- Move the resident monitor from the monolithic Windows PowerShell process to a compiled .NET 10 host while retaining the complete Settings host on demand and a `-Legacy` rollback path.
+- Introduce a platform-neutral `CodexMonitorHud.Core` for bounded discovery, incremental JSONL streaming, privacy-safe identity, lifecycle, accounting, configuration, pricing, and presentation rules.
+- Add the Windows WPF shell with summary/list/split/quiet surfaces, retained-control updates, independent task bubbles, tray recovery, click-through, DPI integration, attention choreography, MCP notices, and task deep links.
+- Make the file watcher path-driven: ordinary writes poll only changed files; structural events, overflow, and periodic reconciliation trigger bounded rediscovery.
+- Add a zero-dependency Core regression executable, a compiled health check, private runtime staging, compiled-first startup, and automatic legacy fallback.
+- Make installation transactional: validate the staged compiled copy before switching, retain a versioned installed rollback copy, expose an explicit version rollback command, and restore the previous tree and marketplace if any post-switch step fails.
+- Add adaptive polling with watcher-driven wake-up, bounded parser backpressure, incremental official-title refresh, bounded MCP heartbeat restart, and same-fixture legacy/compiled process metrics.
+- Preserve all `2.1.0` defaults, state/privacy contracts, XAML assets, locale catalogs, settings storage, and optional-feature opt-in behavior.
+- Local compiled/install/runtime gates passed on 2026-07-18, including same-fixture legacy comparison, transactional installation, installed health, source/install parity, and a fresh compiled heartbeat. This remains an unreleased local change: no commit, push, ZIP, or GitHub publication was performed.
+
 ## 2.1.0 - 2026-07-16
 
 - Restore a two-line task-list identity with project/workspace as the main title and official Codex conversation title plus time in the subtitle behavior.

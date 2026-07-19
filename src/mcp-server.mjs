@@ -1,15 +1,20 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = dirname(here);
-const stateRoot = join(process.env.LOCALAPPDATA || process.env.TEMP || ".", "CodexMonitorHUD");
+const stateRoot = process.env.CODEX_MONITOR_HUD_STATE_ROOT || (process.platform === "darwin"
+  ? join(homedir(), "Library", "Application Support", "CodexMonitorHUD")
+  : join(process.env.LOCALAPPDATA || process.env.TEMP || ".", "CodexMonitorHUD"));
 mkdirSync(stateRoot, { recursive: true });
 const hostsRoot = join(stateRoot, "hosts");
 const notificationsRoot = join(stateRoot, "notifications");
 const hostHeartbeat = join(hostsRoot, `${process.pid}.heartbeat`);
+const hudHeartbeat = join(stateRoot, "hud.heartbeat");
+const manualExitMarker = join(stateRoot, "manual-exit.signal");
 const debugPath = join(stateRoot, "mcp-debug.log");
 mkdirSync(hostsRoot, { recursive: true });
 mkdirSync(notificationsRoot, { recursive: true });
@@ -67,7 +72,10 @@ function touchHeartbeat() {
 
 function debug(message) {
   if (process.env.CODEX_MONITOR_HUD_DEBUG !== "1") return;
-  try { appendFileSync(debugPath, `${new Date().toISOString()} pid=${process.pid} ${message}\n`, "utf8"); } catch {}
+  try {
+    if (existsSync(debugPath) && statSync(debugPath).size > 1024 * 1024) writeFileSync(debugPath, "", "utf8");
+    appendFileSync(debugPath, `${new Date().toISOString()} pid=${process.pid} ${message}\n`, "utf8");
+  } catch {}
 }
 
 touchHeartbeat();
@@ -75,21 +83,32 @@ const heartbeatTimer = setInterval(touchHeartbeat, 2000);
 heartbeatTimer.unref();
 
 let hud = null;
+let lastHudStartAttempt = 0;
+let nextHudRestartAt = 0;
+const hudRestartAttempts = [];
+let noticeSequence = 0;
 
 function startHud(openSettings = false) {
   if (hud && hud.exitCode === null) return;
-  const script = join(pluginRoot, "scripts", "start.ps1");
-  const args = [
-    "-NoProfile",
-    "-WindowStyle", "Hidden",
-    "-ExecutionPolicy", "Bypass",
-    "-File", script,
-    "-Managed",
-  ];
-  if (openSettings) args.push("-Settings");
-  if (process.env.CODEX_MONITOR_HUD_DEBUG === "1") args.push("-DebugLog");
+  try { rmSync(manualExitMarker, { force: true }); } catch {}
+  lastHudStartAttempt = Date.now();
+  const isMac = process.platform === "darwin";
+  const command = isMac
+    ? process.env.CODEX_MONITOR_HUD_MAC_APP || join(homedir(), "Applications", "CodexMonitorHUD.app", "Contents", "MacOS", "CodexMonitorHud")
+    : "powershell.exe";
+  const args = isMac
+    ? ["--plugin-root", pluginRoot, "--managed", "--parent-pid", String(process.pid)]
+    : [
+        "-NoProfile",
+        "-WindowStyle", "Hidden",
+        "-ExecutionPolicy", "Bypass",
+        "-File", join(pluginRoot, "scripts", "start.ps1"),
+        "-Managed",
+      ];
+  if (openSettings) args.push(isMac ? "--open-settings" : "-Settings");
+  if (!isMac && process.env.CODEX_MONITOR_HUD_DEBUG === "1") args.push("-DebugLog");
   const debugHud = process.env.CODEX_MONITOR_HUD_DEBUG === "1";
-  hud = spawn("powershell.exe", args, {
+  hud = spawn(command, args, {
     cwd: pluginRoot,
     windowsHide: true,
     stdio: debugHud ? ["ignore", "ignore", "pipe"] : "ignore",
@@ -98,6 +117,29 @@ function startHud(openSettings = false) {
   hud.on("error", (error) => { debug(`HUD spawn error: ${error.message || error}`); hud = null; });
   hud.on("exit", (code, signalName) => { debug(`HUD exit code=${code} signal=${signalName}`); hud = null; });
   if (debugHud && hud.stderr) hud.stderr.on("data", (chunk) => debug(`HUD stderr: ${String(chunk).trim()}`));
+}
+
+function hudHeartbeatIsFresh(now = Date.now()) {
+  try { return now - statSync(hudHeartbeat).mtimeMs <= 8000; } catch { return false; }
+}
+
+function maintainHud() {
+  if (process.env.CODEX_MONITOR_HUD_DISABLE_AUTO_START === "1") return;
+  if (existsSync(manualExitMarker)) return;
+  const now = Date.now();
+  if (hudHeartbeatIsFresh(now)) {
+    hudRestartAttempts.length = 0;
+    nextHudRestartAt = 0;
+    return;
+  }
+  if (now - lastHudStartAttempt < 10000 || now < nextHudRestartAt) return;
+  while (hudRestartAttempts.length && now - hudRestartAttempts[0] > 5 * 60 * 1000) hudRestartAttempts.shift();
+  if (hudRestartAttempts.length >= 3) return;
+  hudRestartAttempts.push(now);
+  const backoffMs = Math.min(30000, 2000 * (2 ** (hudRestartAttempts.length - 1)));
+  nextHudRestartAt = now + backoffMs;
+  debug(`HUD heartbeat missing; bounded restart ${hudRestartAttempts.length}/3 backoff=${backoffMs}ms`);
+  startHud(false);
 }
 
 function signal(name) {
@@ -177,7 +219,7 @@ function handle(request) {
       result: {
         protocolVersion: params.protocolVersion || "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "codex-monitor-hud", version: "2.1.0" },
+        serverInfo: { name: "codex-monitor-hud", version: "3.0.0" },
       },
     };
   }
@@ -227,7 +269,15 @@ function handle(request) {
         task_number: Number.isInteger(params.arguments?.task_number) ? params.arguments.task_number : null,
         animation: permission === "expressive" ? requestedAnimation : null,
       };
-      writeFileSync(join(notificationsRoot, `notice-${Date.now()}-${process.pid}.json`), JSON.stringify(payload), "utf8");
+      const noticeName = `notice-${Date.now()}-${process.pid}-${++noticeSequence}.json`;
+      const noticePath = join(notificationsRoot, noticeName);
+      const temporaryNoticePath = noticePath + ".tmp";
+      try {
+        writeFileSync(temporaryNoticePath, JSON.stringify(payload), "utf8");
+        renameSync(temporaryNoticePath, noticePath);
+      } finally {
+        try { rmSync(temporaryNoticePath, { force: true }); } catch {}
+      }
       if (process.env.CODEX_MONITOR_HUD_DISABLE_AUTO_START !== "1") startHud(false);
       return { jsonrpc: "2.0", id, result: textResult(`Codex Monitor HUD notice queued (${permission} permission).`) };
     }
@@ -238,6 +288,8 @@ function handle(request) {
 }
 
 if (process.env.CODEX_MONITOR_HUD_DISABLE_AUTO_START !== "1") startHud(false);
+const hudMonitorTimer = setInterval(maintainHud, 5000);
+hudMonitorTimer.unref();
 
 let buffer = "";
 process.stdin.setEncoding("utf8");
@@ -261,6 +313,7 @@ process.stdin.on("data", (chunk) => {
 function shutdown() {
   debug("host shutdown");
   clearInterval(heartbeatTimer);
+  clearInterval(hudMonitorTimer);
   try { rmSync(hostHeartbeat, { force: true }); } catch {}
   // The HUD owns shared lifecycle coordination. It exits only after every
   // plugin-host heartbeat is gone, so one closing task cannot stop another.

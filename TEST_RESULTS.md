@@ -1,12 +1,31 @@
 # Test results
 
-Updated: 2026-07-16
+Updated: 2026-07-19
 
 ## Current result
 
-The current `2.1.0` source candidate passes the source suite, isolated real-WPF list/split matrix, behavior runtime, and visual review described below.
+The installed Windows `2.2.0` build remains untouched and retains its previously passed source, compiled, isolated-runtime, same-fixture performance, transactional-install and health/heartbeat gates. The repository source is now the unreleased `3.0.0` cross-platform candidate.
+
+This is local verification, not a GitHub release or publication claim. The isolated install transaction gate also passes its forced post-switch failure recovery path.
+
+The pre-refactor `2.1.0` baseline also passed the complete source suite and the 1/5/12/59-user-fixture list/split matrix described below. Those results remain the compatibility authority for the compiled candidate.
 
 These results use synthetic task names and isolated state/profile roots. They do not include real prompts, responses, tool output, account details, or credentials.
+
+## macOS v3 candidate
+
+- Four-project solution build, including `CodexMonitorHud.Mac`: PASS with 0 warnings and 0 errors.
+- `CodexMonitorHud.Core` tests: PASS 13/13, including explicit macOS state/session paths, Unix/UTF-8 workspace parsing, case-sensitive path identity, atomic title-index replacement and nested watcher reconciliation.
+- Windows-hosted self-contained cross-publish: PASS for `osx-arm64` and `osx-x64` app-host outputs.
+- Deterministic repository install protocol: PASS for three vague prompts, Windows/macOS architecture routes, verified Release preference, missing-Release source fallback, corrupt-checksum stop, settings preservation, repair and rollback.
+- Compiled Windows isolated regression after Core changes: PASS for 5-task list and split modes.
+- Functional Avalonia host synthetic smoke: PASS for summary, list, split, quiet, settings and notifications with 5 tasks each.
+- Mac click-through now has an NSWindow-only adapter plus status-menu and signal recovery; native click delivery remains an explicit cloud-Mac gate.
+- Full four-project build: PASS with 0 warnings and 0 errors after native NuGet audit metadata was available; Windows compiled 5-task list/split real-WPF isolated runs also PASS.
+- Final public v3 audit stage/ZIP: PASS with 682 files; forbidden package material 0 and sensitive-marker hits 0 across 165 text files.
+- Mac app/plugin/settings/marketplace transaction: implemented with native-runner test coverage for install, verify, forced post-switch failure, rollback, forced rollback failure and uninstall; not runnable on Windows.
+- Unsigned GitHub Actions workflow: expanded native dual-architecture draft; no result is claimed until it is pushed and runs.
+- macOS `.app` launch, `plutil`, Mach-O inspection, Gatekeeper and interactive behavior: not locally validated and explicitly reserved for Actions/cloud Mac.
 
 ## Source and parser suite
 
@@ -26,10 +45,23 @@ Covered contracts include:
 - context-alert dependency and three upward thresholds;
 - theme bounds, status palettes, icons, tray recovery, and click-through defaults;
 - locale caching, render signatures, bounded session queues, on-demand Settings, and working-set trim guards.
+- compiled architecture/source contracts, neutral-Core Windows dependency exclusion, exact XAML control-type bindings, valid compiled health fixture JSON, watcher wake-up, bounded parser/title backlogs, MCP restart budget, and transactional install/rollback paths;
+- fully synthetic legacy self-test/session discovery, plus an isolated HOME transaction test proving successful version rollback and exact restoration of the prior tree and marketplace after a forced post-switch failure;
+- retained WPF attention effects are explicitly cleared when reminders expire, targets change, or summary/list/split routing changes.
+- installer/package boundaries reject private workflow roots, nested `bin/obj`, local settings/environment files, logs, JSONL, databases, and archives; the current public source scan has zero local-path or credential-shaped hits.
+
+## Compiled and legacy runtime checkpoints
+
+- `scripts/test-runtime-isolated.ps1 -HostMode legacy -Mode list -TaskCount 5`: PASS with heartbeat/token-burst/pre-exit process samples.
+- `scripts/test-behavior-isolated.ps1`: PASS from a fresh temporary state/profile root.
+- `scripts/test-terminal-exit-isolated.ps1 -Mode list`: PASS from a fresh temporary root.
+- `scripts/test-terminal-exit-isolated.ps1 -Mode split`: PASS from a fresh temporary root.
+
+The compiled host passed list and split fixtures at 5 tasks with no churn and at 12 tasks with one churn cycle. The retained legacy host also passed the 12-task list/split churn fixture, providing the direct baseline used by the performance gate.
 
 ## Real-WPF multi-task matrix
 
-`scripts/test-runtime-isolated.ps1`: PASS
+`scripts/test-runtime-isolated.ps1` against the `2.1.0` baseline: PASS
 
 | User fixtures | Total files including filter fixtures | List | Split | Churn |
 | ---: | ---: | --- | --- | ---: |
@@ -89,6 +121,23 @@ Performance figures are local observations, not hardware-independent guarantees.
 - A final real active sample started around 269 MB, dropped to about 47–82 MB, and settled around 142 MB after a larger live log update.
 - Private committed memory can remain near 250–290 MB because PowerShell/WPF retains its managed-heap high-water mark. Working-set reduction should not be described as equivalent to eliminating that commitment.
 
+### 2.2.0 same-fixture gate (12 tasks, one churn cycle)
+
+| Mode | Private bytes (legacy → compiled) | CPU time (legacy → compiled) | Result |
+| --- | ---: | ---: | --- |
+| List | 362.5 MB → 250.6 MB (0.691×) | 16,890.6 ms → 16,125.0 ms (0.955×) | PASS |
+| Split | 321.6 MB → 229.6 MB (0.714×) | 16,843.8 ms → 12,468.8 ms (0.740×) | PASS |
+| Aggregate | 0.702× private bytes | 0.847× CPU time | PASS |
+
+The gate also kept compiled working set below its 1.10× baseline ceiling in both modes (list 1.030×, split 1.038×). These are isolated synthetic-fixture measurements on this machine, not product guarantees.
+
+## Installed-copy validation
+
+- Transactional installation completed successfully with an existing settings file preserved.
+- The installed compiled health check passed and a fresh normal launch produced a current heartbeat from the compiled `dotnet` host.
+- All 144 non-runtime package files matched source to installed copy with no missing, extra, or differing files. Runtime manifest, application, and host-file hashes also matched; the installed health check validated the remaining staged runtime.
+- Marketplace discovery reports `codex-monitor-hud` as available. No commit, push, release, ZIP, or GitHub write was performed.
+
 ## Verification commands
 
 ```powershell
@@ -96,4 +145,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode list -TaskCount 5 -ChurnCycles 1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode split -TaskCount 5 -ChurnCycles 1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-isolated.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\compare-runtime-performance.ps1 -TaskCount 12 -ChurnCycles 1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -DefaultLanguage zh-CN
 ```

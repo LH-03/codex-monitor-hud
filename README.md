@@ -2,7 +2,13 @@
 
 > English · [简体中文](README.zh-CN.md)
 
-Codex Monitor HUD is a Windows desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
+## Install with Codex
+
+Give Codex only this repository URL plus “install this.” The agent must follow the short, deterministic [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) procedure and `install-manifest.json`; it must not inspect conversation content or improvise install commands.
+
+> macOS status: the unsigned Avalonia v3 candidate implements the core HUD flows and passes Windows-hosted synthetic smoke tests, but native Actions and interactive cloud-Mac validation are still required before a macOS release claim. macOS may require the user to Control-click **Open** or approve it in **System Settings → Privacy & Security**; the installer does not bypass Gatekeeper.
+
+Codex Monitor HUD is a Windows and macOS desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
 
 The project is intentionally a live monitor, not a historical analytics service, billing tool, or conversation database.
 
@@ -47,9 +53,9 @@ The optional `codexMicro` scheme uses five display-reference values sampled from
 
 ## Runtime and performance boundary
 
-The current implementation uses Windows PowerShell 5.1, WPF, Windows Forms for the notification-area icon, and small Win32 interop helpers. It avoids a database, reads only appended session bytes after discovery, caches locale and render projections, and does not rebuild unchanged WPF trees.
+The unreleased `3.0.0` source line retains the verified Windows 2.2 WPF behavior and adds an independent Avalonia macOS host. Platform-neutral parsing, bounded discovery, incremental JSONL reading, state transitions, configuration, pricing, and presentation rules live in `CodexMonitorHud.Core`. Windows keeps its WPF/Windows Forms/Win32 shell and on-demand PowerShell settings compatibility process; macOS keeps native lifecycle, menu, window, notification and deep-link adapters in its own host.
 
-Windows PowerShell/WPF can retain a high private committed-memory watermark after parsing or rendering bursts. The HUD returns unused working-set pages to Windows after updates; this reduces physical resident memory but does not make the committed watermark disappear. Local measurements are recorded in [TEST_RESULTS.md](TEST_RESULTS.md); they are machine-specific and are not a universal memory guarantee. A substantially lower committed-memory floor would require a future compiled .NET resident host.
+Normal file-change events poll only the affected paths. Full discovery is reserved for structural changes, watcher overflow, and periodic reconciliation; unchanged lifecycle ticks do not stat every tracked file. Initial tails and appended records are bounded, and retained WPF controls are updated in place when their structure is unchanged.
 
 ## Privacy
 
@@ -65,23 +71,11 @@ See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 
 ## Requirements
 
-- Windows 10 or Windows 11;
+- Windows 10/11, or macOS 13 or later on Apple silicon or Intel;
 - Codex Desktop with local session records available;
-- Windows PowerShell 5.1 or later;
+- no machine-wide .NET installation is required by an installed build; the installer stages a private runtime;
+- Windows PowerShell 5.1 or later for the exact-compatible Settings host and emergency legacy fallback;
 - Node.js available to the Codex plugin host.
-
-## Install with Codex
-
-Give Codex the repository URL and ask it to read [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) before installing. A minimal English request is:
-
-```text
-Install Codex Monitor HUD from this repository. Read INSTALL_WITH_CODEX.md first.
-Use English for a first install, preserve existing settings on upgrade, run the project
-tests, install the personal plugin, and do not enable optional notices, cost estimates,
-click-through, themes, or Windows login startup without asking me.
-```
-
-For Simplified Chinese, state that the request is Chinese and use `-DefaultLanguage zh-CN` on first install.
 
 ## Manual install
 
@@ -89,7 +83,7 @@ For Simplified Chinese, state that the request is Chinese and use `-DefaultLangu
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-Manual first install defaults to English. Existing settings are preserved. The installer creates desktop and Start-menu settings shortcuts and does not enable Windows login startup.
+On Windows, manual first install defaults to English. On macOS, use `sh scripts/install-macos.sh`; the app is installed under `~/Applications`, the plugin under `~/plugins`, and settings remain under `~/Library/Application Support/CodexMonitorHUD`. Both installers validate before switching and retain rollback material. No login item is enabled.
 
 ## Everyday controls
 
@@ -114,9 +108,12 @@ Reasoning output is an output detail and is not added to call total a second tim
 ## Development
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-dotnet.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-dotnet.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode list -TaskCount 5
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode list -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\compare-runtime-performance.ps1 -TaskCount 12 -ChurnCycles 1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-isolated.ps1
 ```
 
@@ -124,6 +121,6 @@ Tests use synthetic sessions and isolated state roots. See [Architecture](docs/A
 
 ## Project status and disclaimer
 
-The current source version is `2.1.0`. It is Windows-only and unofficial; it is not affiliated with or endorsed by OpenAI. See [RELEASE_NOTES_2.1.0.md](RELEASE_NOTES_2.1.0.md) for the current release summary.
+The current unreleased source candidate is `3.0.0`. Windows continues to use the previously verified 2.2 WPF implementation. The Avalonia macOS host now has functional summary/list/split/quiet/settings/menu/notification/deep-link/lifecycle code and passes local synthetic tests plus Windows cross-publish, but native Actions and interactive cloud-Mac results are not yet claimed. The project is unofficial and is not affiliated with or endorsed by OpenAI.
 
 MIT License.

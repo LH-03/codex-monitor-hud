@@ -1,77 +1,39 @@
-# Install Codex Monitor HUD with Codex
+# Install with Codex
 
-This document is for users who want Codex to inspect, test, and install the plugin rather than running the installer manually.
+This is the canonical agent procedure. A repository URL plus “帮我安装” or “install this” is sufficient. Do not infer installation commands from other documents.
 
-## 中文提示词
+## Deterministic procedure
 
-```text
-请从下面的公开仓库安装 Codex Monitor HUD：
+1. Confirm the URL resolves to `https://github.com/LH-03/codex-monitor-hud`. Read `install-manifest.json`; do not read local Codex sessions, prompts, replies, tool output, logs, databases, settings values, or credentials.
+2. Detect the platform and architecture:
+   - Windows x64 → `windows-x64`;
+   - macOS `arm64` → `macos-arm64`;
+   - macOS `x86_64` → `macos-x64`;
+   - anything else → stop as unsupported.
+3. Use a user-local install. Never request administrator access unless the user explicitly asks for a machine-wide install.
+4. Use a clean checkout of the manifest's exact tag when consuming a Release. If the exact Release is absent, use the currently trusted checkout only after confirming its origin and manifest version. Run exactly one platform entrypoint:
+   - Windows: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-windows-from-repository.ps1 -DefaultLanguage <zh-CN|en>`;
+   - macOS: `sh ./scripts/install-macos.sh`.
+5. The entrypoint prefers the matching app asset from the manifest's exact version/tag and verifies it with `SHA256SUMS.txt`. Plugin files come from the same trusted exact-tag checkout. A missing matching Release/asset may use the pinned source-build fallback. A checksum mismatch, missing checksum entry, network error, wrong architecture, mismatched app/plugin version, or unavailable Node.js must stop; never switch silently to another artifact.
+6. Preserve the existing settings/state directory. The installer must stage and health-check the candidate before switching, retain the previous app and plugin as a paired rollback, update the personal marketplace atomically without changing unrelated entries, launch it, and check a fresh heartbeat.
+7. If an unsigned macOS build is blocked, ask the user to Control-click the app and choose **Open**, or use **System Settings → Privacy & Security → Open Anyway**. Do not clear quarantine, weaken Gatekeeper, or automate the approval. Then run `sh ./scripts/install-macos.sh --verify`.
+8. Report only the bounded summary emitted by the installer: version, platform, architecture, app/plugin roots, config status/path, heartbeat status, and paired rollback paths. Do not upload local evidence.
 
-<粘贴仓库链接>
+## Maintenance commands
 
-先阅读 README.zh-CN.md、INSTALL_WITH_CODEX.md 和 PRIVACY.md。在独立临时目录检查
-插件结构，不要修改 Codex 应用本体。Windows 首次安装运行
-scripts/install.ps1 -DefaultLanguage zh-CN；升级必须保留现有 settings.json。
+| Operation | Windows | macOS |
+| --- | --- | --- |
+| Repair | `scripts/install-windows-from-repository.ps1 -Operation Repair` | `sh scripts/install-macos.sh --repair` |
+| Verify | installer health/heartbeat checks | `sh scripts/install-macos.sh --verify` |
+| Roll back | `scripts/install-windows-from-repository.ps1 -Operation Rollback -RollbackVersion <version>` | `sh scripts/install-macos.sh --rollback` |
+| Uninstall | `scripts/uninstall.ps1` | `sh scripts/install-macos.sh --uninstall` |
 
-运行 scripts/test.ps1，安装到个人插件目录并登记个人插件市场。验证 HUD 心跳、设置
-快捷方式和插件版本。不要创建 Windows 登录自启动，不要上传、删除、移动或修改我的
-Codex 会话、日志、数据库、提示词、回复、Token 记录或设置。
+Uninstall preserves user settings unless the user separately and explicitly requests a settings reset.
 
-如果发现旧的 codex-token-strip，请停止并让我先处理；不要迁移或删除旧设置。首次安装
-保持基础默认值，不要替我开启主动通知、动态编排、成本估算、鼠标穿透或第三方主题。
-完成后报告安装目录、测试结果、是否需要重启 Codex/新建任务，以及卸载和恢复默认设置的方法。
-```
+## Language
 
-## English prompt
+Use `zh-CN` for a Simplified Chinese first-install request and `en` for English or any language without a reviewed locale. Never infer language from session content, and never replace an existing saved preference during upgrade/repair.
 
-```text
-Install Codex Monitor HUD from this public repository:
+## Required stop conditions
 
-<PASTE REPOSITORY URL>
-
-Read README.md, INSTALL_WITH_CODEX.md, and PRIVACY.md first. Inspect the plugin in a
-separate temporary directory and do not modify the Codex application. On a first Windows
-install run scripts/install.ps1 -DefaultLanguage en; preserve an existing settings.json
-on upgrade.
-
-Run scripts/test.ps1, install the personal plugin, and verify its version, HUD heartbeat,
-and settings shortcuts. Do not enable Windows login startup. Do not upload, delete, move,
-or modify my Codex sessions, logs, databases, prompts, replies, token records, or settings.
-
-If codex-token-strip is present, stop and ask me to handle it; do not migrate or remove its
-settings. Keep optional notices, expressive choreography, cost estimates, click-through,
-and third-party themes disabled. Report the install path, tests, restart/new-task requirement,
-uninstall procedure, and reset procedure.
-```
-
-## Language selection
-
-`-DefaultLanguage` affects only a first install:
-
-- Simplified Chinese request: `zh-CN`;
-- English request: `en`;
-- other request languages: `en` until a reviewed locale exists.
-
-The installer must not infer language from saved session content and must not replace an existing language preference. See [LOCALIZATION.md](LOCALIZATION.md) before adding a locale.
-
-## Expected result
-
-- Plugin: `%USERPROFILE%\plugins\codex-monitor-hud`
-- Settings/state: `%LOCALAPPDATA%\CodexMonitorHUD`
-- Personal marketplace: `%USERPROFILE%\.agents\plugins\marketplace.json`
-- Desktop and Start-menu shortcuts open Settings on demand.
-- No Windows Startup shortcut is created.
-- The HUD starts through the local plugin/MCP lifecycle after Codex discovers the plugin.
-- Existing settings remain unchanged during an upgrade.
-
-Codex may need a restart or a new task before plugin tools are rediscovered.
-
-## Optional features to explain, not enable
-
-- proactive task-targeted Codex notices;
-- bounded expressive notice motion;
-- Theme Workshop and local theme packs;
-- API-equivalent cost estimates;
-- split bubbles, advanced transparency, quiet indicators, and mouse click-through.
-
-If an installation workflow asks to upload local sessions, logs, or a database, stop. This plugin does not require an upload.
+Stop and explain the reason when the repository identity, platform/architecture, checksum, staged health check, install switch, or rollback restoration cannot be verified. If the legacy `codex-token-strip` is present, stop and ask the user to handle it; do not migrate or delete it.

@@ -1,21 +1,23 @@
 param(
-    [ValidateSet('list','split')][string]$Mode = 'list'
+    [ValidateSet('list','split')][string]$Mode = 'list',
+    [string]$TestOutputRoot
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$testRoot = Join-Path $root ('.test-output\terminal-exit-' + $Mode)
+$outputRoot = if ([string]::IsNullOrWhiteSpace($TestOutputRoot)) { Join-Path $root '.test-output' } else { $TestOutputRoot }
+$testRoot = Join-Path $outputRoot ('terminal-exit-' + $Mode)
 $profileRoot = Join-Path $testRoot 'profile'
 $localAppData = Join-Path $testRoot 'localapp'
 $stateRoot = Join-Path $localAppData 'CodexMonitorHUD'
 $sessionRoot = Join-Path $profileRoot ('.codex\sessions\' + (Get-Date).ToString('yyyy\MM\dd'))
 $sessionIndexPath = Join-Path $profileRoot '.codex\session_index.jsonl'
-$runtimeLog = Join-Path $root '.test-output\runtime.log'
+$runtimeLog = Join-Path $outputRoot 'runtime.log'
 $encoding = New-Object Text.UTF8Encoding($false)
 
 if (Test-Path -LiteralPath $testRoot) {
     $resolved = [IO.Path]::GetFullPath($testRoot)
-    $allowed = [IO.Path]::GetFullPath((Join-Path $root '.test-output'))
+    $allowed = [IO.Path]::GetFullPath($outputRoot)
     if (-not $resolved.StartsWith($allowed + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe terminal-exit test root.' }
     Remove-Item -LiteralPath $testRoot -Recurse -Force
 }
@@ -57,12 +59,14 @@ $savedLocalAppData = $env:LOCALAPPDATA
 $savedUserProfile = $env:USERPROFILE
 $savedHome = $env:HOME
 $savedModuleAnalysisCache = $env:PSModuleAnalysisCachePath
+$savedDebugPath = $env:CODEX_MONITOR_HUD_DEBUG_PATH
 $process = $null
 try {
     $env:LOCALAPPDATA = $localAppData
     $env:USERPROFILE = $profileRoot
     $env:HOME = $profileRoot
     $env:PSModuleAnalysisCachePath = Join-Path $testRoot 'ModuleAnalysisCache'
+    $env:CODEX_MONITOR_HUD_DEBUG_PATH = $runtimeLog
     $process = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
         '-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $root 'src\CodexMonitorHUD.ps1'),
         '-InstanceId',('isolated-terminal-exit-' + $Mode),'-DebugLog'
@@ -114,4 +118,5 @@ try {
     $env:USERPROFILE = $savedUserProfile
     $env:HOME = $savedHome
     $env:PSModuleAnalysisCachePath = $savedModuleAnalysisCache
+    $env:CODEX_MONITOR_HUD_DEBUG_PATH = $savedDebugPath
 }

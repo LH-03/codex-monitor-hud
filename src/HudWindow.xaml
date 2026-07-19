@@ -99,7 +99,7 @@
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
           <Ellipse x:Name="StatusDot"
@@ -111,7 +111,8 @@
           <Button x:Name="TaskListToggleButton"
                   Grid.Column="2"
                   Visibility="Collapsed"
-                  Margin="8,0,0,0"
+                  Margin="8,0,2,0"
+                  HorizontalAlignment="Right"
                   Style="{StaticResource HudListToggleButton}"
                   FontFamily="Segoe UI Variable Text, Microsoft YaHei UI"
                   FontSize="12"
@@ -119,6 +120,7 @@
           <WrapPanel x:Name="MetricsPanel"
                      Grid.Column="1"
                      Orientation="Horizontal"
+                     HorizontalAlignment="Left"
                      VerticalAlignment="Center"
                      MaxWidth="1480" />
         </Grid>

@@ -4,6 +4,7 @@ param(
     [switch]$OpenSettings,
     [switch]$SettingsHost,
     [switch]$SelfTest,
+    [string]$SelfTestSessionsRoot = '',
     [switch]$DebugLog,
     [string]$InstanceId = '',
     [string]$RenderPreview,
@@ -76,7 +77,14 @@ $pluginRoot = Split-Path -Parent $PSScriptRoot
 $script:windowIconHandles = @{}
 Import-Module (Join-Path $PSScriptRoot 'MonitorHud.Core.psm1') -Force
 $paths = Get-HudPaths $pluginRoot
-$debugPath = Join-Path $pluginRoot '.test-output\runtime.log'
+if ($SelfTest -and -not [string]::IsNullOrWhiteSpace($SelfTestSessionsRoot)) {
+    $paths.SessionsRoot = [IO.Path]::GetFullPath($SelfTestSessionsRoot)
+}
+$debugPath = if (-not [string]::IsNullOrWhiteSpace($env:CODEX_MONITOR_HUD_DEBUG_PATH)) {
+    [IO.Path]::GetFullPath($env:CODEX_MONITOR_HUD_DEBUG_PATH)
+} else {
+    Join-Path $pluginRoot '.test-output\runtime.log'
+}
 
 function Write-HudDebug {
     param([string]$Message)
@@ -2905,6 +2913,7 @@ function Set-Preset {
     Apply-HudThemeDefinition $theme
     Sync-ControlsFromConfig
     Save-HudConfig $paths $config
+    if ($SettingsHost) { [IO.File]::WriteAllText($reloadSettingsSignal,[DateTime]::UtcNow.ToString('O')) }
     Update-DisplaySnapshot
 }
 
@@ -3204,6 +3213,10 @@ function Show-HudSettings {
 }
 
 function Stop-HudApplication {
+    param([switch]$UserInitiated)
+    if ($UserInitiated) {
+        try { [IO.File]::WriteAllText((Join-Path $paths.StateRoot 'manual-exit.signal'), [DateTime]::UtcNow.ToString('O')) } catch { }
+    }
     $script:closingApp = $true
     foreach ($path in @($splitWindows.Keys)) { Close-TaskBubble ([string]$path) }
     try { $colorPicker.Close() } catch { }
@@ -3635,19 +3648,30 @@ if (-not [string]::IsNullOrWhiteSpace($ImportThemeFile)) {
 if ($loadSettingsUi) {
 Build-ThemeButtons
 
+function Flush-SliderPreview {
+    if (-not $script:sliderPreviewDirty) { return }
+    $script:sliderPreviewDirty = $false
+    try {
+        Save-HudConfig $paths $config
+        if ($SettingsHost) {
+            [IO.File]::WriteAllText($reloadSettingsSignal, [DateTime]::UtcNow.ToString('O'))
+        }
+    } catch {
+        # An individual preview frame must never bring down the settings host.
+        Write-HudDebug ('Slider preview save failed: ' + $_.Exception.Message)
+        $saveStatus.Text = [string]$settingsLocale.saveFailed
+    }
+}
+
+$script:sliderPreviewDirty = $false
 $sliderPreviewTimer = New-Object Windows.Threading.DispatcherTimer
-$sliderPreviewTimer.Interval = [TimeSpan]::FromMilliseconds(55)
+$sliderPreviewTimer.Interval = [TimeSpan]::FromMilliseconds(33)
 $sliderPreviewTimer.Add_Tick({
-    $sliderPreviewTimer.Stop()
-    $script:interactivePreview = $true
-    try { Update-DisplaySnapshot } finally { $script:interactivePreview = $false }
-})
-$sliderSaveTimer = New-Object Windows.Threading.DispatcherTimer
-$sliderSaveTimer.Interval = [TimeSpan]::FromMilliseconds(320)
-$sliderSaveTimer.Add_Tick({
-    $sliderSaveTimer.Stop()
-    Save-HudConfig $paths $config
-    $saveStatus.Text = ('{0}  {1}' -f [string]$settingsLocale.savedAt, (Get-Date).ToString('HH:mm:ss'))
+    if (-not $script:sliderPreviewDirty) {
+        $sliderPreviewTimer.Stop()
+        return
+    }
+    Flush-SliderPreview
 })
 
 function Apply-SliderPreview {
@@ -3668,8 +3692,12 @@ function Apply-SliderPreview {
         }
     }
     $config.preset='custom'
-    $sliderPreviewTimer.Stop();$sliderPreviewTimer.Start()
-    $sliderSaveTimer.Stop();$sliderSaveTimer.Start()
+    # Keep direct manipulation visually continuous without doing unguarded
+    # disk I/O for every WPF pixel event.  33 ms is about 30 fps and flushes
+    # during the drag rather than only when it stops.
+    $script:sliderPreviewDirty = $true
+    if (-not $sliderPreviewTimer.IsEnabled) { $sliderPreviewTimer.Start() }
+    $saveStatus.Text = ('{0}  {1}' -f [string]$settingsLocale.savedAt, (Get-Date).ToString('HH:mm:ss'))
 }
 
 $liveControls = @(
@@ -3763,10 +3791,12 @@ $settings.AllowDrop = $true
 $settings.Add_DragOver($themeDragOver)
 $settings.Add_Drop($themeDrop)
 $closeSettingsButton.Add_Click({
+    Flush-SliderPreview
     Save-HudConfig $paths $config
     if ($SettingsHost) { $script:closingApp=$true; $settings.Close() } else { $settings.Hide() }
 })
 $saveButton.Add_Click({
+    Flush-SliderPreview
     Apply-ControlsToConfig
     if ($SettingsHost) { $script:closingApp=$true; $settings.Close() } else { $settings.Hide() }
 })
@@ -3778,6 +3808,7 @@ $resetButton.Add_Click({
     Update-DisplaySnapshot
 })
 $settings.Add_Closing({
+    Flush-SliderPreview
     Save-HudConfig $paths $config
     if ($SettingsHost) {
         [IO.File]::WriteAllText($reloadSettingsSignal,[DateTime]::UtcNow.ToString('O'))
@@ -3789,7 +3820,14 @@ $settings.Add_Closing({
 if ($SettingsHost) {
     Sync-ControlsFromConfig
     $settingsApplication = [Windows.Application]::new()
-    $settings.Add_Loaded({ $settings.Activate() | Out-Null })
+    $settings.Add_Loaded({
+        # The settings host is short-lived. Keep it above normal/maximized
+        # windows for its whole lifetime so an open request is immediately
+        # actionable instead of requiring a taskbar click.
+        $settings.Topmost = $true
+        $settings.Activate() | Out-Null
+        $settings.Focus() | Out-Null
+    })
     try { $settingsApplication.Run($settings) | Out-Null } finally { Release-HudMutex }
     exit 0
 }
@@ -3873,7 +3911,7 @@ $trayListModeItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Set-Mu
 $traySplitModeItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Split-AllTaskBubbles }) })
 $trayMergeAllItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Merge-AllTaskBubbles }) })
 $trayDisablePassthroughItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Disable-HudMousePassthrough }) })
-$trayExitItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Stop-HudApplication }) })
+$trayExitItem.Add_Click({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Stop-HudApplication -UserInitiated }) })
 $trayIcon.Add_DoubleClick({ [void]$hud.Dispatcher.BeginInvoke([Action]{ Show-HudSettings }) })
 $statusItem.IsEnabled = $false
 [void]$contextMenu.Items.Add($statusItem)
@@ -3915,7 +3953,7 @@ $summaryModeItem.Add_Click({ Set-MultiTaskDisplayMode 'summary' })
 $listModeItem.Add_Click({ Set-MultiTaskDisplayMode 'list' })
 $splitModeItem.Add_Click({ Split-AllTaskBubbles })
 $mergeAllItem.Add_Click({ Merge-AllTaskBubbles })
-$exitItem.Add_Click({ Stop-HudApplication })
+$exitItem.Add_Click({ Stop-HudApplication -UserInitiated })
 
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(800)

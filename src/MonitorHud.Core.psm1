@@ -303,7 +303,15 @@ function Get-HudConfig {
 function Save-HudConfig {
     param([Parameter(Mandatory = $true)]$Paths, [Parameter(Mandatory = $true)]$Config)
     New-Item -ItemType Directory -Force -Path $Paths.StateRoot | Out-Null
-    $Config | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Paths.ConfigPath -Encoding UTF8
+    # Readers in the compiled HUD can reload while the settings host is open.
+    # Never expose a partially-written JSON document to that reader.
+    $temporaryPath = $Paths.ConfigPath + '.tmp.' + [Guid]::NewGuid().ToString('N')
+    try {
+        $Config | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $temporaryPath -Encoding UTF8
+        Move-Item -LiteralPath $temporaryPath -Destination $Paths.ConfigPath -Force
+    } finally {
+        Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function New-HudTaskNumberPool {

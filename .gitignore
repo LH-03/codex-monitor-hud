@@ -17,3 +17,6 @@ logs/
 archive/
 private/
 node_modules/
+bin/
+obj/
+runtime/
