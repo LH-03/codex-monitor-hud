@@ -2,7 +2,7 @@
 
 > English · [简体中文](README.zh-CN.md)
 
-Codex Monitor HUD is a Windows desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
+Codex Monitor HUD is a desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
 
 The project is intentionally a live monitor, not a historical analytics service, billing tool, or conversation database.
 
@@ -69,6 +69,18 @@ See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 - Codex Desktop with local session records available;
 - Windows PowerShell 5.1 or later;
 - Node.js available to the Codex plugin host.
+
+## Platform status(new)
+
+- **Windows:** Stable
+- **macOS Intel:** Preview
+- **macOS Apple Silicon:** Preview
+
+macOS support is currently experimental and has received limited real-device testing. Community testing, bug reports and pull requests are welcome.
+
+- [Download the macOS preview](https://github.com/LH-03/codex-token-hud/releases/tag/v3.0.0-macos-preview.1)
+- [Read the macOS testing guide](https://github.com/LH-03/codex-token-hud/blob/main/docs/MACOS_PREVIEW_TESTING.md)
+- [Report macOS test results](https://github.com/LH-03/codex-monitor-hud/issues/5)
 
 ## Install with Codex
 
