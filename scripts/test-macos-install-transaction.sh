@@ -43,6 +43,9 @@ fi
 test "$BEFORE_MARKETPLACE" = "$(shasum -a 256 "$CODEX_MONITOR_HUD_MARKETPLACE_PATH" | awk '{print $1}')"
 test "$BEFORE_PLUGIN" = "$(shasum -a 256 "$CODEX_MONITOR_HUD_PLUGIN_ROOT/.codex-plugin/plugin.json" | awk '{print $1}')"
 
+# The forced failure consumed the previous rollback while restoring it.
+# Install successfully once more to create a fresh rollback pair.
+sh "$ROOT/scripts/install-macos.sh"
 sh "$ROOT/scripts/install-macos.sh" --rollback
 sh "$ROOT/scripts/install-macos.sh" --verify
 
