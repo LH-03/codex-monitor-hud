@@ -218,9 +218,10 @@ foreach ($required in @('passthrough-off.signal','Disable click-through','SetMou
     if ($macController -notmatch [regex]::Escape($required)) { throw "macOS click-through recovery path is missing: $required" }
 }
 if ($macInterop -notmatch 'setIgnoresMouseEvents:' -or $macInterop -notmatch 'HandleDescriptor.*NSWindow') { throw 'macOS native click-through adapter is missing or not restricted to NSWindow.' }
-foreach ($required in @('macos-15','macos-15-intel','Functional host smoke matrix','Isolated app/plugin/settings/marketplace transaction','SHA256SUMS.txt')) {
+foreach ($required in @('macos-15','osx-arm64','Functional host smoke matrix','Isolated app/plugin/settings/marketplace transaction','SHA256SUMS.txt')) {
     if ($macWorkflow -notmatch [regex]::Escape($required)) { throw "Unsigned macOS workflow gate is missing: $required" }
 }
+if ($macWorkflow -match 'macos-15-intel' -or $macWorkflow -match 'CodexMonitorHUD-macos-x64\.zip') { throw 'Unsigned macOS workflow must remain scoped to Apple silicon.' }
 if ($macProject -notmatch '<Version>3\.0\.0</Version>' -or $macProject -notmatch 'Avalonia\.Desktop' -or $macInfo.plist.dict.string -notcontains '3.0.0') { throw 'macOS project, Avalonia host, or bundle version is not aligned to v3.0.0.' }
 if ($macProject -notmatch 'codex-monitor-hud-256\.png' -or -not (Test-Path -LiteralPath (Join-Path $root 'assets\codex-monitor-hud-256.png'))) { throw 'macOS PNG status-item asset is missing.' }
 $dotnetRequired = @(

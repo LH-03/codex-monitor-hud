@@ -5,7 +5,7 @@
 - Keep the verified Windows 2.2 host behavior as the Windows v3 implementation and add an independent Avalonia macOS host over the same platform-neutral `CodexMonitorHud.Core`.
 - Implement macOS summary, list, split and quiet projections, settings with guarded live preview, window-position persistence, tray/menu recovery, native NSWindow click-through with independent recovery, single-instance wake-up, validated task deep links, privacy-safe heartbeat/task registry, bounded notices and managed lifecycle checks.
 - Add explicit macOS session/state paths, case-sensitive non-Windows path identity, UTF-8/atomic-index/watcher regressions, and isolated six-mode synthetic host smoke tests.
-- Add unsigned `osx-arm64` and `osx-x64` app-bundle construction, mechanical bundle/privacy audits, checksums, and GitHub Actions jobs on native Apple-silicon and Intel runners.
+- Add unsigned `osx-arm64` app-bundle construction, mechanical bundle/privacy audits, checksums, and a native Apple-silicon GitHub Actions job. Windows x64 and macOS arm64 are the current release targets.
 - Define a deterministic repository-link installation protocol that detects the platform, prefers an exact checksummed Release, falls back to pinned source build only when the Release is missing, preserves settings, installs both app and plugin, updates the personal marketplace atomically, verifies health, and retains paired rollback trees.
 - Add isolated macOS install/repair/rollback/uninstall transaction tests, including forced post-switch and rollback-verification failures.
 - Keep distribution unsigned and free: the installer does not remove quarantine or weaken Gatekeeper, and instructs the user to use macOS's manual Open/Open Anyway approval when required.

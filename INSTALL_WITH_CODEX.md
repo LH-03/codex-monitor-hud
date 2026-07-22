@@ -8,7 +8,7 @@ This is the canonical agent procedure. A repository URL plus “帮我安装” 
 2. Detect the platform and architecture:
    - Windows x64 → `windows-x64`;
    - macOS `arm64` → `macos-arm64`;
-   - macOS `x86_64` → `macos-x64`;
+   - macOS `x86_64` → stop as unsupported for the current release line;
    - anything else → stop as unsupported.
 3. Use a user-local install. Never request administrator access unless the user explicitly asks for a machine-wide install.
 4. Use a clean checkout of the manifest's exact tag when consuming a Release. If the exact Release is absent, use the currently trusted checkout only after confirming its origin and manifest version. Run exactly one platform entrypoint:

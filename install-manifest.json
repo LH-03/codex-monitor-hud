@@ -15,11 +15,6 @@
       "asset": "CodexMonitorHUD-macos-arm64.zip",
       "entrypoint": "scripts/install-macos.sh",
       "stateRoot": "~/Library/Application Support/CodexMonitorHUD"
-    },
-    "macos-x64": {
-      "asset": "CodexMonitorHUD-macos-x64.zip",
-      "entrypoint": "scripts/install-macos.sh",
-      "stateRoot": "~/Library/Application Support/CodexMonitorHUD"
     }
   },
   "rules": {

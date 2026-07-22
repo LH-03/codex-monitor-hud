@@ -30,8 +30,7 @@ fi
 
 case "$(uname -m)" in
   arm64) ARCH=arm64; RID=osx-arm64 ;;
-  x86_64) ARCH=x64; RID=osx-x64 ;;
-  *) echo "status=unsupported architecture=$(uname -m)" >&2; exit 3 ;;
+  *) echo "status=unsupported architecture=$(uname -m) supported=arm64" >&2; exit 3 ;;
 esac
 
 VERSION=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$MANIFEST" | head -n 1)
@@ -60,7 +59,7 @@ verify_install() {
   test -d "$INSTALL_ROOT/Contents/MacOS"
   test -x "$INSTALL_ROOT/Contents/MacOS/CodexMonitorHud"
   plutil -lint "$INSTALL_ROOT/Contents/Info.plist" >/dev/null
-  file "$INSTALL_ROOT/Contents/MacOS/CodexMonitorHud" | grep -q "$( [ "$ARCH" = arm64 ] && echo arm64 || echo x86_64 )"
+  file "$INSTALL_ROOT/Contents/MacOS/CodexMonitorHud" | grep -q arm64
   mkdir -p "$STATE_ROOT"
   "$INSTALL_ROOT/Contents/MacOS/CodexMonitorHud" --health-check "$STATE_ROOT/install-health.json"
   HEALTH_VERSION=$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$STATE_ROOT/install-health.json" | head -n 1)

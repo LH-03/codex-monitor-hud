@@ -12,11 +12,11 @@
 - `docs/THEMING_AND_UI_EXTENSIONS.md`: public theme schema, status palette and XAML extension guide.
 - `docs/AI_PORTING_AND_CUSTOMIZATION_GUIDE.md`: deep project model for AI maintainers, macOS/Linux ports and other agent-runtime adapters.
 - `assets/`: icon and synthetic preview screenshots.
-- Historical 2.1/2.2 material remains for traceability. The local `3.0.0` candidate is not a macOS release until native Actions and interactive cloud-Mac gates pass.
+- Historical 2.1/2.2 material remains for traceability. The `3.0.0` candidate has an unsigned macOS preview with native Actions evidence, but it is not a validated stable macOS release until interactive real-device gates pass.
 - `docs/PROJECT_STATUS.md`: current contracts, implementation state, verified display matrix, known limits, and migration boundary.
 - `INSTALL_WITH_CODEX.md` and `install-manifest.json`: canonical low-reasoning repository installation protocol, platform/asset routing, checksum stop rules, settings preservation and rollback operations.
-- `.github/workflows/unsigned-macos.yml`: unsigned dual-architecture macOS build, host-smoke, privacy-audit and install-transaction workflow.
-- `docs/MACOS_PORTABILITY_PHASE1.md`: portable-Core audit and the boundary between Actions evidence and required interactive cloud-Mac validation.
+- `.github/workflows/unsigned-macos.yml`: unsigned macOS arm64 build, host-smoke, privacy-audit and install-transaction workflow.
+- `docs/MACOS_PORTABILITY_PHASE1.md`: portable-Core audit and the boundary between Actions evidence and required interactive real-Mac validation.
 - `docs/MACOS_CLOUD_VALIDATION.md` and `scripts/measure-macos-runtime.sh`: interactive unsigned-release checklist and aggregate-only Mac process sampling without session-content inspection.
 - `LOCALIZATION.md`: BCP 47 locale naming, human-review rules and steps for adding another language.
 - `README.md` / `README.zh-CN.md`: public documentation.

@@ -1,12 +1,12 @@
 # Test results
 
-Updated: 2026-07-19
+Updated: 2026-07-22
 
 ## Current result
 
 The installed Windows `2.2.0` build remains untouched and retains its previously passed source, compiled, isolated-runtime, same-fixture performance, transactional-install and health/heartbeat gates. The repository source is now the unreleased `3.0.0` cross-platform candidate.
 
-This is local verification, not a GitHub release or publication claim. The isolated install transaction gate also passes its forced post-switch failure recovery path.
+Local verification and GitHub Actions evidence are reported separately from the unsigned public preview. The isolated install transaction gate also passes its forced post-switch failure recovery path.
 
 The pre-refactor `2.1.0` baseline also passed the complete source suite and the 1/5/12/59-user-fixture list/split matrix described below. Those results remain the compatibility authority for the compiled candidate.
 
@@ -16,16 +16,16 @@ These results use synthetic task names and isolated state/profile roots. They do
 
 - Four-project solution build, including `CodexMonitorHud.Mac`: PASS with 0 warnings and 0 errors.
 - `CodexMonitorHud.Core` tests: PASS 13/13, including explicit macOS state/session paths, Unix/UTF-8 workspace parsing, case-sensitive path identity, atomic title-index replacement and nested watcher reconciliation.
-- Windows-hosted self-contained cross-publish: PASS for `osx-arm64` and `osx-x64` app-host outputs.
+- Windows-hosted self-contained cross-publish: PASS for the supported `osx-arm64` app-host output. An earlier `osx-x64` engineering check also passed but is no longer part of the supported release matrix.
 - Deterministic repository install protocol: PASS for three vague prompts, Windows/macOS architecture routes, verified Release preference, missing-Release source fallback, corrupt-checksum stop, settings preservation, repair and rollback.
 - Compiled Windows isolated regression after Core changes: PASS for 5-task list and split modes.
 - Functional Avalonia host synthetic smoke: PASS for summary, list, split, quiet, settings and notifications with 5 tasks each.
-- Mac click-through now has an NSWindow-only adapter plus status-menu and signal recovery; native click delivery remains an explicit cloud-Mac gate.
+- Mac click-through has an NSWindow-only adapter plus status-menu and signal recovery; interactive click delivery remains an explicit real-Mac gate.
 - Full four-project build: PASS with 0 warnings and 0 errors after native NuGet audit metadata was available; Windows compiled 5-task list/split real-WPF isolated runs also PASS.
 - Final public v3 audit stage/ZIP: PASS with 682 files; forbidden package material 0 and sensitive-marker hits 0 across 165 text files.
 - Mac app/plugin/settings/marketplace transaction: implemented with native-runner test coverage for install, verify, forced post-switch failure, rollback, forced rollback failure and uninstall; not runnable on Windows.
-- Unsigned GitHub Actions workflow: expanded native dual-architecture draft; no result is claimed until it is pushed and runs.
-- macOS `.app` launch, `plutil`, Mach-O inspection, Gatekeeper and interactive behavior: not locally validated and explicitly reserved for Actions/cloud Mac.
+- Unsigned GitHub Actions baseline: PASS in run 4 for Windows regression and native `osx-arm64`. The workflow is now intentionally scoped to Windows x64 and macOS arm64; the earlier Intel Mac job is historical evidence only.
+- Native macOS health launch, `plutil`, Mach-O inspection, six-mode synthetic host smoke and isolated install transactions: PASS in Actions. Gatekeeper and interactive real-device behavior remain unverified.
 
 ## Source and parser suite
 

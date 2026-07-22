@@ -1,11 +1,11 @@
-# macOS unsigned cloud validation
+# macOS unsigned real-device validation
 
-This is the release gate that cannot be replaced by Windows cross-publish or GitHub Actions. Use a disposable macOS test account and synthetic sessions first. Do not upload session files or inspect prompt, response, or tool-output content.
+This is the community real-device gate that cannot be replaced by Windows cross-publish or GitHub Actions. A rented cloud Mac is not required. Use a disposable macOS test account and synthetic sessions first when practical. Do not upload session files or inspect prompt, response, or tool-output content.
 
 ## Entry conditions
 
 - Both native GitHub Actions architecture jobs are green and their bundle audits, health checks, six-mode smoke matrix, checksums, and install transaction tests are available.
-- Test the exact downloaded workflow artifact after verifying `SHA256SUMS.txt`.
+- Test the exact public preview asset after verifying `SHA256SUMS.txt`; record the filename and calculated hash.
 - Keep the existing Windows 2.2 installation and its settings untouched.
 
 ## Mechanical evidence already owned by Actions

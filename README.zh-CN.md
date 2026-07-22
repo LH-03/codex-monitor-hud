@@ -6,7 +6,7 @@
 
 只需把本仓库链接加“帮我安装”交给 Codex。安装代理必须遵循精简、确定性的 [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) 和 `install-manifest.json`，不得读取对话正文，也不得自行猜测安装命令。
 
-> macOS 当前状态：未签名 Avalonia v3 候选版已实现 HUD 核心流程并通过 Windows 侧合成烟测，但仍需原生 Actions 和云 Mac 交互验证后才能作 macOS 发布声明。macOS 可能要求用户右键（Control 点按）选择“打开”，或在“系统设置 → 隐私与安全性”中手动同意；安装器不会绕过 Gatekeeper。
+> macOS 当前状态：未签名 Avalonia v3 候选版仅面向 Apple 芯片（`arm64`），并已通过原生 GitHub Actions 的构建、架构、合成宿主及安装事务门禁，但真实 Mac 交互验证仍不完整。macOS 可能要求用户 Control 点按应用选择“打开”，或在“系统设置 → 隐私与安全性”中手动同意；安装器不会清除 quarantine 或削弱 Gatekeeper。
 
 Codex Monitor HUD 是面向 Windows 和 macOS 版 Codex Desktop 的桌面监控浮层。它只读取近期本地 Codex 会话记录中受限的一部分数据，并将当前状态显示为汇总 HUD、可展开任务列表或独立任务气泡。
 
@@ -71,11 +71,24 @@ HUD 不会从自然语言猜测任务是否完成。只有明确生命周期事�
 
 ## 运行要求
 
-- Windows 10/11，或运行在 Apple 芯片/Intel 上的 macOS 13 及以上；
+- Windows 10/11；HUD 应用本身的最低目标为 macOS 13；
+- OpenAI 当前说明中，整合 Codex 的新版 ChatGPT 桌面应用要求 macOS 14；
 - 能提供本地会话记录的 Codex Desktop；
 - 安装版自带私有 .NET 运行时，不要求系统全局安装 .NET；
 - Windows PowerShell 5.1 或更高版本，用于完全兼容的设置宿主和紧急旧版回退；
 - Codex 插件宿主可以使用 Node.js。
+
+## 平台状态
+
+- **Windows x64：**稳定实现；v3 候选版保留已验证的 Windows 2.2 行为。
+- **macOS arm64：**Apple 芯片预览目标；原生 Actions 已通过，正在征集真实设备验证。
+- **其他操作系统和处理器架构：**当前发布线不支持。
+
+GitHub Actions 能证明原生构建和合成行为，不能证明 Gatekeeper 提示、视觉效果、菜单栏恢复、通知、多显示器、Spaces、睡眠唤醒、真实 Codex 集成或长期资源表现。欢迎提交经过隐私清理的测试报告、缺陷和拉取请求。
+
+- [下载 macOS 预览版](https://github.com/LH-03/codex-monitor-hud/releases/tag/v3.0.0-macos-preview.1)
+- [阅读 macOS 测试指南](docs/MACOS_PREVIEW_TESTING.md)
+- [报告 macOS 测试结果](https://github.com/LH-03/codex-monitor-hud/issues/5)
 
 ## 手动安装
 
@@ -121,6 +134,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-
 
 ## 项目状态与声明
 
-当前未发布源码候选版为 `3.0.0`。Windows 继续使用已经验证的 2.2 WPF 实现；Avalonia macOS 宿主已具备汇总/列表/分屏/安静模式、设置、菜单、通知、深链和生命周期代码，并通过本地合成测试与 Windows 交叉发布，但尚未声称原生 Actions 和云 Mac 交互结果。项目是独立的非官方开源项目，与 OpenAI 没有隶属或背书关系。
+当前未发布源码候选版为 `3.0.0`。Windows x64 继续使用已经验证的 2.2 WPF 实现；Avalonia macOS arm64 宿主已具备汇总/列表/分屏/安静模式、设置、菜单、通知、深链和生命周期代码，并通过本地合成测试、Windows 交叉发布及 Apple 芯片原生 Actions。真实 Mac 交互结果仍明确标为未验证。项目是独立的非官方开源项目，与 OpenAI 没有隶属或背书关系。
 
 MIT License。

@@ -10,7 +10,6 @@ function Resolve-SyntheticPlan([string]$Platform,[string]$Architecture,[Validate
     $key = switch ("$Platform/$Architecture") {
         'windows/x64' { 'windows-x64' }
         'macos/arm64' { 'macos-arm64' }
-        'macos/x64' { 'macos-x64' }
         default { return 'stop:unsupported' }
     }
     if ($null -eq $manifest.platforms.$key) { return 'stop:unsupported' }
@@ -34,7 +33,7 @@ foreach ($prompt in $prompts) {
 
 Assert-Protocol ((Resolve-SyntheticPlan windows x64 valid) -eq 'release:windows-x64') 'Windows x64 Release route'
 Assert-Protocol ((Resolve-SyntheticPlan macos arm64 valid) -eq 'release:macos-arm64') 'macOS arm64 Release route'
-Assert-Protocol ((Resolve-SyntheticPlan macos x64 valid) -eq 'release:macos-x64') 'macOS x64 Release route'
+Assert-Protocol ((Resolve-SyntheticPlan macos x64 valid) -eq 'stop:unsupported') 'macOS x64 unsupported route'
 Assert-Protocol ((Resolve-SyntheticPlan macos arm64 missing) -eq 'source:macos-arm64') 'missing Release source fallback'
 Assert-Protocol ((Resolve-SyntheticPlan macos arm64 corrupt) -eq 'stop:checksum') 'corrupt checksum hard stop'
 Assert-Protocol ((Resolve-SyntheticPlan macos arm64 interrupted) -eq 'rollback') 'interrupted switch rollback'

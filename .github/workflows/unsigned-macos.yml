@@ -34,16 +34,8 @@ jobs:
           ./scripts/test.ps1 -NodePath (Get-Command node).Source
 
   mac-build:
-    name: ${{ matrix.rid }} unsigned bundle
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            rid: osx-arm64
-          - runner: macos-15-intel
-            rid: osx-x64
-    runs-on: ${{ matrix.runner }}
+    name: osx-arm64 unsigned bundle
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d
@@ -54,25 +46,25 @@ jobs:
       - name: Portable Core tests
         run: dotnet run --project tests-dotnet/CodexMonitorHud.Core.Tests/CodexMonitorHud.Core.Tests.csproj -c Release
       - name: Build and audit unsigned app bundle
-        run: sh scripts/build-macos.sh '${{ matrix.rid }}'
+        run: sh scripts/build-macos.sh osx-arm64
       - name: Functional host smoke matrix with synthetic sessions only
         shell: pwsh
         run: |
-          $executable = "${{ github.workspace }}/artifacts/macos/${{ matrix.rid }}/CodexMonitorHUD.app/Contents/MacOS/CodexMonitorHud"
+          $executable = "${{ github.workspace }}/artifacts/macos/osx-arm64/CodexMonitorHUD.app/Contents/MacOS/CodexMonitorHud"
           foreach ($mode in @('summary','list','split','quiet','settings','notifications')) {
             ./scripts/test-macos-host-isolated.ps1 -Mode $mode -TaskCount 5 -ExecutablePath $executable
           }
       - name: Isolated app/plugin/settings/marketplace transaction
-        run: sh scripts/test-macos-install-transaction.sh "artifacts/macos/${{ matrix.rid }}/CodexMonitorHUD.app" '${{ matrix.rid }}'
+        run: sh scripts/test-macos-install-transaction.sh "artifacts/macos/osx-arm64/CodexMonitorHUD.app" osx-arm64
       - name: Upload unsigned bundle and mechanical evidence
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
-          name: CodexMonitorHUD-${{ matrix.rid }}-unsigned
+          name: CodexMonitorHUD-osx-arm64-unsigned
           path: |
-            artifacts/macos/${{ matrix.rid }}/CodexMonitorHUD-macos-*.zip
-            artifacts/macos/${{ matrix.rid }}/SHA256SUMS.txt
-            artifacts/macos/${{ matrix.rid }}/bundle-files.sha256
-            artifacts/macos/${{ matrix.rid }}/health-check.json
+            artifacts/macos/osx-arm64/CodexMonitorHUD-macos-arm64.zip
+            artifacts/macos/osx-arm64/SHA256SUMS.txt
+            artifacts/macos/osx-arm64/bundle-files.sha256
+            artifacts/macos/osx-arm64/health-check.json
           if-no-files-found: error
           retention-days: 7
 
@@ -80,22 +72,21 @@ jobs:
     needs: mac-build
     runs-on: macos-15
     steps:
-      - name: Download both audited architectures
+      - name: Download audited Apple-silicon asset
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
         with:
-          pattern: CodexMonitorHUD-osx-*-unsigned
+          pattern: CodexMonitorHUD-osx-arm64-unsigned
           path: artifacts/release
           merge-multiple: true
-      - name: Create combined Release checksum asset
+      - name: Create Release checksum asset
         working-directory: artifacts/release
-        run: shasum -a 256 CodexMonitorHUD-macos-arm64.zip CodexMonitorHUD-macos-x64.zip > SHA256SUMS.txt
+        run: shasum -a 256 CodexMonitorHUD-macos-arm64.zip > SHA256SUMS.txt
       - name: Upload unsigned Release asset set
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
           name: CodexMonitorHUD-macos-unsigned-release-assets
           path: |
             artifacts/release/CodexMonitorHUD-macos-arm64.zip
-            artifacts/release/CodexMonitorHUD-macos-x64.zip
             artifacts/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7

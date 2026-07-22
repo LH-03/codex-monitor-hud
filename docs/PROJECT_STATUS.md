@@ -1,6 +1,6 @@
 # Project status
 
-Updated: 2026-07-19
+Updated: 2026-07-22
 
 ## Current line
 
@@ -33,8 +33,8 @@ The repository source is the product authority. An installed copy is a deploymen
 - Adaptive polling backs off while idle but file watchers coalesce session, title, notice, and signal changes into an immediate dispatcher wake.
 - The MCP host checks the HUD heartbeat and applies a bounded three-attempt/five-minute restart budget while respecting intentional manual exit.
 - The Avalonia macOS host implements summary/list/split/quiet surfaces, settings preview and atomic persistence, saved window position, tray/menu recovery, native NSWindow click-through plus tray/signal recovery, hide-on-close, single-instance wake-up, bounded notices, validated deep links, privacy-safe heartbeat/task registry and managed lifecycle checks.
-- Local six-mode synthetic host smoke tests pass. Both Mac RIDs cross-publish on Windows, but executable/bundle validity remains a native-runner gate.
-- The unsigned Actions workflow builds and audits both native architectures, runs Core and six-mode host tests, and exercises isolated app/plugin/settings/marketplace install transactions. No Actions result, native launch or Gatekeeper result is claimed until it actually runs.
+- Local six-mode synthetic host smoke tests pass. The macOS arm64 target cross-publishes on Windows, and GitHub Actions run 4 passed executable, bundle and functional-host checks on a native Apple-silicon runner.
+- The unsigned Actions workflow builds and audits macOS arm64, runs Core and six-mode host tests, and exercises isolated app/plugin/settings/marketplace install transactions. These mechanical results do not establish Gatekeeper or interactive UI behavior.
 
 ## Display state
 
@@ -52,17 +52,17 @@ During the latest visual pass, a fully populated top metric row exposed clipping
 
 ## Known limits
 
-- The compiled build, Core regression executable, list/split isolated fixtures, same-fixture performance gate, transactional install, installed health check, source/install parity, and fresh compiled heartbeat have passed locally. The branch remains uncommitted and unreleased; no GitHub publication was performed.
+- The compiled build, Core regression executable, list/split isolated fixtures, same-fixture performance gate, transactional install, installed health check, source/install parity, and fresh compiled heartbeat passed locally. The v3 branch is published as draft PR #4, and an unsigned macOS preview was published separately; neither is a stable v3 release.
 - Measurements are machine- and workload-specific; do not treat one number as a product guarantee.
 - Split mode creates real top-level WPF windows. The hard limit is 12 even when more sessions are monitored.
 - The weekly allowance value is only the latest value observed in local Codex records and can lag another Codex surface.
 - Five-hour allowance parsing remains dormant because the upstream record is not consistently available.
 - API-equivalent cost is an estimate based on local pricing data, not a bill or exact credit conversion.
-- The project does not yet provide a validated macOS release or Linux host. Native Actions evidence plus interactive UI, Gatekeeper, menu/Dock recovery, permission, Spaces/full-screen, display, sleep/wake, real deep-link and long-running resource validation still require macOS.
+- The project does not yet provide a validated stable macOS release or Linux host. The unsigned preview has native Actions evidence, while interactive UI, Gatekeeper, menu/Dock recovery, permission, Spaces/full-screen, display, sleep/wake, real deep-link and long-running resource validation still require real Mac users.
 
 ## Next architectural decision
 
-Keep macOS-native adapters in the Mac host and do not move Win32/WPF or AppKit conditionals into Core. After native Actions pass, use an interactive cloud Mac to calibrate behavior rather than redesigning the shared state engine.
+Keep macOS-native adapters in the Mac host and do not move Win32/WPF or AppKit conditionals into Core. Use evidence from volunteer real-Mac testers to calibrate behavior rather than redesigning the shared state engine from automation alone.
 
 ## Verification entry points
 
