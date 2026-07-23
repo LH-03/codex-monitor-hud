@@ -1,168 +1,184 @@
-# Codex Token HUD — macOS Preview Test Guide
+# Codex Monitor HUD — macOS Preview Test Guide
 
-Codex Token HUD is a free and open-source HUD for Codex Desktop. macOS support is currently a **preview** because it has only received limited real-device testing.
+Codex Monitor HUD is a free, open-source and unofficial HUD for local Codex task activity. macOS support is a preview because interactive real-device coverage is still limited.
 
-This test is voluntary and unpaid. Test results, bug reports, and pull requests are welcome.
+Testing is voluntary and unpaid. The current macOS release target is Apple silicon (`arm64`) only. Intel Macs and other architectures are not supported by this preview.
 
-Repository:
+## Current evidence boundary
 
-```text
-https://github.com/LH-03/codex-token-hud
-```
+[GitHub Actions run 4](https://github.com/LH-03/codex-monitor-hud/actions/runs/29679571150) passed the native Apple-silicon baseline. It verifies native restore/build, Core tests, executable architecture, plist validity, privacy-safe bundle inspection, bounded health output, six synthetic host modes, installation transactions and checksums.
 
-## 1. Before testing
+Actions do **not** verify Gatekeeper prompts, visual fidelity, menu-bar recovery, notifications, multiple displays, Spaces, sleep/wake, live ChatGPT/Codex integration or long-running resource behavior. Those results require real Mac users.
 
-Please confirm that you have:
+## Requirements and test scope
 
-- macOS 13 or later
-- Codex Desktop installed
-- An Intel Mac or Apple Silicon Mac
-- No sensitive Codex conversation content visible in screenshots or logs
+- The HUD app bundle targets macOS 13 or later.
+- OpenAI currently documents macOS 14 as the minimum for the new ChatGPT desktop app that includes Codex. See [OpenAI's current macOS requirements](https://help.openai.com/en/articles/9395554).
+- A macOS 13 result is still useful for HUD launch and UI compatibility, but it must not be reported as validation of the current ChatGPT/Codex integration.
+- Never upload Codex session files or inspect prompt, response or tool-output content for this test.
 
-Do not post API keys, access tokens, account information, private file paths, or Codex conversation content.
+## 1. Choose the build
 
-## 2. Choose the correct build
+Download [macOS Preview 1](https://github.com/LH-03/codex-monitor-hud/releases/tag/v3.0.0-macos-preview.1):
 
-Download the latest macOS preview release from the repository's **Releases** page.
+- `CodexMonitorHUD-macos-arm64.zip` — Apple silicon (`arm64`);
+- `SHA256SUMS.txt` — checksum for the arm64 ZIP.
 
-Choose:
+Check the architecture:
 
-- `macos-x64` for Intel Macs
-- `macos-arm64` for Apple Silicon Macs, including M1, M2, M3, M4 and later
-
-To check your architecture, open Terminal and run:
-
-```bash
+```sh
 uname -m
 ```
 
-Result:
+- `arm64` → continue with the arm64 ZIP.
+- any other result → stop; the current preview does not support this architecture.
 
-- `x86_64` → download the x64 build
-- `arm64` → download the arm64 build
+## 2. Verify the download
 
-## 3. Install and launch
+Keep `SHA256SUMS.txt` and the selected ZIP in the same directory. Compare the calculated line with the matching line in the checksum file:
 
-1. Download the matching ZIP from the latest macOS preview release.
-2. Extract the ZIP.
-3. Move `CodexMonitorHUD.app` to `Applications` or `~/Applications`.
-4. Try to open the app normally.
+```sh
+cd "$HOME/Downloads"
+shasum -a 256 CodexMonitorHUD-macos-arm64.zip
+grep 'CodexMonitorHUD-macos-arm64.zip' SHA256SUMS.txt
+```
 
-Record exactly what happens:
+Stop if the two hashes differ.
 
-- Opens normally
-- Shows an “unidentified developer” warning
-- Shows an “app is damaged” warning
-- Opens and immediately exits
-- Opens but the HUD does not appear
-- Opens and works normally
+## 3. Test the original app before changing it
 
-## 4. If macOS says the app is damaged
+1. Extract the selected ZIP.
+2. Move `CodexMonitorHUD.app` to `~/Applications` or `/Applications`.
+3. Try a normal open once and record the exact result.
+4. If macOS blocks an unidentified developer, Control-click the app, choose **Open**, and confirm **Open**.
+5. If that choice is unavailable, use **System Settings → Privacy & Security → Open Anyway**.
 
-Only run the following commands on the downloaded `CodexMonitorHUD.app`.
+The project is not signed with an Apple Developer ID and is not notarized. Manual approval is expected on some systems.
 
-Replace the path if your app is not in `~/Applications`.
+Do not disable Gatekeeper, clear quarantine, or re-sign the app as an ordinary installation step. If the app is reported as damaged or exits immediately, collect the original evidence below before modifying anything.
 
-```bash
+## 4. Collect launch diagnostics
+
+Change `APP` only if the app is stored elsewhere:
+
+```sh
 APP="$HOME/Applications/CodexMonitorHUD.app"
 
-codesign --remove-signature "$APP" 2>/dev/null || true
-codesign --force --deep --sign - "$APP"
-xattr -dr com.apple.quarantine "$APP"
-codesign --verify --deep --strict --verbose=4 "$APP"
-open "$APP"
-```
-
-If the app is in `/Applications`, use:
-
-```bash
-APP="/Applications/CodexMonitorHUD.app"
-```
-
-If the repair still fails, collect the following output:
-
-```bash
 uname -m
 sw_vers
-file "$APP/Contents/MacOS/"*
+file "$APP/Contents/MacOS/CodexMonitorHud"
 codesign -dv --verbose=4 "$APP" 2>&1
 codesign --verify --deep --strict --verbose=4 "$APP" 2>&1
+spctl --assess --type execute -vv "$APP" 2>&1
 xattr -lr "$APP"
 ```
 
-Please remove personal usernames and private paths before posting the output.
+A rejected assessment is useful evidence; it is not an instruction to weaken macOS security. Remove personal usernames and private paths before posting output.
 
-## 5. Test checklist
+## 5. Interactive checklist
 
-Please test the following:
+### Original package and launch
 
-- [ ] The ZIP downloads and extracts normally
-- [ ] The correct x64 or arm64 build was selected
-- [ ] The app launches
-- [ ] The HUD or menu bar icon appears
-- [ ] The app remains running for at least one minute
-- [ ] Codex Desktop can be opened at the same time
-- [ ] The HUD detects Codex activity
-- [ ] Token or task information updates
-- [ ] Settings can be opened
-- [ ] The HUD can be moved or configured
-- [ ] The app exits normally
-- [ ] The app launches again after being closed
-- [ ] Existing settings remain after restart
+- [ ] Correct architecture selected
+- [ ] ZIP hash matched `SHA256SUMS.txt`
+- [ ] Original app tested before any local modification
+- [ ] Normal open result recorded
+- [ ] Control-click **Open** result recorded
+- [ ] **Open Anyway** result recorded if offered
+- [ ] App remained running for at least one minute
+
+### HUD behavior
+
+- [ ] HUD window or menu-bar item appeared
+- [ ] Summary, list, split and quiet modes were visible
+- [ ] Settings opened and saved changes
+- [ ] Window movement and position persistence worked
+- [ ] Menu-bar Show and Exit worked
+- [ ] A second launch did not create a duplicate monitor
+- [ ] Settings survived restart
+
+### Current ChatGPT/Codex integration
+
+Run this section only when the current ChatGPT desktop app with Codex is supported on the test machine.
+
+- [ ] Local Codex activity was detected
+- [ ] Task and token values updated
+- [ ] Completion/abort state remained bounded and accurate
+- [ ] Task navigation opened only the selected task
+
+Report only visible outcomes. Do not attach the underlying JSONL files or conversation content.
+
+### Environment behavior
+
+- [ ] Notification allow/deny behavior recorded
+- [ ] Multiple displays or display scaling recorded, if available
+- [ ] Spaces/full-screen behavior recorded
+- [ ] Sleep/wake behavior recorded
+- [ ] Normal quit and relaunch worked
 
 ## 6. Report template
 
-Copy this template into the public macOS testing issue:
+Post results in [macOS testing issue #5](https://github.com/LH-03/codex-monitor-hud/issues/5).
 
 ```markdown
 ### Environment
 
 - Mac model:
-- Chip: Intel / Apple Silicon
-- `uname -m` result:
+- Chip and model:
+- `uname -m`:
 - macOS version:
-- Codex Desktop version:
-- Preview build filename:
+- ChatGPT desktop/Codex version, or not installed:
+- Preview filename:
+- Calculated ZIP SHA-256:
 
-### Installation result
+### Original package result
 
-- ZIP extracted successfully: Yes / No
-- App opened without repair: Yes / No
-- Warning shown:
-- Repair commands required: Yes / No
-- App remained running: Yes / No
+- App was unmodified for this result: Yes / No
+- ZIP checksum matched: Yes / No
+- Normal open result:
+- Control-click Open result:
+- Open Anyway result:
+- Exact warning or error:
+- App remained running for at least one minute: Yes / No
 
 ### Functional result
 
-- HUD or menu bar icon appeared: Yes / No
-- Codex activity detected: Yes / No
-- Token/task values updated: Yes / No
-- Settings opened: Yes / No
+- HUD appeared: Yes / No
+- Menu-bar item appeared: Yes / No
+- Summary/list/split/quiet checked:
+- Settings opened and persisted: Yes / No
 - Exit and restart worked: Yes / No
-- Settings survived restart: Yes / No
+- Current ChatGPT/Codex integration was in scope: Yes / No
+- Codex activity detected: Yes / No / Not tested
+- Task/token values updated: Yes / No / Not tested
 
-### Failure details
+### Diagnostics and reproduction
 
-- What happened:
 - Reproduction steps:
-- Screenshot:
-- Terminal output:
-- Crash log:
+- `codesign --verify` result:
+- `spctl --assess` result:
+- Relevant sanitized `xattr` result:
+- Screenshot or crash report, if safe:
+
+### Local modifications after original evidence
+
+- App was re-signed: Yes / No
+- Quarantine was cleared: Yes / No
+- Any other modification:
+- Result after modification:
 
 ### Additional notes
 
 -
 ```
 
-## 7. Pull requests
+## Privacy notice
 
-Fixes and pull requests are welcome. Please include:
+Before posting screenshots or logs, remove or hide:
 
-- Mac architecture
-- macOS version
-- The original failure
-- The exact change
-- How the change was tested
-- Whether Windows behavior remains unchanged
+- conversation content, prompts and task names;
+- API keys, access tokens and account details;
+- email addresses and personal usernames;
+- private paths, filenames, project names and repository names.
 
-Thank you for helping validate the macOS preview.
+There is no need to upload session files or contact the maintainer privately. Sanitized public reports, fixes and pull requests are welcome.

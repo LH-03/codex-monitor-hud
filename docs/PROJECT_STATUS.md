@@ -1,10 +1,10 @@
 # Project status
 
-Updated: 2026-07-16
+Updated: 2026-07-23
 
 ## Current line
 
-The current source version is `2.1.0`. It is a Windows-only Codex Desktop monitor implemented with Windows PowerShell 5.1 and WPF.
+The Windows release candidate is `2.2.0`. It uses the compiled WPF host, keeps the on-demand Settings compatibility process, and retains `scripts/start.ps1 -Legacy` as a recovery path.
 
 The repository source is the product authority. An installed copy is a deployment target, not a source of truth. Publication, release creation, and installation are separate user-controlled actions.
 
@@ -23,13 +23,15 @@ The repository source is the product authority. An installed copy is a deploymen
 
 ## Current implementation
 
-- Locale data and visible render projections are cached.
-- Unchanged appearance, metrics, list rows, quiet indicators, and menus are not rebuilt every timer tick.
-- Newly appended session records are filtered before JSON parsing when their top-level type is irrelevant to the HUD.
-- Initial session tails use a bounded streaming queue; active sessions read only appended bytes.
-- Confirmed internal sessions stop consuming appended data.
-- Settings and the color picker run in an on-demand process. Closing Settings releases that process; the HUD reloads saved configuration through a local signal.
-- The resident process returns unused working-set pages to Windows after updates. Full generation-2 collection is rate-limited.
+- `CodexMonitorHud.Core` targets neutral `net10.0` and contains no Windows UI or Win32 references.
+- Initial tails are reverse-read in bounded chunks; active appended reads use pooled buffers, a 256 KiB per-session/4 MiB global dispatcher budget, bounded session/title backlogs, and a hard cap for an incomplete JSONL record.
+- Ordinary file changes enqueue affected paths. Full capped discovery is reserved for structural changes, watcher overflow, startup, and periodic reconciliation.
+- Unchanged list structures retain WPF controls; values, context, status, and notices update in place.
+- Summary, list, split bubbles, quiet indicators, attention/context/agent animation, tray recovery, click-through, deep links, task registry, and MCP notice routing are implemented in the compiled shell.
+- Settings and the color picker remain an on-demand compatibility process. Closing Settings releases that process; the compiled HUD reloads saved configuration through the existing local signal.
+- Build staging includes a private .NET runtime and a compiled health check. Installation validates a separate staged tree, including same-fixture legacy/compiled list and split performance gates, before an atomic directory switch; the preceding installed version remains available by version for rollback. Startup is compiled-first and automatically falls back to the legacy host after an early compiled failure.
+- Adaptive polling backs off while idle but file watchers coalesce session, title, notice, and signal changes into an immediate dispatcher wake.
+- The MCP host checks the HUD heartbeat and applies a bounded three-attempt/five-minute restart budget while respecting intentional manual exit.
 
 ## Display state
 
@@ -47,24 +49,27 @@ During the latest visual pass, a fully populated top metric row exposed clipping
 
 ## Known limits
 
-- Windows PowerShell/WPF may keep a high private committed-memory watermark after a burst even when the physical working set has been returned to Windows.
-- Measurements are machine- and workload-specific; see `TEST_RESULTS.md` for the tested environment rather than treating one number as a product guarantee.
+- The compiled build, Core regression executable, list/split isolated fixtures, same-fixture performance gate, transactional install, installed health check, source/install parity, and fresh compiled heartbeat must be re-run for each release candidate. They passed for the current Windows 2.2.0 preparation on 2026-07-23.
+- Measurements are machine- and workload-specific; do not treat one number as a product guarantee.
 - Split mode creates real top-level WPF windows. The hard limit is 12 even when more sessions are monitored.
 - The weekly allowance value is only the latest value observed in local Codex records and can lag another Codex surface.
 - Five-hour allowance parsing remains dormant because the upstream record is not consistently available.
 - API-equivalent cost is an estimate based on local pricing data, not a bill or exact credit conversion.
-- The project does not provide macOS or Linux binaries. Porting guidance is architectural direction, not a supported platform promise.
+- `2.2.0` is Windows x64 only. macOS work is intentionally kept outside this release line until real-device validation is available.
 
 ## Next architectural decision
 
-Further small caching changes may still help specific paths, but a materially lower committed-memory floor requires moving the resident monitor from the monolithic PowerShell/WPF host to a compiled .NET process. Such a migration should preserve the state model, privacy boundary, display contracts, and synthetic real-window regression matrix before replacing the current host.
+Keep platform-neutral parsing/state code free of WPF and Win32. Future platform hosts must prove their own lifecycle and UI behavior without weakening the Windows contracts.
 
 ## Verification entry points
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-dotnet.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-dotnet.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode list -TaskCount 5
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode list -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\compare-runtime-performance.ps1 -TaskCount 12 -ChurnCycles 1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-isolated.ps1
 ```
 

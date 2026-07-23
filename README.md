@@ -2,7 +2,11 @@
 
 > English · [简体中文](README.zh-CN.md)
 
-Codex Monitor HUD is a desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
+## Install with Codex
+
+Give Codex only this repository URL plus “install this.” The agent must follow the short, deterministic [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) procedure and `install-manifest.json`; it must not inspect conversation content or improvise install commands.
+
+Codex Monitor HUD is a Windows desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
 
 The project is intentionally a live monitor, not a historical analytics service, billing tool, or conversation database.
 
@@ -47,9 +51,9 @@ The optional `codexMicro` scheme uses five display-reference values sampled from
 
 ## Runtime and performance boundary
 
-The current implementation uses Windows PowerShell 5.1, WPF, Windows Forms for the notification-area icon, and small Win32 interop helpers. It avoids a database, reads only appended session bytes after discovery, caches locale and render projections, and does not rebuild unchanged WPF trees.
+The `2.2.0` Windows line moves the resident monitor into a compiled .NET host while retaining the WPF/Windows Forms/Win32 shell, on-demand compatible Settings process, and `-Legacy` recovery path. Platform-neutral parsing, bounded discovery, incremental JSONL reading, state transitions, configuration, pricing, and presentation rules live in `CodexMonitorHud.Core`.
 
-Windows PowerShell/WPF can retain a high private committed-memory watermark after parsing or rendering bursts. The HUD returns unused working-set pages to Windows after updates; this reduces physical resident memory but does not make the committed watermark disappear. Local measurements are recorded in [TEST_RESULTS.md](TEST_RESULTS.md); they are machine-specific and are not a universal memory guarantee. A substantially lower committed-memory floor would require a future compiled .NET resident host.
+Normal file-change events poll only the affected paths. Full discovery is reserved for structural changes, watcher overflow, and periodic reconciliation; unchanged lifecycle ticks do not stat every tracked file. Initial tails and appended records are bounded, and retained WPF controls are updated in place when their structure is unchanged.
 
 ## Privacy
 
@@ -67,33 +71,16 @@ See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 
 - Windows 10 or Windows 11;
 - Codex Desktop with local session records available;
-- Windows PowerShell 5.1 or later;
+- no machine-wide .NET installation is required by an installed build; the installer stages a private runtime;
+- Windows PowerShell 5.1 or later for the exact-compatible Settings host and emergency legacy fallback;
 - Node.js available to the Codex plugin host.
 
-## Platform status(new)
+## Platform status
 
-- **Windows:** Stable
-- **macOS Intel:** Preview
-- **macOS Apple Silicon:** Preview
+- **Windows x64:** supported by this release line.
+- **Other operating systems and architectures:** not included in `2.2.0`.
 
-macOS support is currently experimental and has received limited real-device testing. Community testing, bug reports and pull requests are welcome.
-
-- [Download the macOS preview](https://github.com/LH-03/codex-token-hud/releases/tag/v3.0.0-macos-preview.1)
-- [Read the macOS testing guide](https://github.com/LH-03/codex-token-hud/blob/main/docs/MACOS_PREVIEW_TESTING.md)
-- [Report macOS test results](https://github.com/LH-03/codex-monitor-hud/issues/5)
-
-## Install with Codex
-
-Give Codex the repository URL and ask it to read [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) before installing. A minimal English request is:
-
-```text
-Install Codex Monitor HUD from this repository. Read INSTALL_WITH_CODEX.md first.
-Use English for a first install, preserve existing settings on upgrade, run the project
-tests, install the personal plugin, and do not enable optional notices, cost estimates,
-click-through, themes, or Windows login startup without asking me.
-```
-
-For Simplified Chinese, state that the request is Chinese and use `-DefaultLanguage zh-CN` on first install.
+macOS work is deliberately deferred until interactive real-device validation is available; it is not part of this Windows Release.
 
 ## Manual install
 
@@ -101,7 +88,7 @@ For Simplified Chinese, state that the request is Chinese and use `-DefaultLangu
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-Manual first install defaults to English. Existing settings are preserved. The installer creates desktop and Start-menu settings shortcuts and does not enable Windows login startup.
+Manual first install defaults to English. The installer validates before switching, preserves settings, retains rollback material, and does not enable Windows login startup.
 
 ## Everyday controls
 
@@ -126,9 +113,12 @@ Reasoning output is an output detail and is not added to call total a second tim
 ## Development
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-dotnet.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-dotnet.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode list -TaskCount 5
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode list -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\compare-runtime-performance.ps1 -TaskCount 12 -ChurnCycles 1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-isolated.ps1
 ```
 
@@ -136,6 +126,6 @@ Tests use synthetic sessions and isolated state roots. See [Architecture](docs/A
 
 ## Project status and disclaimer
 
-The current source version is `2.1.0`. It is Windows-only and unofficial; it is not affiliated with or endorsed by OpenAI. See [RELEASE_NOTES_2.1.0.md](RELEASE_NOTES_2.1.0.md) for the current release summary.
+The current Windows release candidate is `2.2.0`. It is a local-first, unofficial project and is not affiliated with or endorsed by OpenAI.
 
 MIT License.

@@ -1,5 +1,20 @@
 # Sensitive information scan
 
+## Windows 2.2.0 release candidate - 2026-07-23
+
+- Windows-only package staging excludes `private/`, local settings, session JSONL, logs, databases, test output, local agent directories, compiled source `bin/obj`, and the deferred macOS preview guide.
+- No real session content was read, copied, packaged or uploaded; all runtime fixtures use synthetic paths and records.
+- Final local ZIP audit: `657` files, exact archive/file-list parity, `0` Mac paths, `0` forbidden private/state/data paths, and `0` strict maintainer-path, GitHub-token, OpenAI-token, or private-key-pattern hits. The exact package hash is emitted with each freshly generated Release ZIP in `SHA256SUMS.txt`.
+
+## 2.2.0 locally verified source - 2026-07-18
+
+- Enumerated 144 public source candidates after excluding `.git`, `private`, `artifacts`, `.test-output`, compiled `bin/obj`, and the private staged runtime.
+- Local username and machine repository/profile path hits: 0.
+- OpenAI/GitHub credential prefixes and private-key header hits: 0.
+- Candidate settings, `.env`, logs, session JSONL, databases, archives, certificates, and private keys: 0.
+- Source tests now use synthetic session JSONL only. The install transaction gate redirects HOME/USERPROFILE/LOCALAPPDATA, proves post-switch failure recovery, and verifies `.agents`, `.codex`, `bin/obj`, settings, environment files, logs, archives, databases, and JSONL cannot enter the installed tree.
+- The private `runtime/win-x64` was staged and installed only after the compiled gate passed. Source/install parity found no differences in the 144 non-runtime package files; key runtime hashes and installed health also passed. This is not a public-release ZIP scan and no ZIP or GitHub artifact was produced.
+
 ## 2.1.0 source scan - 2026-07-16
 
 - Scanned 92 public source/package candidates after excluding `.git`, `artifacts`, `.test-output`, `private`, local workflow files and other installer exclusions.

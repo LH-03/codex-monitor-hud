@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "product": "Codex Monitor HUD",
+  "version": "2.2.0",
+  "repository": "https://github.com/LH-03/codex-monitor-hud",
+  "releaseTag": "v2.2.0",
+  "checksumAsset": "SHA256SUMS.txt",
+  "platforms": {
+    "windows-x64": {
+      "asset": "CodexMonitorHUD-windows-x64.zip",
+      "entrypoint": "scripts/install-windows-from-repository.ps1",
+      "stateRoot": "%LOCALAPPDATA%\\CodexMonitorHUD"
+    }
+  },
+  "rules": {
+    "preferVerifiedRelease": true,
+    "sourceFallbackOnlyWhenReleaseMissing": true,
+    "stopOnChecksumMismatch": true,
+    "userLocalInstall": true,
+    "preserveSettings": true,
+    "retainRollback": true,
+    "readSessionContent": false,
+    "uploadLocalData": false
+  },
+  "operations": [
+    "install",
+    "repair",
+    "rollback",
+    "uninstall"
+  ],
+  "sourceBuild": {
+    "sdkVersion": "10.0.302",
+    "windows": "scripts/build-dotnet.ps1"
+  },
+  "health": {
+    "file": "hud.heartbeat",
+    "fields": [
+      "version",
+      "platform",
+      "architecture",
+      "installRoot",
+      "pluginRoot",
+      "config",
+      "heartbeat",
+      "rollbackPath",
+      "pluginRollbackPath"
+    ]
+  }
+}

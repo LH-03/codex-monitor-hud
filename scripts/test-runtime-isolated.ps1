@@ -1,29 +1,33 @@
 param(
     [ValidateSet('list','split')][string]$Mode = 'list',
+    [ValidateSet('legacy','compiled')][string]$HostMode = 'legacy',
     # Five additional synthetic files exercise internal, delayed-metadata and terminal filtering.
     # Keep the fixture at or below the production 64-file discovery cap.
     [ValidateRange(1,59)][int]$TaskCount = 10,
-    [ValidateRange(0,5)][int]$ChurnCycles = 0
+    [ValidateRange(0,5)][int]$ChurnCycles = 0,
+    [string]$TestOutputRoot,
+    [string]$MetricsPath
 )
 
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-$testRoot = Join-Path $root '.test-output\isolated-runtime'
-$expectedRoot = [IO.Path]::GetFullPath((Join-Path $root '.test-output'))
+$outputRoot = if ([string]::IsNullOrWhiteSpace($TestOutputRoot)) { Join-Path $root '.test-output' } else { $TestOutputRoot }
+$testRoot = Join-Path $outputRoot ('isolated-runtime-' + $HostMode)
+$expectedRoot = [IO.Path]::GetFullPath($outputRoot)
 $resolvedTarget = [IO.Path]::GetFullPath($testRoot)
 if (-not $resolvedTarget.StartsWith($expectedRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Refusing to reset a runtime-test folder outside .test-output.'
 }
 if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
-$runtimeLog = Join-Path $root '.test-output\runtime.log'
-if (Test-Path -LiteralPath $runtimeLog) { Remove-Item -LiteralPath $runtimeLog -Force }
 
 $localAppData = Join-Path $testRoot 'localapp'
 $profileRoot = Join-Path $testRoot 'profile'
 $sessionRoot = Join-Path (Join-Path (Join-Path (Join-Path $profileRoot '.codex') 'sessions') (Get-Date).ToString('yyyy')) ((Get-Date).ToString('MM'))
 $sessionRoot = Join-Path $sessionRoot ((Get-Date).ToString('dd'))
 $stateRoot = Join-Path $localAppData 'CodexMonitorHUD'
+$runtimeLog = if ($HostMode -eq 'compiled') { Join-Path $stateRoot 'runtime-v220.log' } else { Join-Path $outputRoot 'runtime.log' }
+if (Test-Path -LiteralPath $runtimeLog) { Remove-Item -LiteralPath $runtimeLog -Force }
 $sessionIndexPath = Join-Path (Join-Path $profileRoot '.codex') 'session_index.jsonl'
 New-Item -ItemType Directory -Force -Path $sessionRoot, $stateRoot | Out-Null
 
@@ -102,6 +106,21 @@ function Write-SyntheticTask {
     [IO.File]::AppendAllText($sessionIndexPath,($indexEntry+[Environment]::NewLine),$encoding)
     return $path
 }
+function Start-IsolatedHost {
+    param([string]$FilePath, [string[]]$Arguments)
+    $info = New-Object Diagnostics.ProcessStartInfo
+    $info.FileName = $FilePath
+    $info.Arguments = (($Arguments | ForEach-Object { '"' + ([string]$_).Replace('"','\"') + '"' }) -join ' ')
+    $info.WorkingDirectory = $root
+    $info.UseShellExecute = $false
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $info.CreateNoWindow = $true
+    $hostProcess = New-Object Diagnostics.Process
+    $hostProcess.StartInfo = $info
+    [void]$hostProcess.Start()
+    return $hostProcess
+}
 for ($index = 1; $index -le $TaskCount; $index++) { [void](Write-SyntheticTask $index 'synthetic' -PaddedMetadata:($index -eq 1) -LongTail:($index -eq 1)) }
 [void](Write-SyntheticTask 9001 'internal' -Internal)
 [void](Write-SyntheticTask 9002 'internal' -Internal)
@@ -128,16 +147,49 @@ $savedLocalAppData = $env:LOCALAPPDATA
 $savedUserProfile = $env:USERPROFILE
 $savedHome = $env:HOME
 $savedModuleAnalysisCache = $env:PSModuleAnalysisCachePath
+$savedDebugPath = $env:CODEX_MONITOR_HUD_DEBUG_PATH
+$savedCompiledTestHome = $env:CODEX_MONITOR_HUD_TEST_HOME
+$savedCompiledTestLocalAppData = $env:CODEX_MONITOR_HUD_TEST_LOCALAPPDATA
 $process = $null
+$runtimeSamples = New-Object System.Collections.Generic.List[object]
+$runtimeStartedAt = [DateTimeOffset]::UtcNow
+function Add-RuntimeSample {
+    param([string]$Label)
+    if ($null -eq $process -or $process.HasExited) { return }
+    $process.Refresh()
+    $runtimeSamples.Add([pscustomobject][ordered]@{
+        label = $Label
+        elapsed_ms = [Math]::Round(([DateTimeOffset]::UtcNow - $runtimeStartedAt).TotalMilliseconds, 1)
+        working_set_bytes = [long]$process.WorkingSet64
+        private_memory_bytes = [long]$process.PrivateMemorySize64
+        cpu_ms = [Math]::Round($process.TotalProcessorTime.TotalMilliseconds, 1)
+        handles = [int]$process.HandleCount
+        threads = [int]$process.Threads.Count
+    })
+}
 try {
     $env:LOCALAPPDATA = $localAppData
     $env:USERPROFILE = $profileRoot
     $env:HOME = $profileRoot
     $env:PSModuleAnalysisCachePath = Join-Path $testRoot 'ModuleAnalysisCache'
-    $process = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $root 'src\CodexMonitorHUD.ps1'),
-        '-InstanceId', ('isolated-runtime-v140-' + $Mode), '-DebugLog'
-    ) -PassThru -WindowStyle Hidden
+    $env:CODEX_MONITOR_HUD_TEST_HOME = $profileRoot
+    $env:CODEX_MONITOR_HUD_TEST_LOCALAPPDATA = $localAppData
+    if ($HostMode -eq 'legacy') { $env:CODEX_MONITOR_HUD_DEBUG_PATH = $runtimeLog }
+    if ($HostMode -eq 'compiled') {
+        $compiledDotnet = Join-Path $root 'runtime\win-x64\dotnet\dotnet.exe'
+        $compiledApp = Join-Path $root 'runtime\win-x64\app\CodexMonitorHud.dll'
+        if (-not (Test-Path -LiteralPath $compiledDotnet) -or -not (Test-Path -LiteralPath $compiledApp)) {
+            throw 'Compiled runtime is not staged. Run scripts\build-dotnet.ps1 first.'
+        }
+        $process = Start-IsolatedHost $compiledDotnet @(
+            $compiledApp, '--plugin-root', $root, '--instance-id', ('isolated-runtime-v220-' + $Mode), '--debug-log'
+        )
+    } else {
+        $process = Start-IsolatedHost 'powershell.exe' @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $root 'src\CodexMonitorHUD.ps1'),
+            '-InstanceId', ('isolated-runtime-v210-' + $Mode), '-DebugLog'
+        )
+    }
 
     $heartbeat = Join-Path $stateRoot 'hud.heartbeat'
     $deadline = [DateTime]::UtcNow.AddSeconds(20)
@@ -147,8 +199,12 @@ try {
     }
     if (-not (Test-Path -LiteralPath $heartbeat)) {
         $detail = if (Test-Path -LiteralPath $runtimeLog) { Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog } else { 'No debug log.' }
-        throw ('Isolated HUD did not reach its heartbeat. ' + $detail)
+        $process.Refresh()
+        $exitDetail = if ($process.HasExited) { ' Process exit=' + $process.ExitCode + '.' } else { ' Process is still running.' }
+        $stderrDetail = if ($process.HasExited) { $process.StandardError.ReadToEnd() } else { '' }
+        throw ('Isolated HUD did not reach its heartbeat.' + $exitDetail + ' ' + $detail + ' ' + $stderrDetail)
     }
+    Add-RuntimeSample 'heartbeat'
 
     $registryPath = Join-Path $stateRoot 'task-registry.json'
     $registryDeadline = [DateTime]::UtcNow.AddSeconds(10)
@@ -212,6 +268,7 @@ try {
     $afterBurstLog = Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog
     $afterBurstAnimations = ([regex]::Matches($afterBurstLog,'Update animation:')).Count
     if ($afterBurstAnimations -ne $beforeBurstAnimations) { throw 'High-frequency token refresh replayed the whole-window update animation.' }
+    Add-RuntimeSample 'token-burst'
 
     $notificationRoot = Join-Path $stateRoot 'notifications'
     New-Item -ItemType Directory -Force -Path $notificationRoot | Out-Null
@@ -221,6 +278,7 @@ try {
     } | ConvertTo-Json -Compress -Depth 6
     [IO.File]::WriteAllText((Join-Path $notificationRoot 'notice-synthetic.json'),$agentNotice,$encoding)
     Start-Sleep -Seconds 2
+    if ($HostMode -eq 'compiled' -and (Test-Path -LiteralPath (Join-Path $notificationRoot 'notice-synthetic.json'))) { throw 'Compiled HUD did not consume its targeted notice.' }
 
     $deletedIndex = $TaskCount
     $deletedWorkspace = ('workspace-{0:d2}' -f $deletedIndex)
@@ -275,25 +333,32 @@ try {
         Start-Sleep -Seconds 3
         $process.Refresh()
         if ($process.HasExited) { throw ('HUD exited during churn cycle ' + $cycle) }
+        Add-RuntimeSample ('churn-' + $cycle)
     }
 
+    Add-RuntimeSample 'pre-exit'
     [IO.File]::WriteAllText((Join-Path $stateRoot 'exit.signal'), [DateTime]::UtcNow.ToString('O'), $encoding)
     if (-not $process.WaitForExit(10000)) { throw 'Isolated HUD did not exit through its own signal.' }
     if ($process.ExitCode -ne 0) { throw ('Isolated HUD exit code: ' + $process.ExitCode) }
 
     $logText = Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog
-    if ($logText -notmatch 'HUD Loaded event completed\.') { throw 'HUD Loaded completion marker is missing.' }
-    if ($logText -match 'Dispatcher error:|HUD Loaded error:') { throw 'Runtime log contains a HUD error.' }
-    if ($logText -notmatch 'Session identity loaded: workspace-01; metadata=True; officialTitle=True') { throw 'Codex session-index thread title was not loaded for a user task with late header metadata.' }
-    if ($logText -notmatch 'Session identity resolved: workspace-9004; internal=True; officialTitle=True') { throw 'Late-metadata internal session was not reclassified before display.' }
-    if ($logText -notmatch 'Session identity resolved: workspace-9005; internal=False; officialTitle=True') { throw 'Late-metadata user session did not refresh its official title.' }
+    if ($HostMode -eq 'compiled') {
+        if ($logText -notmatch 'Compiled HUD v2\.2\.0 starting\.') { throw 'Compiled HUD startup marker is missing.' }
+        if ($logText -match 'Unhandled dispatcher exception:|Unhandled domain exception:|Fatal startup error:') { throw 'Compiled runtime log contains an unhandled HUD error.' }
+    } else {
+        if ($logText -notmatch 'HUD Loaded event completed\.') { throw 'HUD Loaded completion marker is missing.' }
+        if ($logText -match 'Dispatcher error:|HUD Loaded error:') { throw 'Runtime log contains a HUD error.' }
+        if ($logText -notmatch 'Session identity loaded: workspace-01; metadata=True; officialTitle=True') { throw 'Codex session-index thread title was not loaded for a user task with late header metadata.' }
+        if ($logText -notmatch 'Session identity resolved: workspace-9004; internal=True; officialTitle=True') { throw 'Late-metadata internal session was not reclassified before display.' }
+        if ($logText -notmatch 'Session identity resolved: workspace-9005; internal=False; officialTitle=True') { throw 'Late-metadata user session did not refresh its official title.' }
+    }
     if ($logText -notmatch ('Agent notice accepted for task #' + [regex]::Escape([string]$agentTarget.task_number) + '; expressive=True')) { throw 'Expressive Codex notice was not accepted.' }
     if ($Mode -eq 'list') {
         if ($logText -notmatch ('Attention surface: list ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent') -or $logText -match ('Attention surface: bubble ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent')) { throw 'Codex notice escaped its single matching list item.' }
     } else {
         if ($logText -notmatch ('Attention surface: bubble ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent') -or $logText -match ('Attention surface: list ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent')) { throw 'Codex notice escaped its single matching bubble.' }
     }
-    if ($terminalFiles.Count -ge 3) {
+    if ($terminalFiles.Count -ge 3 -and $HostMode -eq 'legacy') {
         if ($logText -notmatch ('Silent completion retained: ' + [regex]::Escape($workspaces[0]))) { throw 'Silent completion was not retained.' }
         if ($logText -match ('Attention triggered: ' + [regex]::Escape($workspaces[0]) + ' completed')) { throw 'Silent completion unexpectedly triggered attention.' }
         if ($logText -notmatch ('Pending completion canceled: ' + [regex]::Escape($workspaces[1]))) { throw 'Immediate continuation did not cancel its pending reminder.' }
@@ -305,7 +370,27 @@ try {
             if ($logText -notmatch 'Attention surface: bubble ' -or $logText -match 'Attention surface: summary |Attention surface: list ') { throw 'Split mode reminder escaped its matching bubble surface.' }
         }
     }
-    Write-Output ('Isolated multi-task runtime: OK ({0} synthetic tasks, {1} mode, {2} churn cycle(s))' -f $TaskCount,$Mode,$ChurnCycles)
+    if (-not [string]::IsNullOrWhiteSpace($MetricsPath)) {
+        $metricsDirectory = Split-Path -Parent $MetricsPath
+        if (-not [string]::IsNullOrWhiteSpace($metricsDirectory)) { New-Item -ItemType Directory -Force -Path $metricsDirectory | Out-Null }
+        $peakWorkingSet = [long](($runtimeSamples | Measure-Object -Property working_set_bytes -Maximum).Maximum)
+        $peakPrivateMemory = [long](($runtimeSamples | Measure-Object -Property private_memory_bytes -Maximum).Maximum)
+        $finalCpu = [double](($runtimeSamples | Measure-Object -Property cpu_ms -Maximum).Maximum)
+        $metrics = [ordered]@{
+            schema_version = 1
+            host_mode = $HostMode
+            display_mode = $Mode
+            task_count = $TaskCount
+            churn_cycles = $ChurnCycles
+            duration_ms = [Math]::Round(([DateTimeOffset]::UtcNow - $runtimeStartedAt).TotalMilliseconds, 1)
+            peak_working_set_bytes = $peakWorkingSet
+            peak_private_memory_bytes = $peakPrivateMemory
+            final_cpu_ms = $finalCpu
+            samples = $runtimeSamples.ToArray()
+        }
+        [IO.File]::WriteAllText($MetricsPath, ($metrics | ConvertTo-Json -Depth 6), $encoding)
+    }
+    Write-Output ('Isolated multi-task runtime: OK ({0} synthetic tasks, {1} mode, {2} host, {3} churn cycle(s))' -f $TaskCount,$Mode,$HostMode,$ChurnCycles)
 } finally {
     if ($null -ne $process -and -not $process.HasExited) {
         try { $process.Kill() } catch { }
@@ -314,4 +399,7 @@ try {
     $env:USERPROFILE = $savedUserProfile
     $env:HOME = $savedHome
     $env:PSModuleAnalysisCachePath = $savedModuleAnalysisCache
+    $env:CODEX_MONITOR_HUD_DEBUG_PATH = $savedDebugPath
+    $env:CODEX_MONITOR_HUD_TEST_HOME = $savedCompiledTestHome
+    $env:CODEX_MONITOR_HUD_TEST_LOCALAPPDATA = $savedCompiledTestLocalAppData
 }

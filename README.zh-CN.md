@@ -2,6 +2,10 @@
 
 > [English](README.md) · 简体中文
 
+## 让 Codex 安装
+
+只需把本仓库链接加“帮我安装”交给 Codex。安装代理必须遵循精简、确定性的 [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) 和 `install-manifest.json`，不得读取对话正文，也不得自行猜测安装命令。
+
 Codex Monitor HUD 是面向 Windows 版 Codex Desktop 的桌面监控浮层。它只读取近期本地 Codex 会话记录中受限的一部分数据，并将当前状态显示为汇总 HUD、可展开任务列表或独立任务气泡。
 
 它的定位是实时监控，不是历史分析平台、账单工具或对话数据库。
@@ -47,9 +51,9 @@ HUD 不会从自然语言猜测任务是否完成。只有明确生命周期事�
 
 ## 运行时与性能边界
 
-当前实现基于 Windows PowerShell 5.1、WPF、用于托盘图标的 Windows Forms，以及少量 Win32 互操作。它不建立数据库；会话发现后只读取新增字节；语言、外观和可见投影会缓存；没有变化时不会重建 WPF 控件树。
+`2.2.0` Windows 线将常驻监控迁移到编译型 .NET 宿主，同时保留 WPF/Windows Forms/Win32 外壳、按需兼容设置进程和 `-Legacy` 恢复路径。受限发现、JSONL 增量读取、状态机、配置、价格和展示规则位于 `CodexMonitorHud.Core`。
 
-Windows PowerShell/WPF 在解析或渲染高峰后可能保留较高的私有提交内存。HUD 会在更新后把未使用的工作集页面归还给 Windows，因此物理常驻内存会下降，但私有提交高水位不会凭空消失。[TEST_RESULTS.md](TEST_RESULTS.md) 记录了本机实测，数值只代表测试环境，不是所有电脑的统一承诺。若要继续明显降低私有提交底座，需要未来把常驻宿主迁移到编译型 .NET。
+普通文件变化只轮询受影响路径；只有目录结构变化、watcher 溢出或定期校准才重新发现。没有变化的生命周期 tick 不再逐个查询全部会话文件；首轮尾读和新增记录都有限额，列表结构不变时原位更新 WPF 控件。
 
 ## 隐私
 
@@ -67,20 +71,16 @@ Windows PowerShell/WPF 在解析或渲染高峰后可能保留较高的私有提
 
 - Windows 10 或 Windows 11；
 - 能提供本地会话记录的 Codex Desktop；
-- Windows PowerShell 5.1 或更高版本；
+- 安装版自带私有 .NET 运行时，不要求系统全局安装 .NET；
+- Windows PowerShell 5.1 或更高版本，用于完全兼容的设置宿主和紧急旧版回退；
 - Codex 插件宿主可以使用 Node.js。
 
-## 使用 Codex 安装
+## 平台状态
 
-把仓库地址交给 Codex，并要求它先阅读 [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md)。可直接使用：
+- **Windows x64：**本发布线支持。
+- **其他操作系统和处理器架构：**`2.2.0` 不包含。
 
-```text
-从这个仓库安装 Codex Monitor HUD。先阅读 INSTALL_WITH_CODEX.md。
-首次安装使用简体中文，升级时保留现有设置；运行项目测试并安装个人插件。
-未经我确认，不要开启主动通知、成本估算、鼠标穿透、第三方主题或 Windows 登录自启动。
-```
-
-首次中文安装对应 `-DefaultLanguage zh-CN`。
+macOS 工作会等待真实设备交互验证后另行推进，不属于本次 Windows Release。
 
 ## 手动安装
 
@@ -88,7 +88,7 @@ Windows PowerShell/WPF 在解析或渲染高峰后可能保留较高的私有提
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -DefaultLanguage zh-CN
 ```
 
-升级会保留现有设置。安装器会创建桌面和开始菜单设置快捷方式，不会开启 Windows 登录自启动。
+Windows 首次安装可使用上面的 PowerShell 命令。安装器会先验证再切换、保留回滚材料和现有设置；不会开启 Windows 登录自启动。
 
 ## 日常操作
 
@@ -113,9 +113,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -D
 ## 开发与验证
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-dotnet.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-dotnet.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode list -TaskCount 5
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode list -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode split -TaskCount 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\compare-runtime-performance.ps1 -TaskCount 12 -ChurnCycles 1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-isolated.ps1
 ```
 
@@ -123,6 +126,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-
 
 ## 项目状态与声明
 
-当前源码版本为 `2.1.0`。项目只支持 Windows，是独立的非官方开源项目，与 OpenAI 没有隶属或背书关系。当前版本摘要见 [RELEASE_NOTES_2.1.0.md](RELEASE_NOTES_2.1.0.md)。
+当前 Windows Release 候选版为 `2.2.0`。项目是独立的非官方开源项目，与 OpenAI 没有隶属或背书关系。
 
 MIT License。
