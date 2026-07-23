@@ -1,6 +1,6 @@
 # Architecture
 
-## 3.0 process boundary
+## 2.2 Windows process boundary
 
 ```text
 Codex local files
@@ -8,11 +8,9 @@ Codex local files
        v
 CodexMonitorHud.Core (net10.0, platform-neutral)
        | parsing / discovery / incremental state / projections
-       +--------------------------+
-       |                          |
-       v                          v
-Windows WPF shell          Avalonia macOS shell
-verified 2.2 behavior      menu + bubbles + settings + adapters
+       v
+Windows WPF shell
+compiled resident monitor
        |
        v
 on-demand legacy Settings host (exact config/UI compatibility only)
@@ -22,7 +20,7 @@ The resident hot path is compiled C#. `CodexMonitorHud.Core` has no WPF, Windows
 
 ## Scope
 
-Codex Monitor HUD is a local Windows/macOS projection over recent Codex Desktop session records. It does not maintain a historical database and does not modify Codex sessions.
+Codex Monitor HUD 2.2.0 is a local Windows projection over recent Codex Desktop session records. It does not maintain a historical database and does not modify Codex sessions.
 
 ```text
 Codex local session JSONL + session_index.jsonl
@@ -44,7 +42,6 @@ Codex local session JSONL + session_index.jsonl
 | --- | --- |
 | `src-dotnet/CodexMonitorHud.Core` | Platform-neutral configuration, bounded discovery, streaming JSONL parsing, identity, accounting, state transitions, pricing, and presentation rules. |
 | `src-dotnet/CodexMonitorHud.App` | Compiled Windows lifecycle, WPF projections, tray, DPI/Win32 integration, bubbles, signals, and MCP notice inbox. |
-| `src-dotnet/CodexMonitorHud.Mac` | Separate Avalonia/macOS host. Phase 1 provides a minimal window, health check, heartbeat and unsigned bundle metadata without changing the Windows host. |
 | `tests-dotnet/CodexMonitorHud.Core.Tests` | Zero-dependency executable regression suite for neutral behavior. |
 | `src/MonitorHud.Core.psm1` | Configuration normalization, bounded discovery, record parsing, accounting, themes, pricing, and pure helpers. |
 | `src/CodexMonitorHUD.ps1` | On-demand exact-compatible Settings host and explicit legacy runtime rollback. |

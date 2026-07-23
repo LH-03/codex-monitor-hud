@@ -1,15 +1,10 @@
 # Sensitive information scan
 
-## macOS v3 candidate - 2026-07-19
+## Windows 2.2.0 release candidate - 2026-07-23
 
-- Built an ignored final `3.0.0` audit stage/ZIP containing 682 public files after the functional Mac host, native click-through adapter, Mac PNG icon, cloud checklist and installer changes.
-- Package entries under `private/`, local settings, session JSONL, logs, databases and ignored test output: 0.
-- Maintainer profile/repository path and common private-key header hits in the staged package: 0.
-- Mac bundle audit rejects JSONL, logs, databases, local `~/.codex` profile paths and common private-key markers before artifact upload.
-- Avalonia and .NET build telemetry are explicitly disabled in repository build entrypoints and CI.
-- No real session content was read, copied, packaged or uploaded; all new path/title/watcher fixtures are synthetic.
-- Relative package paths contain no private/state/test directories or forbidden local-data extensions. A 165-text-file marker scan found no maintainer machine paths, common private-key headers, OpenAI-style secret prefix or GitHub token prefix.
-- Current six-mode Mac host fixtures use synthetic `/Users/synthetic/...` paths only. This remains Windows-local evidence; no GitHub Actions artifact or native macOS bundle has been uploaded yet.
+- Windows-only package staging excludes `private/`, local settings, session JSONL, logs, databases, test output, local agent directories, compiled source `bin/obj`, and the deferred macOS preview guide.
+- No real session content was read, copied, packaged or uploaded; all runtime fixtures use synthetic paths and records.
+- Final local ZIP audit: `657` files, exact archive/file-list parity, `0` Mac paths, `0` forbidden private/state/data paths, and `0` strict maintainer-path, GitHub-token, OpenAI-token, or private-key-pattern hits. The exact package hash is emitted with each freshly generated Release ZIP in `SHA256SUMS.txt`.
 
 ## 2.2.0 locally verified source - 2026-07-18
 

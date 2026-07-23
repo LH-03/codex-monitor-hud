@@ -6,9 +6,7 @@
 
 Give Codex only this repository URL plus “install this.” The agent must follow the short, deterministic [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) procedure and `install-manifest.json`; it must not inspect conversation content or improvise install commands.
 
-> macOS status: the unsigned Avalonia v3 candidate targets Apple silicon (`arm64`) and passes native GitHub Actions build, architecture, synthetic-host and install-transaction gates. Interactive real-Mac validation remains incomplete. macOS may require the user to Control-click **Open** or approve it in **System Settings → Privacy & Security**; the installer never clears quarantine or weakens Gatekeeper.
-
-Codex Monitor HUD is a Windows and macOS desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
+Codex Monitor HUD is a Windows desktop overlay for monitoring currently active Codex Desktop tasks. It reads a bounded subset of local Codex session records and projects that state as a summary, an expandable task list, or independent task bubbles.
 
 The project is intentionally a live monitor, not a historical analytics service, billing tool, or conversation database.
 
@@ -53,7 +51,7 @@ The optional `codexMicro` scheme uses five display-reference values sampled from
 
 ## Runtime and performance boundary
 
-The unreleased `3.0.0` source line retains the verified Windows 2.2 WPF behavior and adds an independent Avalonia macOS host. Platform-neutral parsing, bounded discovery, incremental JSONL reading, state transitions, configuration, pricing, and presentation rules live in `CodexMonitorHud.Core`. Windows keeps its WPF/Windows Forms/Win32 shell and on-demand PowerShell settings compatibility process; macOS keeps native lifecycle, menu, window, notification and deep-link adapters in its own host.
+The `2.2.0` Windows line moves the resident monitor into a compiled .NET host while retaining the WPF/Windows Forms/Win32 shell, on-demand compatible Settings process, and `-Legacy` recovery path. Platform-neutral parsing, bounded discovery, incremental JSONL reading, state transitions, configuration, pricing, and presentation rules live in `CodexMonitorHud.Core`.
 
 Normal file-change events poll only the affected paths. Full discovery is reserved for structural changes, watcher overflow, and periodic reconciliation; unchanged lifecycle ticks do not stat every tracked file. Initial tails and appended records are bounded, and retained WPF controls are updated in place when their structure is unchanged.
 
@@ -71,8 +69,7 @@ See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 
 ## Requirements
 
-- Windows 10/11, or macOS 13 or later for the HUD app itself;
-- current ChatGPT desktop with Codex requires macOS 14 according to OpenAI;
+- Windows 10 or Windows 11;
 - Codex Desktop with local session records available;
 - no machine-wide .NET installation is required by an installed build; the installer stages a private runtime;
 - Windows PowerShell 5.1 or later for the exact-compatible Settings host and emergency legacy fallback;
@@ -80,15 +77,10 @@ See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 
 ## Platform status
 
-- **Windows x64:** stable implementation; the v3 candidate retains the verified Windows 2.2 behavior.
-- **macOS arm64:** preview target for Apple-silicon Macs; native Actions pass, real-device validation is requested.
-- **Other operating systems and architectures:** not supported by the current release line.
+- **Windows x64:** supported by this release line.
+- **Other operating systems and architectures:** not included in `2.2.0`.
 
-GitHub Actions can verify native build and synthetic behavior, but not Gatekeeper prompts, visual fidelity, menu-bar recovery, notifications, multiple displays, Spaces, sleep/wake, live Codex integration, or long-running resource behavior. Community testing, sanitized bug reports and pull requests are welcome.
-
-- [Download the macOS preview](https://github.com/LH-03/codex-monitor-hud/releases/tag/v3.0.0-macos-preview.1)
-- [Read the macOS testing guide](docs/MACOS_PREVIEW_TESTING.md)
-- [Report macOS test results](https://github.com/LH-03/codex-monitor-hud/issues/5)
+macOS work is deliberately deferred until interactive real-device validation is available; it is not part of this Windows Release.
 
 ## Manual install
 
@@ -96,7 +88,7 @@ GitHub Actions can verify native build and synthetic behavior, but not Gatekeepe
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-On Windows, manual first install defaults to English. On macOS, use `sh scripts/install-macos.sh`; the app is installed under `~/Applications`, the plugin under `~/plugins`, and settings remain under `~/Library/Application Support/CodexMonitorHUD`. Both installers validate before switching and retain rollback material. No login item is enabled.
+Manual first install defaults to English. The installer validates before switching, preserves settings, retains rollback material, and does not enable Windows login startup.
 
 ## Everyday controls
 
@@ -134,6 +126,6 @@ Tests use synthetic sessions and isolated state roots. See [Architecture](docs/A
 
 ## Project status and disclaimer
 
-The current unreleased source candidate is `3.0.0`. Windows x64 continues to use the previously verified 2.2 WPF implementation. The Avalonia macOS arm64 host has functional summary/list/split/quiet/settings/menu/notification/deep-link/lifecycle code and passes local synthetic tests, Windows cross-publish, and native Apple-silicon Actions. Interactive real-Mac results remain explicitly unverified. The project is unofficial and is not affiliated with or endorsed by OpenAI.
+The current Windows release candidate is `2.2.0`. It is a local-first, unofficial project and is not affiliated with or endorsed by OpenAI.
 
 MIT License.

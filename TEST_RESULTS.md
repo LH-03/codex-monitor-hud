@@ -1,31 +1,27 @@
 # Test results
 
-Updated: 2026-07-22
+Updated: 2026-07-23
 
 ## Current result
 
-The installed Windows `2.2.0` build remains untouched and retains its previously passed source, compiled, isolated-runtime, same-fixture performance, transactional-install and health/heartbeat gates. The repository source is now the unreleased `3.0.0` cross-platform candidate.
+The repository source is the Windows `2.2.0` release candidate. It is prepared as a Windows x64-only package; macOS work is excluded from this release line.
 
-Local verification and GitHub Actions evidence are reported separately from the unsigned public preview. The isolated install transaction gate also passes its forced post-switch failure recovery path.
+The source regression, Core regression executable, compiled list/split runtime gate, 12-task legacy/compiled comparison, behavior runtime, and list/split terminal-departure gates passed on 2026-07-23. The isolated install transaction gate also passes its forced post-switch failure recovery path.
 
 The pre-refactor `2.1.0` baseline also passed the complete source suite and the 1/5/12/59-user-fixture list/split matrix described below. Those results remain the compatibility authority for the compiled candidate.
 
 These results use synthetic task names and isolated state/profile roots. They do not include real prompts, responses, tool output, account details, or credentials.
 
-## macOS v3 candidate
+## Windows 2.2.0 candidate
 
-- Four-project solution build, including `CodexMonitorHud.Mac`: PASS with 0 warnings and 0 errors.
-- `CodexMonitorHud.Core` tests: PASS 13/13, including explicit macOS state/session paths, Unix/UTF-8 workspace parsing, case-sensitive path identity, atomic title-index replacement and nested watcher reconciliation.
-- Windows-hosted self-contained cross-publish: PASS for the supported `osx-arm64` app-host output. An earlier `osx-x64` engineering check also passed but is no longer part of the supported release matrix.
-- Deterministic repository install protocol: PASS for three vague prompts, Windows/macOS architecture routes, verified Release preference, missing-Release source fallback, corrupt-checksum stop, settings preservation, repair and rollback.
-- Compiled Windows isolated regression after Core changes: PASS for 5-task list and split modes.
-- Functional Avalonia host synthetic smoke: PASS for summary, list, split, quiet, settings and notifications with 5 tasks each.
-- Mac click-through has an NSWindow-only adapter plus status-menu and signal recovery; interactive click delivery remains an explicit real-Mac gate.
-- Full four-project build: PASS with 0 warnings and 0 errors after native NuGet audit metadata was available; Windows compiled 5-task list/split real-WPF isolated runs also PASS.
-- Final public v3 audit stage/ZIP: PASS with 682 files; forbidden package material 0 and sensitive-marker hits 0 across 165 text files.
-- Mac app/plugin/settings/marketplace transaction: implemented with native-runner test coverage for install, verify, forced post-switch failure, rollback, forced rollback failure and uninstall; not runnable on Windows.
-- Unsigned GitHub Actions baseline: PASS in run 4 for Windows regression and native `osx-arm64`. The workflow is now intentionally scoped to Windows x64 and macOS arm64; the earlier Intel Mac job is historical evidence only.
-- Native macOS health launch, `plutil`, Mach-O inspection, six-mode synthetic host smoke and isolated install transactions: PASS in Actions. Gatekeeper and interactive real-device behavior remain unverified.
+- Three-project solution build (`Core`, `Core.Tests`, `App`): PASS with 0 warnings and 0 errors.
+- `CodexMonitorHud.Core` regression executable: PASS 13/13.
+- Compiled Windows isolated runtime: PASS for 5-task list and split modes.
+- Same-fixture legacy/compiled comparison: PASS for 12-task list and split modes. On this machine, compiled private memory was 68.4% of legacy in list mode and 70.3% in split mode; these are local measurements, not product guarantees.
+- Isolated behavior runtime: PASS for quiet-task retention, activity expansion and three context stages.
+- Isolated terminal departure: PASS for list and split beacon modes.
+- Deterministic Windows repository install protocol: PASS for three vague prompts, verified Release preference, missing-Release source fallback, checksum stop, settings preservation, repair and rollback.
+- Final local Release package audit: PASS with 657 files, matching ZIP file list and SHA-256, no Mac paths, and no forbidden private/state/data paths or strict credential-pattern hits.
 
 ## Source and parser suite
 

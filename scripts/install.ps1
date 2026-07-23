@@ -40,7 +40,7 @@ function Copy-PluginTree {
     param([string]$From, [string]$To)
     New-Item -ItemType Directory -Force -Path $To | Out-Null
     $excludedRootNames = @('.git','.agents','.codex','artifacts','.test-output','private','node_modules','sessions','logs','archive','AGENTS.md','WORKSPACE_STATE.md')
-    $excludedRelativePaths = @('docs/MAINTENANCE_WORKFLOW.md','scripts/prepare-delivery.ps1')
+    $excludedRelativePaths = @('docs/MAINTENANCE_WORKFLOW.md','docs/MACOS_PREVIEW_TESTING.md','scripts/prepare-delivery.ps1')
     foreach ($item in Get-ChildItem -Force -LiteralPath $From | Where-Object { $_.Name -notin $excludedRootNames }) {
         Copy-Item -LiteralPath $item.FullName -Destination $To -Recurse -Force
     }
@@ -223,7 +223,7 @@ if ((Test-Path -LiteralPath $buildScript) -and ((Test-Path -LiteralPath $private
     # repaired or rolled back without requiring a global SDK.
     & $buildScript -Configuration Release
 } elseif (-not (Test-Path -LiteralPath $compiledApp)) {
-    throw 'The compiled v3.0.0 runtime is missing and no .NET 10 SDK is available to build it.'
+    throw 'The compiled v2.2.0 runtime is missing and no .NET 10 SDK is available to build it.'
 }
 
 $stageRoot = Join-Path $pluginsRoot ('.codex-monitor-hud-stage-' + [Guid]::NewGuid().ToString('N'))
@@ -239,7 +239,7 @@ try {
     & $stageDotnet $stageApp --plugin-root $stageRoot --health-check $healthPath
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $healthPath)) { throw 'Staged install health check failed.' }
     $health = Get-Content -Raw -Encoding UTF8 -LiteralPath $healthPath | ConvertFrom-Json
-    if ([string]$health.version -ne '3.0.0' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
+    if ([string]$health.version -ne '2.2.0' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
         throw ('Staged install health check returned an invalid result: ' + ($health | ConvertTo-Json -Compress))
     }
     & (Join-Path $stageRoot 'scripts\test.ps1') -TestOutputRoot (Join-Path $validationRoot 'static')

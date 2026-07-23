@@ -1,7 +1,7 @@
 {
   "name": "codex-monitor-hud",
-  "version": "3.0.0",
-  "description": "A local real-time multi-task HUD for Codex Desktop on Windows and macOS.",
+  "version": "2.2.0",
+  "description": "A local real-time multi-task HUD for Codex Desktop on Windows.",
   "author": {
     "name": "Codex Monitor HUD Contributors"
   },
@@ -11,7 +11,6 @@
     "token-usage",
     "hud",
     "windows",
-    "macos",
     "local-first",
     "multi-task",
     "pro-workflow"

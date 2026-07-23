@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '3.0.0',
+    [string]$Version = '2.2.0',
     [string]$OutputRoot = ''
 )
 
@@ -16,13 +16,13 @@ if (-not $outputRoot.StartsWith($artifactRoot, [StringComparison]::OrdinalIgnore
 }
 
 $stageRoot = Join-Path $outputRoot 'stage'
-$archiveName = "codex-monitor-hud-v$Version.zip"
+$archiveName = 'CodexMonitorHUD-windows-x64.zip'
 $archivePath = Join-Path $outputRoot $archiveName
 $excludedRootNames = @('.git','.agents','.codex','artifacts','.test-output','private','node_modules','sessions','logs','archive')
 $excludedDirectoryNames = @('bin','obj')
 $excludedFileNames = @('.DS_Store','Thumbs.db','settings.json','AGENTS.md','WORKSPACE_STATE.md')
 $excludedExtensions = @('.log','.zip','.db','.sqlite','.sqlite3','.jsonl')
-$excludedRelativePaths = @('docs/MAINTENANCE_WORKFLOW.md','scripts/prepare-delivery.ps1')
+$excludedRelativePaths = @('docs/MAINTENANCE_WORKFLOW.md','docs/MACOS_PREVIEW_TESTING.md','scripts/prepare-delivery.ps1')
 
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 $files = Get-ChildItem -LiteralPath $sourceRoot -File -Recurse -Force | Where-Object {

@@ -6,9 +6,7 @@
 
 只需把本仓库链接加“帮我安装”交给 Codex。安装代理必须遵循精简、确定性的 [INSTALL_WITH_CODEX.md](INSTALL_WITH_CODEX.md) 和 `install-manifest.json`，不得读取对话正文，也不得自行猜测安装命令。
 
-> macOS 当前状态：未签名 Avalonia v3 候选版仅面向 Apple 芯片（`arm64`），并已通过原生 GitHub Actions 的构建、架构、合成宿主及安装事务门禁，但真实 Mac 交互验证仍不完整。macOS 可能要求用户 Control 点按应用选择“打开”，或在“系统设置 → 隐私与安全性”中手动同意；安装器不会清除 quarantine 或削弱 Gatekeeper。
-
-Codex Monitor HUD 是面向 Windows 和 macOS 版 Codex Desktop 的桌面监控浮层。它只读取近期本地 Codex 会话记录中受限的一部分数据，并将当前状态显示为汇总 HUD、可展开任务列表或独立任务气泡。
+Codex Monitor HUD 是面向 Windows 版 Codex Desktop 的桌面监控浮层。它只读取近期本地 Codex 会话记录中受限的一部分数据，并将当前状态显示为汇总 HUD、可展开任务列表或独立任务气泡。
 
 它的定位是实时监控，不是历史分析平台、账单工具或对话数据库。
 
@@ -53,7 +51,7 @@ HUD 不会从自然语言猜测任务是否完成。只有明确生命周期事�
 
 ## 运行时与性能边界
 
-未发布的 `3.0.0` 源码线保留已验证 Windows 2.2 WPF 行为，并增加独立 Avalonia macOS 宿主。跨平台的解析、受限发现、JSONL 增量读取、状态机、配置、价格和展示规则位于 `CodexMonitorHud.Core`。Windows 继续使用 WPF/Windows Forms/Win32 外壳和按需 PowerShell 设置兼容进程；macOS 的生命周期、菜单、窗口、通知和深链适配只放在 Mac 宿主内。
+`2.2.0` Windows 线将常驻监控迁移到编译型 .NET 宿主，同时保留 WPF/Windows Forms/Win32 外壳、按需兼容设置进程和 `-Legacy` 恢复路径。受限发现、JSONL 增量读取、状态机、配置、价格和展示规则位于 `CodexMonitorHud.Core`。
 
 普通文件变化只轮询受影响路径；只有目录结构变化、watcher 溢出或定期校准才重新发现。没有变化的生命周期 tick 不再逐个查询全部会话文件；首轮尾读和新增记录都有限额，列表结构不变时原位更新 WPF 控件。
 
@@ -71,8 +69,7 @@ HUD 不会从自然语言猜测任务是否完成。只有明确生命周期事�
 
 ## 运行要求
 
-- Windows 10/11；HUD 应用本身的最低目标为 macOS 13；
-- OpenAI 当前说明中，整合 Codex 的新版 ChatGPT 桌面应用要求 macOS 14；
+- Windows 10 或 Windows 11；
 - 能提供本地会话记录的 Codex Desktop；
 - 安装版自带私有 .NET 运行时，不要求系统全局安装 .NET；
 - Windows PowerShell 5.1 或更高版本，用于完全兼容的设置宿主和紧急旧版回退；
@@ -80,15 +77,10 @@ HUD 不会从自然语言猜测任务是否完成。只有明确生命周期事�
 
 ## 平台状态
 
-- **Windows x64：**稳定实现；v3 候选版保留已验证的 Windows 2.2 行为。
-- **macOS arm64：**Apple 芯片预览目标；原生 Actions 已通过，正在征集真实设备验证。
-- **其他操作系统和处理器架构：**当前发布线不支持。
+- **Windows x64：**本发布线支持。
+- **其他操作系统和处理器架构：**`2.2.0` 不包含。
 
-GitHub Actions 能证明原生构建和合成行为，不能证明 Gatekeeper 提示、视觉效果、菜单栏恢复、通知、多显示器、Spaces、睡眠唤醒、真实 Codex 集成或长期资源表现。欢迎提交经过隐私清理的测试报告、缺陷和拉取请求。
-
-- [下载 macOS 预览版](https://github.com/LH-03/codex-monitor-hud/releases/tag/v3.0.0-macos-preview.1)
-- [阅读 macOS 测试指南](docs/MACOS_PREVIEW_TESTING.md)
-- [报告 macOS 测试结果](https://github.com/LH-03/codex-monitor-hud/issues/5)
+macOS 工作会等待真实设备交互验证后另行推进，不属于本次 Windows Release。
 
 ## 手动安装
 
@@ -96,7 +88,7 @@ GitHub Actions 能证明原生构建和合成行为，不能证明 Gatekeeper �
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -DefaultLanguage zh-CN
 ```
 
-Windows 首次安装可使用上面的 PowerShell 命令；macOS 使用 `sh scripts/install-macos.sh`，应用位于 `~/Applications`、插件位于 `~/plugins`、设置保留在 `~/Library/Application Support/CodexMonitorHUD`。两端都先验证再切换并保留回滚材料；不会开启登录启动。
+Windows 首次安装可使用上面的 PowerShell 命令。安装器会先验证再切换、保留回滚材料和现有设置；不会开启 Windows 登录自启动。
 
 ## 日常操作
 
@@ -134,6 +126,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-
 
 ## 项目状态与声明
 
-当前未发布源码候选版为 `3.0.0`。Windows x64 继续使用已经验证的 2.2 WPF 实现；Avalonia macOS arm64 宿主已具备汇总/列表/分屏/安静模式、设置、菜单、通知、深链和生命周期代码，并通过本地合成测试、Windows 交叉发布及 Apple 芯片原生 Actions。真实 Mac 交互结果仍明确标为未验证。项目是独立的非官方开源项目，与 OpenAI 没有隶属或背书关系。
+当前 Windows Release 候选版为 `2.2.0`。项目是独立的非官方开源项目，与 OpenAI 没有隶属或背书关系。
 
 MIT License。

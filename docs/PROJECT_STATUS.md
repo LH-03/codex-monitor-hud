@@ -1,10 +1,10 @@
 # Project status
 
-Updated: 2026-07-22
+Updated: 2026-07-23
 
 ## Current line
 
-The unreleased source candidate is `3.0.0`. Windows deliberately retains the locally verified 2.2 compiled WPF behavior, its on-demand 2.1-compatible Settings host, and `scripts/start.ps1 -Legacy` fallback. A separate Avalonia macOS host consumes the same platform-neutral Core.
+The Windows release candidate is `2.2.0`. It uses the compiled WPF host, keeps the on-demand Settings compatibility process, and retains `scripts/start.ps1 -Legacy` as a recovery path.
 
 The repository source is the product authority. An installed copy is a deployment target, not a source of truth. Publication, release creation, and installation are separate user-controlled actions.
 
@@ -32,9 +32,6 @@ The repository source is the product authority. An installed copy is a deploymen
 - Build staging includes a private .NET runtime and a compiled health check. Installation validates a separate staged tree, including same-fixture legacy/compiled list and split performance gates, before an atomic directory switch; the preceding installed version remains available by version for rollback. Startup is compiled-first and automatically falls back to the legacy host after an early compiled failure.
 - Adaptive polling backs off while idle but file watchers coalesce session, title, notice, and signal changes into an immediate dispatcher wake.
 - The MCP host checks the HUD heartbeat and applies a bounded three-attempt/five-minute restart budget while respecting intentional manual exit.
-- The Avalonia macOS host implements summary/list/split/quiet surfaces, settings preview and atomic persistence, saved window position, tray/menu recovery, native NSWindow click-through plus tray/signal recovery, hide-on-close, single-instance wake-up, bounded notices, validated deep links, privacy-safe heartbeat/task registry and managed lifecycle checks.
-- Local six-mode synthetic host smoke tests pass. The macOS arm64 target cross-publishes on Windows, and GitHub Actions run 4 passed executable, bundle and functional-host checks on a native Apple-silicon runner.
-- The unsigned Actions workflow builds and audits macOS arm64, runs Core and six-mode host tests, and exercises isolated app/plugin/settings/marketplace install transactions. These mechanical results do not establish Gatekeeper or interactive UI behavior.
 
 ## Display state
 
@@ -52,17 +49,17 @@ During the latest visual pass, a fully populated top metric row exposed clipping
 
 ## Known limits
 
-- The compiled build, Core regression executable, list/split isolated fixtures, same-fixture performance gate, transactional install, installed health check, source/install parity, and fresh compiled heartbeat passed locally. The v3 branch is published as draft PR #4, and an unsigned macOS preview was published separately; neither is a stable v3 release.
+- The compiled build, Core regression executable, list/split isolated fixtures, same-fixture performance gate, transactional install, installed health check, source/install parity, and fresh compiled heartbeat must be re-run for each release candidate. They passed for the current Windows 2.2.0 preparation on 2026-07-23.
 - Measurements are machine- and workload-specific; do not treat one number as a product guarantee.
 - Split mode creates real top-level WPF windows. The hard limit is 12 even when more sessions are monitored.
 - The weekly allowance value is only the latest value observed in local Codex records and can lag another Codex surface.
 - Five-hour allowance parsing remains dormant because the upstream record is not consistently available.
 - API-equivalent cost is an estimate based on local pricing data, not a bill or exact credit conversion.
-- The project does not yet provide a validated stable macOS release or Linux host. The unsigned preview has native Actions evidence, while interactive UI, Gatekeeper, menu/Dock recovery, permission, Spaces/full-screen, display, sleep/wake, real deep-link and long-running resource validation still require real Mac users.
+- `2.2.0` is Windows x64 only. macOS work is intentionally kept outside this release line until real-device validation is available.
 
 ## Next architectural decision
 
-Keep macOS-native adapters in the Mac host and do not move Win32/WPF or AppKit conditionals into Core. Use evidence from volunteer real-Mac testers to calibrate behavior rather than redesigning the shared state engine from automation alone.
+Keep platform-neutral parsing/state code free of WPF and Win32. Future platform hosts must prove their own lifecycle and UI behavior without weakening the Windows contracts.
 
 ## Verification entry points
 

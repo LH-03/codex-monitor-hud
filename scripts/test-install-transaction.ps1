@@ -7,7 +7,7 @@ $profileRoot = Join-Path $fixtureRoot 'profile'
 $localAppData = Join-Path $fixtureRoot 'localappdata'
 $pluginsRoot = Join-Path $profileRoot 'plugins'
 $targetRoot = Join-Path $pluginsRoot 'codex-monitor-hud'
-$rollback22 = Join-Path $pluginsRoot '.codex-monitor-hud-rollback-2.2.0'
+$rollback21 = Join-Path $pluginsRoot '.codex-monitor-hud-rollback-2.1.0'
 $marketplacePath = Join-Path $profileRoot '.agents\plugins\marketplace.json'
 $encoding = New-Object Text.UTF8Encoding($false)
 
@@ -60,30 +60,30 @@ function Get-FixtureVersion {
 try {
     if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $pluginsRoot,(Split-Path -Parent $marketplacePath),$localAppData | Out-Null
-    New-FixturePlugin $targetRoot '3.0.0' $true
-    New-FixturePlugin $rollback22 '2.2.0' $false
+    New-FixturePlugin $targetRoot '2.2.0' $true
+    New-FixturePlugin $rollback21 '2.1.0' $false
     foreach ($unsafeDirectory in @('.agents','nested\bin','nested\obj')) {
-        New-Item -ItemType Directory -Force -Path (Join-Path $rollback22 $unsafeDirectory) | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $rollback21 $unsafeDirectory) | Out-Null
     }
     foreach ($unsafeRelativePath in @('.agents\local.txt','nested\bin\leak.dll','nested\obj\leak.cache','nested\session.jsonl','.env.local','settings.json')) {
-        [IO.File]::WriteAllText((Join-Path $rollback22 $unsafeRelativePath), 'synthetic local-only data', $encoding)
+        [IO.File]::WriteAllText((Join-Path $rollback21 $unsafeRelativePath), 'synthetic local-only data', $encoding)
     }
     [IO.File]::WriteAllText($marketplacePath, '{"name":"personal","plugins":[]}', $encoding)
 
-    $success = Invoke-IsolatedRollback '2.2.0'
-    if ($success.ExitCode -ne 0 -or (Get-FixtureVersion $targetRoot) -ne '2.2.0') {
+    $success = Invoke-IsolatedRollback '2.1.0'
+    if ($success.ExitCode -ne 0 -or (Get-FixtureVersion $targetRoot) -ne '2.1.0') {
         throw ('Successful rollback transaction failed: ' + $success.Stderr)
     }
     foreach ($unsafeRelativePath in @('.agents','nested\bin','nested\obj','nested\session.jsonl','.env.local','settings.json')) {
         if (Test-Path -LiteralPath (Join-Path $targetRoot $unsafeRelativePath)) { throw "Installer copied excluded material: $unsafeRelativePath" }
     }
-    $rollback30 = Join-Path $pluginsRoot '.codex-monitor-hud-rollback-3.0.0'
-    if ((Get-FixtureVersion $rollback30) -ne '3.0.0') { throw 'Successful rollback did not retain the previous 3.0.0 tree.' }
+    $rollback22 = Join-Path $pluginsRoot '.codex-monitor-hud-rollback-2.2.0'
+    if ((Get-FixtureVersion $rollback22) -ne '2.2.0') { throw 'Successful rollback did not retain the previous 2.2.0 tree.' }
     $marketplaceBeforeFailure = [IO.File]::ReadAllBytes($marketplacePath)
 
-    $failure = Invoke-IsolatedRollback '3.0.0'
+    $failure = Invoke-IsolatedRollback '2.2.0'
     if ($failure.ExitCode -eq 0) { throw 'Synthetic post-switch failure unexpectedly succeeded.' }
-    if ((Get-FixtureVersion $targetRoot) -ne '2.2.0') { throw 'Failed post-switch action did not restore the prior installed tree.' }
+    if ((Get-FixtureVersion $targetRoot) -ne '2.1.0') { throw 'Failed post-switch action did not restore the prior installed tree.' }
     $beforeBase64 = [Convert]::ToBase64String($marketplaceBeforeFailure)
     $afterBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($marketplacePath))
     if ($beforeBase64 -ne $afterBase64) {

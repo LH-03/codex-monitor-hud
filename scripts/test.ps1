@@ -9,6 +9,7 @@ $root = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($TestOutputRoot)) {
     $TestOutputRoot = Join-Path $root '.test-output'
 }
+$TestOutputRoot = [IO.Path]::GetFullPath($TestOutputRoot)
 if ([string]::IsNullOrWhiteSpace($NodePath)) {
     $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
     if ($null -ne $nodeCommand) {
@@ -199,31 +200,9 @@ $mcpText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\mc
 $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\SettingsWindow.xaml')
 $installText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install.ps1')
 $manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.codex-plugin\plugin.json') | ConvertFrom-Json
-if ([string]$manifest.version -ne '3.0.0' -or $mcpText -notmatch 'version: "3\.0\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v3.0.0 manifest and MCP version are not aligned.' }
+if ([string]$manifest.version -ne '2.2.0' -or $mcpText -notmatch 'version: "2\.2\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v2.2.0 manifest and MCP version are not aligned.' }
 $installManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'install-manifest.json') | ConvertFrom-Json
-if ([string]$installManifest.version -ne '3.0.0' -or [string]$installManifest.releaseTag -ne 'v3.0.0' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback) { throw 'Deterministic v3 repository-install manifest is invalid.' }
-$macProject = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Mac\CodexMonitorHud.Mac.csproj')
-$macInfo = [xml](Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Mac\Info.plist'))
-$macInstaller = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install-macos.sh')
-$macWorkflow = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.github\workflows\unsigned-macos.yml')
-foreach ($required in @('MacHudController','SettingsWindow','TaskBubbleWindow','MacNotificationService','MacWindowInterop','scripts/test-macos-host-isolated.ps1','scripts/test-macos-install-transaction.sh','scripts/measure-macos-runtime.sh','docs/MACOS_CLOUD_VALIDATION.md')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root ($required -replace '^(MacHudController|SettingsWindow|TaskBubbleWindow|MacNotificationService|MacWindowInterop)$','src-dotnet/CodexMonitorHud.Mac/$1.cs')))) { throw "macOS v3 host file is missing: $required" }
-}
-foreach ($required in @('CODEX_MONITOR_HUD_TEST_CANDIDATE_APP','CODEX_MONITOR_HUD_TEST_FAIL_AFTER_SWITCH','CODEX_MONITOR_HUD_TEST_FAIL_ROLLBACK','pluginRollbackPath','update-marketplace.mjs','--health-check')) {
-    if ($macInstaller -notmatch [regex]::Escape($required)) { throw "macOS transactional installer path is missing: $required" }
-}
-$macController = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Mac\MacHudController.cs')
-$macInterop = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Mac\MacWindowInterop.cs')
-foreach ($required in @('passthrough-off.signal','Disable click-through','SetMousePassthrough(false)')) {
-    if ($macController -notmatch [regex]::Escape($required)) { throw "macOS click-through recovery path is missing: $required" }
-}
-if ($macInterop -notmatch 'setIgnoresMouseEvents:' -or $macInterop -notmatch 'HandleDescriptor.*NSWindow') { throw 'macOS native click-through adapter is missing or not restricted to NSWindow.' }
-foreach ($required in @('macos-15','osx-arm64','Functional host smoke matrix','Isolated app/plugin/settings/marketplace transaction','SHA256SUMS.txt')) {
-    if ($macWorkflow -notmatch [regex]::Escape($required)) { throw "Unsigned macOS workflow gate is missing: $required" }
-}
-if ($macWorkflow -match 'macos-15-intel' -or $macWorkflow -match 'CodexMonitorHUD-macos-x64\.zip') { throw 'Unsigned macOS workflow must remain scoped to Apple silicon.' }
-if ($macProject -notmatch '<Version>3\.0\.0</Version>' -or $macProject -notmatch 'Avalonia\.Desktop' -or $macInfo.plist.dict.string -notcontains '3.0.0') { throw 'macOS project, Avalonia host, or bundle version is not aligned to v3.0.0.' }
-if ($macProject -notmatch 'codex-monitor-hud-256\.png' -or -not (Test-Path -LiteralPath (Join-Path $root 'assets\codex-monitor-hud-256.png'))) { throw 'macOS PNG status-item asset is missing.' }
+if ([string]$installManifest.version -ne '2.2.0' -or [string]$installManifest.releaseTag -ne 'v2.2.0' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v2.2.0 repository-install manifest is invalid.' }
 $dotnetRequired = @(
     'CodexMonitorHud.slnx',
     'src-dotnet/CodexMonitorHud.Core/CodexMonitorHud.Core.csproj',
@@ -237,7 +216,7 @@ $dotnetRequired = @(
     'scripts/compare-runtime-performance.ps1'
 )
 foreach ($relativePath in $dotnetRequired) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v3.0.0 compiled architecture file is missing: $relativePath" }
+    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v2.2.0 compiled architecture file is missing: $relativePath" }
 }
 $coreProjectText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core\CodexMonitorHud.Core.csproj')
 $coreSourceText = (Get-ChildItem -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core') -Recurse -Filter *.cs | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_.FullName }) -join "`n"
@@ -299,14 +278,15 @@ foreach ($localOnlyName in @('private','AGENTS.md','WORKSPACE_STATE.md')) {
 foreach ($localOnlyName in @('.agents','.codex','node_modules','sessions','logs','archive')) {
     if ($installText -notmatch [regex]::Escape("'$localOnlyName'")) { throw "Installer must exclude local-only '$localOnlyName' material." }
 }
-foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','scripts/prepare-delivery.ps1')) {
+foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','docs/MACOS_PREVIEW_TESTING.md','scripts/prepare-delivery.ps1')) {
     if ($installText -notmatch [regex]::Escape("'$localOnlyPath'")) { throw "Installer must exclude local-only '$localOnlyPath' material." }
 }
 if ($installText -notmatch '\$excludedRootNames' -or $installText -notmatch '\$excludedRelativePaths') { throw 'Installer exclusion boundary is missing.' }
 $releaseText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\prepare-release.ps1')
-foreach ($required in @("[string]`$Version = '3.0.0'",'$excludedDirectoryNames',"'.agents'","'.codex'","'bin'","'obj'",'$excludedRelativePaths')) {
-    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 3.0.0 default '$required' is missing." }
+foreach ($required in @("[string]`$Version = '2.2.0'",'$excludedDirectoryNames',"'.agents'","'.codex'","'bin'","'obj'",'$excludedRelativePaths')) {
+    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 2.2.0 default '$required' is missing." }
 }
+if ([string]$installManifest.platforms.'windows-x64'.asset -ne 'CodexMonitorHUD-windows-x64.zip' -or $releaseText -notmatch [regex]::Escape("'CodexMonitorHUD-windows-x64.zip'")) { throw 'Release asset name and Windows install manifest are not aligned.' }
 if ($installText -notmatch 'DefaultLanguage' -or $installText -notmatch 'Test-Path -LiteralPath \$settingsPath') { throw 'First-install prompt-language selection or upgrade-preservation guard is missing.' }
 foreach ($required in @('RollbackVersion','Switch-InstalledTree','.codex-monitor-hud-stage-','.codex-monitor-hud-rollback-','compare-runtime-performance.ps1')) {
     if ($installText -notmatch [regex]::Escape($required)) { throw "Transactional install or rollback path '$required' is missing." }
