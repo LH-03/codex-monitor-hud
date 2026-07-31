@@ -53,9 +53,9 @@ During the latest visual pass, a fully populated top metric row exposed clipping
 - Measurements are machine- and workload-specific; do not treat one number as a product guarantee.
 - Split mode creates real top-level WPF windows. The hard limit is 12 even when more sessions are monitored.
 - The weekly allowance value is only the latest value observed in local Codex records and can lag another Codex surface.
-- Five-hour allowance parsing remains dormant because the upstream record is not consistently available.
+- Weekly and 5-hour allowance windows are shown only when the newest local `rate_limits` record provides them. They are account-level observations, not task sums or live account queries.
 - API-equivalent cost is an estimate based on local pricing data, not a bill or exact credit conversion.
-- `2.2.0` is Windows x64 only. macOS work is intentionally kept outside this release line until real-device validation is available.
+- `2.2.0` is Windows x64 only. macOS is not supported or packaged; community source adaptations are welcome but are outside this project's validation and release scope.
 
 ## Next architectural decision
 

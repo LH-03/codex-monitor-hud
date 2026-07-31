@@ -285,7 +285,7 @@ function Get-HudConfig {
     $result.agentNotifications.durationSeconds=[Math]::Max(4,[Math]::Min(60,[int]$result.agentNotifications.durationSeconds))
     try { [void][Windows.Media.ColorConverter]::ConvertFromString([string]$result.agentNotifications.color) } catch { $result.agentNotifications.color='#FF7C3AED' }
     if (@('uniform','layered','focus') -notcontains [string]$result.transparencyMode) { $result.transparencyMode = 'uniform' }
-    $result.opacity = [Math]::Max(0.15, [Math]::Min(1.0, [double]$result.opacity))
+    $result.opacity = [Math]::Max(0.0, [Math]::Min(1.0, [double]$result.opacity))
     if (@('solid','gradient','image') -notcontains [string]$result.themeStyle.surface) { $result.themeStyle.surface = 'solid' }
     if (@('uniform','uniformToFill','fill','none') -notcontains [string]$result.themeStyle.imageStretch) { $result.themeStyle.imageStretch = 'uniformToFill' }
     if (@('none','soft','deep') -notcontains [string]$result.themeStyle.shadow) { $result.themeStyle.shadow = 'soft' }
@@ -648,6 +648,7 @@ function Get-HudMetrics {
         updated = $Snapshot.Timestamp.ToString('HH:mm:ss')
         activeTasks = if ($null -ne $Snapshot.PSObject.Properties['ActiveTasks']) { Format-HudNumber ([Int64]$Snapshot.ActiveTasks) $Config.numberFormat } else { '1' }
         weeklyRemaining = if ($null -ne $Snapshot.PSObject.Properties['WeeklyRemainingPercent'] -and $null -ne $Snapshot.WeeklyRemainingPercent) { ('{0:0.#}%' -f [double]$Snapshot.WeeklyRemainingPercent) } else { '--' }
+        fiveHourRemaining = if ($null -ne $Snapshot.PSObject.Properties['FiveHourRemainingPercent'] -and $null -ne $Snapshot.FiveHourRemainingPercent) { ('{0:0.#}%' -f [double]$Snapshot.FiveHourRemainingPercent) } else { '--' }
         estimatedCost = if ($null -ne $Snapshot.PSObject.Properties['EstimatedCostUsd']) { Format-HudCost $Snapshot.EstimatedCostUsd } else { '--' }
     }
     foreach ($key in $values.Keys) {

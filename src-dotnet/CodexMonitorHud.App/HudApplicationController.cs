@@ -163,7 +163,7 @@ internal sealed partial class HudApplicationController : IDisposable
     {
         _view.SettingsRequested += OpenSettings;
         _view.ExitRequested += StopByUser;
-        _view.ToggleListRequested += () => SetMode(_settings.MultiTask.DisplayMode == "list" ? "summary" : "list");
+        _view.ToggleListRequested += ToggleTaskList;
         _view.DismissRequested += path =>
         {
             _engine.Dismiss(path);
@@ -447,12 +447,27 @@ internal sealed partial class HudApplicationController : IDisposable
         {
             _view.MergeAll();
         }
+        _view.ResetTaskListVisibility();
         _configDocument["multiTask"]!["displayMode"] = mode;
         SaveAndReloadSettings();
         if (mode == "split")
         {
             _view.SplitAll(_engine.GetVisibleStates(), _settings.MultiTask.MaxSplitBubbles);
         }
+        Render(force: true);
+    }
+
+    private void ToggleTaskList()
+    {
+        // The aggregate button is a list visibility control, not a "merge all"
+        // command. In split mode and when individual bubbles are detached, it
+        // must leave those windows alone.
+        if (_settings.MultiTask.DisplayMode == "summary")
+        {
+            SetMode("list");
+            return;
+        }
+        _view.ToggleTaskListVisibility(_settings);
         Render(force: true);
     }
 

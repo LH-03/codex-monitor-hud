@@ -54,6 +54,9 @@ internal sealed class MainHudView : IDisposable
     private Brush? _summaryBaseBorderBrush;
     private Thickness _summaryBaseBorderThickness;
     private bool _isMainIndicatorCollapsed;
+    // This is intentionally independent from displayMode. A user can retract
+    // the embedded task list without merging any detached task bubbles.
+    private bool? _taskListVisibilityOverride;
     private bool _closing;
     private bool _mousePassthrough;
     private bool _hasSynchronizedStates;
@@ -133,14 +136,14 @@ internal sealed class MainHudView : IDisposable
         RenderMetrics(settings, locale, states, snapshot, paused, initialScanComplete);
         RenderSummaryNotice(settings, settingsLocale, states, now);
 
-        var listExpanded = settings.MultiTask.DisplayMode == "list" && states.Count > 0;
+        var listExpanded = IsTaskListVisible(settings) && states.Count > 0;
         // Keep both expand and collapse in the main metrics row. The visible
         // list supplies the shared width, so the collapse arrow naturally sits
         // at the same far-right edge without creating an empty toolbar row.
         _taskListToggle.Visibility = states.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         _taskListToggle.Content = listExpanded ? "\u2303" : $"{states.Count} \u25BE";
         _taskListToggle.ToolTip = Get(settingsLocale, "activeTasks");
-        RenderTaskList(settings, settingsLocale, locale, states, statusFor, now);
+        RenderTaskList(settings, settingsLocale, locale, states, statusFor, now, listExpanded);
         SynchronizeBubbles(settings, settingsLocale, locale, states, statusFor, now);
         PositionBubbles(settings);
         UpdateQuietMode(settings, settingsLocale, states, statusFor, overallStatus, now);
@@ -157,6 +160,7 @@ internal sealed class MainHudView : IDisposable
         }
         _bubbles.Clear();
         _detached.Clear();
+        _taskListVisibilityOverride = null;
         _listSignature = string.Empty;
     }
 
@@ -168,6 +172,18 @@ internal sealed class MainHudView : IDisposable
         }
         _hasSynchronizedStates = true;
         foreach (var state in states) _seenStatePaths.Add(state.Path);
+        _listSignature = string.Empty;
+    }
+
+    public void ToggleTaskListVisibility(HudSettings settings)
+    {
+        _taskListVisibilityOverride = !IsTaskListVisible(settings);
+        _listSignature = string.Empty;
+    }
+
+    public void ResetTaskListVisibility()
+    {
+        _taskListVisibilityOverride = null;
         _listSignature = string.Empty;
     }
 
@@ -476,9 +492,9 @@ internal sealed class MainHudView : IDisposable
         IReadOnlyDictionary<string, string> metricLocale,
         IReadOnlyList<SessionState> states,
         Func<SessionState, string> statusFor,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool visible)
     {
-        var visible = settings.MultiTask.DisplayMode == "list";
         var stateSignature = visible
             ? string.Join(';', states.Select(state => string.Join(':',
                 state.SessionId.Length > 0 ? state.SessionId : state.Path,
@@ -720,6 +736,9 @@ internal sealed class MainHudView : IDisposable
             UpdateTaskListLiveEntry(settings, locale, metricLocale, state, status, live, now);
         }
     }
+
+    private bool IsTaskListVisible(HudSettings settings) =>
+        _taskListVisibilityOverride ?? settings.MultiTask.DisplayMode == "list";
 
     private void SynchronizeBubbles(
         HudSettings settings,

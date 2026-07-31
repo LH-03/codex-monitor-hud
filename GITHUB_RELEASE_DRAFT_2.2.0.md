@@ -3,7 +3,7 @@
 ## GitHub Desktop commit summary
 
 ```text
-Release 2.2.0: compiled Windows HUD host and transactional upgrades
+Release 2.2.0: compiled Windows HUD, full opacity range, and 5-hour allowance
 ```
 
 ## Commit description
@@ -13,7 +13,8 @@ Release 2.2.0: compiled Windows HUD host and transactional upgrades
 - Add bounded Core discovery, incremental JSONL reading, privacy-safe task state, watcher wake-up, typed configuration, and retained-control rendering.
 - Keep the existing Windows summary, list, split, quiet, tray, click-through recovery, notices, deep links, locales, settings, and local-only privacy contracts.
 - Add staged health checks, compiled-first startup, transactional install/rollback, Release checksum routing, and synthetic compiled/legacy regression coverage.
-- Scope this release to Windows x64; macOS work remains deferred and is not included in 2.2.0.
+- Add the locally observed 5-hour allowance window, full 0–100% opacity, and an independent list-collapse control that does not merge detached bubbles.
+- Scope this release to Windows x64. macOS is not supported or packaged; source-level community adaptations are welcome.
 ```
 
 ## GitHub Release fields
@@ -32,6 +33,9 @@ This release moves the resident HUD to a compiled .NET 10 Windows host while pre
 - compiled summary, list, split and quiet HUD projections;
 - watcher-driven wake-up and bounded parser backpressure;
 - staged health checks, private runtime packaging, transactional upgrades and versioned rollback;
+- full 0–100% opacity, with notification-area recovery when set to 0%;
+- latest locally observed weekly and 5-hour allowance windows, shown only when Codex emits them;
+- an aggregate list control that never merges independently detached bubbles;
 - preserved local-only privacy model, settings compatibility, task numbering, tray recovery, click-through recovery, deep links and MCP notice controls.
 
 ### Platform and installation
@@ -39,7 +43,7 @@ This release moves the resident HUD to a compiled .NET 10 Windows host while pre
 - Supported platform: Windows x64 only.
 - Download `CodexMonitorHUD-windows-x64.zip` and `SHA256SUMS.txt` from this Release, or give Codex the repository URL and ask it to read `INSTALL_WITH_CODEX.md`.
 - Existing settings are preserved. The installer retains the prior version for rollback.
-- macOS is not part of this release.
+- macOS is not supported or packaged. Community source adaptations are outside this project's validation scope.
 
 ### Verification
 

@@ -135,6 +135,7 @@
     "updated": false,
     "activeTasks": true,
     "weeklyRemaining": true,
+    "fiveHourRemaining": true,
     "estimatedCost": false
   }
 }

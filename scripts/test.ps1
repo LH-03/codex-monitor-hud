@@ -133,8 +133,10 @@ if ((Get-LatestHudAllowanceSnapshot @($olderUsage,$newerUsage)).WeeklyRemainingP
 $rateConfig = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'config.default.json') | ConvertFrom-Json
 foreach ($field in $rateConfig.fields.PSObject.Properties) { $rateConfig.fields.($field.Name) = $false }
 $rateConfig.fields.weeklyRemaining = $true
+$rateConfig.fields.fiveHourRemaining = $true
 $rateMetrics = @(Get-HudMetrics $rateSnapshot $rateConfig $locale)
 if (($rateMetrics | Where-Object Key -eq 'weeklyRemaining').Value -ne '82%') { throw 'Remaining allowance metric self-test failed.' }
+if (($rateMetrics | Where-Object Key -eq 'fiveHourRemaining').Value -ne '86%') { throw 'Five-hour allowance metric self-test failed.' }
 $pricingCatalog = Get-HudPricingCatalog $root (Join-Path $root 'pricing.default.json')
 $costSnapshot = [pscustomobject]@{ Model='gpt-5.6-luna'; Input=100; Cached=50; Output=20; TaskInput=1000000; TaskCached=500000; TaskOutput=100000 }
 $costEstimate = Get-HudCostEstimate $costSnapshot $pricingCatalog
@@ -270,7 +272,7 @@ foreach ($required in @('hudHeartbeatIsFresh','hudRestartAttempts.length >= 3','
 }
 if ($mcpText -notmatch 'monitor_hud_disable_click_through' -or $mainText -notmatch 'passthrough-off\.signal') { throw 'Click-through recovery tool or signal is missing.' }
 if ($mainText -notmatch 'System\.Windows\.Forms\.NotifyIcon' -or $mainText -notmatch 'Disable-HudMousePassthrough' -or $mainText -notmatch '\$trayZh\.disableMousePassthrough' -or $mainText -notmatch '\$trayIcon\.Text') { throw 'Localized click-through tray recovery entry is missing.' }
-if ($settingsXaml -notmatch 'MousePassthroughCheck' -or $settingsXaml -notmatch 'TickFrequency="0\.1"' -or $settingsXaml -notmatch 'OpacitySlider[^>]+Minimum="0\.15"') { throw 'Click-through setting or low/smooth opacity controls are missing.' }
+if ($settingsXaml -notmatch 'MousePassthroughCheck' -or $settingsXaml -notmatch 'TickFrequency="0\.1"' -or $settingsXaml -notmatch 'OpacitySlider[^>]+Minimum="0"') { throw 'Click-through setting or full opacity-range controls are missing.' }
 if ($settingsXaml -notmatch 'TaskRetentionCombo' -or $settingsXaml -notmatch 'Retention1800Item' -or $settingsXaml -notmatch 'TerminalExitModeCombo' -or $settingsXaml -notmatch 'TerminalExitBeaconItem' -or $mainText -match 'TerminalSilent.*return \$false' -or $mainText -notmatch 'Start-HudTerminalExitAnimation' -or $mainText -notmatch 'Update-TerminalExitState' -or $mainText -notmatch 'Get-HudSessionIdentity[\s\S]{0,2400}-TotalCount 64' -or $mainText -notmatch 'record\.payload\.cwd' -or $mainText -notmatch 'Set-HudSessionIdentityFromRecord' -or $mainText -notmatch 'IdentityMetadataFound' -or (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch "@\('fade','gentle','focus','beacon'\)") { throw 'Completed-task retention/departure, workspace identity, or late-metadata filter is missing.' }
 foreach ($localOnlyName in @('private','AGENTS.md','WORKSPACE_STATE.md')) {
     if ($installText -notmatch [regex]::Escape("'$localOnlyName'")) { throw "Installer must exclude local-only '$localOnlyName' material." }
@@ -297,6 +299,10 @@ foreach ($required in @('ThemeWorkshopDropZone','ThemeImportButton','AttentionHe
 foreach ($required in @('MultiTaskTab','DisplayModeCombo','ListStyleCombo','ListDensityCombo','ListDetailCombo','TaskNameModeCombo','MaxSplitCombo','AutoSplitCheck','BubbleFieldModel','PositionCustomItem','SummaryAttentionModeCombo','ListAttentionModeCombo','TaskBubbleAttentionModeCombo','SummaryAttentionFlowItem','SummaryAttentionFocusItem','DotAttentionEnabledCheck','DotPatternCombo','DotBrightnessCombo','DotSpeedCombo','DotBreathingCheck','TransparencyModeCombo')) {
     if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Multi-task setting '$required' is missing." }
 }
+foreach ($required in @('FieldFiveHourRemaining','fiveHourRemaining','ToggleTaskListVisibility','ResetTaskListVisibility')) {
+    if ($settingsXaml -notmatch [regex]::Escape($required) -and $mainText -notmatch [regex]::Escape($required) -and $compiledSourceText -notmatch [regex]::Escape($required) -and (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch [regex]::Escape($required)) { throw "Five-hour allowance or detached-list regression path '$required' is missing." }
+}
+if ($mainText -notmatch 'aggregate toggle only opens or retracts the embedded list' -or $mainText -match '\$taskListToggleButton\.Add_Click\(\{\s*if \(\[string\]\$config\.multiTask\.displayMode -eq ''list''\) \{ Set-MultiTaskDisplayMode') { throw 'Legacy list toggle still merges detached bubbles.' }
 foreach ($required in @('FieldEstimatedCost','BubbleFieldEstimatedCost','PricingPathText','PricingStatusText')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Cost-estimate setting '$required' is missing." } }
 foreach ($required in @('AgentNotificationEnabledCheck','AgentNotificationPermissionCombo','AgentNotificationModeCombo','AgentNotificationGlowPresetCombo','AgentNotificationIntensityCombo','AgentNotificationDurationCombo','AgentNotificationColorText')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Codex notification setting '$required' is missing." } }
 foreach ($required in @('BehaviorTab','OpenTaskOnDoubleClickCheck','IdleIndicatorEnabledCheck','IdleIndicatorDelayCombo','IdleIndicatorLayoutCombo','IdleIndicatorTaskStyleCombo','IdleIndicatorBubblesCheck','ContextMetricVisibleCheck','ContextAlertsEnabledCheck','ContextThreshold1Text','ContextThreshold2Text','ContextThreshold3Text')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Behavior setting '$required' is missing." } }

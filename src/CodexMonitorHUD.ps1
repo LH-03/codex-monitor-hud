@@ -24,7 +24,9 @@ param(
     [ValidateSet('none','overall','horizontal','vertical')][string]$PreviewQuietLayout = 'none',
     [ValidateSet('dot','bar')][string]$PreviewQuietTaskStyle = 'dot',
     [ValidateSet('uniform','layered','focus')][string]$PreviewTransparencyMode = 'uniform',
-    [double]$PreviewOpacity = 0,
+    # -1 means "leave the selected/default opacity alone"; 0 is a valid
+    # explicit preview value for a fully transparent HUD.
+    [double]$PreviewOpacity = -1,
     [double]$PreviewFontSize = 0
 )
 
@@ -523,7 +525,7 @@ $bubbleFieldControls = [ordered]@{
 }
 
 $fieldControls = [ordered]@{}
-foreach ($key in @('Input','Cached','Uncached','Output','Reasoning','CallTotal','TaskTotal','Context','Model','Updated','ActiveTasks','WeeklyRemaining','EstimatedCost')) {
+foreach ($key in @('Input','Cached','Uncached','Output','Reasoning','CallTotal','TaskTotal','Context','Model','Updated','ActiveTasks','WeeklyRemaining','FiveHourRemaining','EstimatedCost')) {
     $control = Find-Control $settings ('Field' + $key)
     $fieldControls[[string]$control.Tag] = $control
 }
@@ -2643,9 +2645,10 @@ function Export-HudPreview {
         $script:config.attention.taskBubbleMode = $PreviewAttentionMode
     }
     $script:config.transparencyMode = $PreviewTransparencyMode
-    if ($PreviewOpacity -gt 0) { $script:config.opacity = [Math]::Max(0.15, [Math]::Min(1.0, $PreviewOpacity)) }
+    if ($PreviewOpacity -ge 0) { $script:config.opacity = [Math]::Max(0.0, [Math]::Min(1.0, $PreviewOpacity)) }
     if ($PreviewFontSize -gt 0) { $script:config.fontSize = [Math]::Round($PreviewFontSize, 1) }
     $script:config.fields.weeklyRemaining = $true
+    $script:config.fields.fiveHourRemaining = $true
     $script:locale = Get-RuntimeHudLocale ([string]$config.language)
     $script:settingsLocale = if ([string]$config.language -eq 'symbols') { Get-RuntimeHudLocale 'en' } else { $locale }
     $script:snapshot = [pscustomobject]@{
@@ -3833,8 +3836,16 @@ if ($SettingsHost) {
 }
 
 $taskListToggleButton.Add_Click({
-    if ([string]$config.multiTask.displayMode -eq 'list') { Set-MultiTaskDisplayMode 'summary' }
-    else { Set-MultiTaskDisplayMode 'list' }
+    # The aggregate toggle only opens or retracts the embedded list.  It must
+    # never merge independently detached task bubbles as a side effect.
+    if ([string]$config.multiTask.displayMode -eq 'list') {
+        $config.multiTask.displayMode = if ($splitWindows.Count -gt 0) { 'split' } else { 'summary' }
+    } else {
+        $config.multiTask.displayMode = 'list'
+    }
+    Save-HudConfig $paths $config
+    Render-Hud
+    Update-ContextMenuText
     $_.Handled = $true
 })
 

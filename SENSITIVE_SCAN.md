@@ -1,10 +1,10 @@
 # Sensitive information scan
 
-## Windows 2.2.0 release candidate - 2026-07-23
+## Windows 2.2.0 release candidate - 2026-07-30
 
-- Windows-only package staging excludes `private/`, local settings, session JSONL, logs, databases, test output, local agent directories, compiled source `bin/obj`, and the deferred macOS preview guide.
+- Windows-only package staging excludes `private/`, local settings, session JSONL, logs, databases, test output, local agent directories, and compiled source `bin/obj`.
 - No real session content was read, copied, packaged or uploaded; all runtime fixtures use synthetic paths and records.
-- Final local ZIP audit: `657` files, exact archive/file-list parity, `0` Mac paths, `0` forbidden private/state/data paths, and `0` strict maintainer-path, GitHub-token, OpenAI-token, or private-key-pattern hits. The exact package hash is emitted with each freshly generated Release ZIP in `SHA256SUMS.txt`.
+- Final local ZIP audit: `657` files (`662` ZIP entries including directories), `0` macOS paths, and `0` forbidden private/state/data paths. The prepared archive is `artifacts/release-v2.2.0-20260730-235002/CodexMonitorHUD-windows-x64.zip`; SHA-256 is `55d4ba0018e232ac73fd9b53b71bce0f6e5393474c748b566e033057792315e5`.
 
 ## 2.2.0 locally verified source - 2026-07-18
 

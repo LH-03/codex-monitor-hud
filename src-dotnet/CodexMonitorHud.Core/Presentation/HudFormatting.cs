@@ -103,6 +103,9 @@ public static class HudFormatting
             ["weeklyRemaining"] = snapshot.WeeklyRemainingPercent.HasValue
                 ? snapshot.WeeklyRemainingPercent.Value.ToString("0.#", English) + "%"
                 : "--",
+            ["fiveHourRemaining"] = snapshot.FiveHourRemainingPercent.HasValue
+                ? snapshot.FiveHourRemainingPercent.Value.ToString("0.#", English) + "%"
+                : "--",
             ["estimatedCost"] = FormatCost(snapshot.EstimatedCostUsd)
         };
 

@@ -15,6 +15,7 @@
   "updated": "Updated",
   "activeTasks": "Active tasks",
   "weeklyRemaining": "Weekly remaining",
+  "fiveHourRemaining": "5-hour remaining",
   "estimatedCost": "Est. API cost",
   "estimatedCostTooltip": "An API-list-price equivalent, not a subscription bill, actual charge, or exact credits. Subscribers can use it to gauge Codex usage scale and equivalent value—and perhaps confirm the subscription earned its keep today. When Work and Codex share an agentic allowance, this HUD still sees only local Codex sessions and cannot measure or separate Work usage.",
   "multiTaskSummary": "{tasks} tasks · {models} models",

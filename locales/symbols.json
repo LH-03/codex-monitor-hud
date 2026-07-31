@@ -15,6 +15,7 @@
   "updated": "◷",
   "activeTasks": "▦",
   "weeklyRemaining": "◒",
+  "fiveHourRemaining": "◔",
   "estimatedCost": "≈$",
   "estimatedCostTooltip": "API-price equivalent only; not a bill or exact credits. Local Codex sessions only; shared Work usage is not measured.",
   "multiTaskSummary": "{tasks} ▦ · {models} ◉",

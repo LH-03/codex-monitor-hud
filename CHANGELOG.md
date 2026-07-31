@@ -2,6 +2,9 @@
 
 ## 2.2.0 - Windows release candidate
 
+- Permit the full 0% to 100% HUD opacity range in Settings, configuration normalization, live preview, and the compatible fallback host.
+- Expose the latest locally observed 5-hour allowance alongside the existing weekly allowance. The account-level value is displayed only when Codex emits it; it is never guessed or summed across tasks.
+- Decouple the aggregate list expand/collapse control from split-bubble ownership, so retracting the list leaves detached task bubbles open.
 - Move the resident monitor from the monolithic Windows PowerShell process to a compiled .NET 10 host while retaining the complete Settings host on demand and a `-Legacy` rollback path.
 - Introduce a platform-neutral `CodexMonitorHud.Core` for bounded discovery, incremental JSONL streaming, privacy-safe identity, lifecycle, accounting, configuration, pricing, and presentation rules.
 - Add the Windows WPF shell with summary/list/split/quiet surfaces, retained-control updates, independent task bubbles, tray recovery, click-through, DPI integration, attention choreography, MCP notices, and task deep links.
@@ -11,7 +14,7 @@
 - Add adaptive polling with watcher-driven wake-up, bounded parser backpressure, incremental official-title refresh, bounded MCP heartbeat restart, and same-fixture legacy/compiled process metrics.
 - Preserve all `2.1.0` defaults, state/privacy contracts, XAML assets, locale catalogs, settings storage, and optional-feature opt-in behavior.
 - Define a deterministic Windows repository-link install protocol: prefer an exact checksummed Release, fall back to a trusted source build only when the Release is missing, preserve settings, health-check before switching, and retain a rollback copy.
-- macOS work is intentionally excluded from this release line and remains on the separate refactor history until it receives real-device validation.
+- macOS is not supported or packaged. Source-level adaptation by community users is welcome, but this project releases and validates Windows only.
 
 ## 2.1.0 - 2026-07-16
 
@@ -110,7 +113,7 @@
 - Replace system ComboBox chrome with rounded glass selection controls, vector chevrons and a matching elevated option menu.
 - Add explicit completed and aborted states from local lifecycle events, plus configurable return-to-work reminders for completion, abort/error and natural settling.
 - Let the summary bubble, relevant list item and independent task bubble use different reminder styles; list and task-bubble reminders can animate the entire relevant surface.
-- Lower the opacity floor to 15% and add uniform, layered-clarity and smart-focus transparency behaviors that preserve important numbers and status visibility.
+- Add uniform, layered-clarity and smart-focus transparency behaviors that preserve important numbers and status visibility.
 - Harden number allocation with a bounded O(1) reuse queue and validate 10,000 allocation/release cycles with 64 continuously visible tasks.
 - Ignore blank JSONL lines safely during concurrent file churn instead of allowing a dispatcher error to close split mode.
 - Refactor settings into General, Multi-task, Metrics and Appearance tabs with a concise explanation of multi-task behavior.

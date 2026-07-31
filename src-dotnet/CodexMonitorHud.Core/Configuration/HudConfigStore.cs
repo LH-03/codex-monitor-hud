@@ -153,7 +153,7 @@ public static partial class HudConfigStore
         }
 
         SetAllowed(result, "uniform", new[] { "uniform", "layered", "focus" }, "transparencyMode");
-        SetDouble(result, Math.Clamp(GetDouble(result, 0.97, "opacity"), 0.15, 1), "opacity");
+        SetDouble(result, Math.Clamp(GetDouble(result, 0.97, "opacity"), 0, 1), "opacity");
         SetAllowed(result, "solid", new[] { "solid", "gradient", "image" }, "themeStyle", "surface");
         SetAllowed(result, "uniformToFill", new[] { "uniform", "uniformToFill", "fill", "none" }, "themeStyle", "imageStretch");
         SetAllowed(result, "soft", new[] { "none", "soft", "deep" }, "themeStyle", "shadow");

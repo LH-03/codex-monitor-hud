@@ -1,10 +1,12 @@
 # Test results
 
-Updated: 2026-07-23
+Updated: 2026-07-30
 
 ## Current result
 
-The repository source is the Windows `2.2.0` release candidate. It is prepared as a Windows x64-only package; macOS work is excluded from this release line.
+The repository source is the Windows `2.2.0` release candidate. It is prepared as a Windows x64-only package; macOS is not supported or packaged.
+
+The final 2026-07-30 pass verified the new 0–100% opacity normalization, the separate 5-hour allowance metric, and the list-collapse path that preserves detached bubbles. The full source suite, Core executable (13/13), staged compiled runtime checks, 12-task legacy/compiled comparison, transactional installer, installed compiled-host heartbeat, package audit, and checksum generation all passed.
 
 The source regression, Core regression executable, compiled list/split runtime gate, 12-task legacy/compiled comparison, behavior runtime, and list/split terminal-departure gates passed on 2026-07-23. The isolated install transaction gate also passes its forced post-switch failure recovery path.
 
@@ -17,11 +19,14 @@ These results use synthetic task names and isolated state/profile roots. They do
 - Three-project solution build (`Core`, `Core.Tests`, `App`): PASS with 0 warnings and 0 errors.
 - `CodexMonitorHud.Core` regression executable: PASS 13/13.
 - Compiled Windows isolated runtime: PASS for 5-task list and split modes.
+- Full opacity range: PASS for 0% and 100% configuration acceptance; the Settings slider, live preview, compiled host, and legacy fallback share the same 0–1 range.
+- 5-hour allowance: PASS for parsing, formatting, locale parity, Settings selection, synthetic English/Chinese previews, and current-session aggregation semantics.
+- Detached-bubble list collapse: PASS by source and isolated legacy/compiled list/split regression coverage; the aggregate toggle does not invoke Merge all.
 - Same-fixture legacy/compiled comparison: PASS for 12-task list and split modes. On this machine, compiled private memory was 68.4% of legacy in list mode and 70.3% in split mode; these are local measurements, not product guarantees.
 - Isolated behavior runtime: PASS for quiet-task retention, activity expansion and three context stages.
 - Isolated terminal departure: PASS for list and split beacon modes.
 - Deterministic Windows repository install protocol: PASS for three vague prompts, verified Release preference, missing-Release source fallback, checksum stop, settings preservation, repair and rollback.
-- Final local Release package audit: PASS with 657 files, matching ZIP file list and SHA-256, no Mac paths, and no forbidden private/state/data paths or strict credential-pattern hits.
+- Final local Release package audit: PASS with 657 files (662 ZIP entries including directories), matching SHA-256, no macOS paths, and no forbidden private/state/data paths.
 
 ## Source and parser suite
 
@@ -129,8 +134,8 @@ The gate also kept compiled working set below its 1.10× baseline ceiling in bot
 
 ## Installed-copy validation
 
-- Transactional installation completed successfully with an existing settings file preserved.
-- The installed compiled health check passed and a fresh normal launch produced a current heartbeat from the compiled `dotnet` host.
+- Transactional installation completed successfully on 2026-07-30 with the existing Simplified Chinese settings file preserved.
+- The installed manifest reports `2.2.0`; the compiled `dotnet` host produced a current heartbeat and the notification-area marketplace entry and Settings shortcut are present.
 - All 144 non-runtime package files matched source to installed copy with no missing, extra, or differing files. Runtime manifest, application, and host-file hashes also matched; the installed health check validated the remaining staged runtime.
 - Marketplace discovery reports `codex-monitor-hud` as available. No commit, push, release, ZIP, or GitHub write was performed.
 

@@ -15,6 +15,7 @@
   "updated": "更新时间",
   "activeTasks": "活跃任务",
   "weeklyRemaining": "周额度剩余",
+  "fiveHourRemaining": "5 小时额度剩余",
   "estimatedCost": "API 成本估算",
   "estimatedCostTooltip": "按公开 API 文本价格换算的近似值，不是订阅账单、实际扣费或精确 credits。订阅用户可用它观察 Codex 使用规模和等价价值——顺便确认今天的订阅没白开。Work 与 Codex 共享 agentic 使用额度时，本 HUD 也只能统计本机 Codex 会话，无法统计或拆分 Work 的消耗。",
   "multiTaskSummary": "{tasks} 个任务 · {models} 个模型",

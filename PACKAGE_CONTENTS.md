@@ -10,9 +10,9 @@
 - `locales/`: Simplified Chinese, English and symbol labels.
 - `themes/`: ten data-driven theme definitions that forks can extend without editing runtime code.
 - `docs/THEMING_AND_UI_EXTENSIONS.md`: public theme schema, status palette and XAML extension guide.
-- `docs/AI_PORTING_AND_CUSTOMIZATION_GUIDE.md`: deep project model for AI maintainers, macOS/Linux ports and other agent-runtime adapters.
+- `docs/AI_PORTING_AND_CUSTOMIZATION_GUIDE.md`: deep project model for AI maintainers and community source adaptations to other agent runtimes.
 - `assets/`: icon and synthetic preview screenshots.
-- Historical material remains for traceability. The `2.2.0` package is Windows x64 only; macOS work is not included in this release line.
+- Historical material remains for traceability. The `2.2.0` package is Windows x64 only; macOS is not supported or packaged.
 - `docs/PROJECT_STATUS.md`: current contracts, implementation state, verified display matrix, known limits, and migration boundary.
 - `INSTALL_WITH_CODEX.md` and `install-manifest.json`: canonical low-reasoning repository installation protocol, platform/asset routing, checksum stop rules, settings preservation and rollback operations.
 - `LOCALIZATION.md`: BCP 47 locale naming, human-review rules and steps for adding another language.

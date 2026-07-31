@@ -328,6 +328,12 @@ void TestFormatting()
     Equal("999,999", HudFormatting.FormatNumber(999_999, "auto"), "auto exact threshold");
     Equal("1M", HudFormatting.FormatNumber(1_000_000, "auto"), "compact million");
     Equal("~$1.15", HudFormatting.FormatCost(1.15), "cost format");
+    var metrics = HudFormatting.GetMetrics(
+        new HudSnapshot { FiveHourRemainingPercent = 86, WeeklyRemainingPercent = 82 },
+        new Dictionary<string, bool> { ["fiveHourRemaining"] = true },
+        new Dictionary<string, string> { ["fiveHourRemaining"] = "5-hour remaining" },
+        "exact");
+    Equal("86%", metrics.Single().Value, "five-hour allowance formatting");
     Equal(3, HudFormatting.GetContextAlertLevel(98, new[] { 75d, 90d, 98d }), "context level");
     Equal("75,90,98", string.Join(',', HudFormatting.ParseContextAlertThresholds(new[] { "98", "75", "90" })!), "threshold normalization");
     NotNull(HudFormatting.GetTaskDeepLink("019f69dc-91bf-7c33-b47b-604b9eaa04b6"), "safe deep link");
@@ -357,13 +363,13 @@ void TestConfiguration()
         File.Copy(Path.Combine(repositoryRoot, "locales", "en.json"), Path.Combine(pluginRoot, "locales", "en.json"));
         var paths = HudPaths.Create(pluginRoot, localRoot, home);
         Directory.CreateDirectory(paths.StateRoot);
-        File.WriteAllText(paths.ConfigPath, """{"multiTask":"corrupt","behavior":{"contextAlerts":"corrupt"},"opacity":0.01,"alwaysOnTop":"yes","fontSize":"large","fields":{"context":"yes"},"statusColors":{"active":17}}""");
+        File.WriteAllText(paths.ConfigPath, """{"multiTask":"corrupt","behavior":{"contextAlerts":"corrupt"},"opacity":-0.01,"alwaysOnTop":"yes","fontSize":"large","fields":{"context":"yes"},"statusColors":{"active":17}}""");
         var config = HudConfigStore.Load(paths);
         Equal("summary", config["multiTask"]!["displayMode"]!.GetValue<string>(), "object/scalar corruption recovery");
-        Equal(0.15d, config["opacity"]!.GetValue<double>(), "opacity clamp");
+        Equal(0d, config["opacity"]!.GetValue<double>(), "opacity clamp");
         var settings = HudSettings.From(config);
         Equal("summary", settings.MultiTask.DisplayMode, "typed settings projection");
-        Equal(0.15d, settings.Opacity, "typed numeric settings projection");
+        Equal(0d, settings.Opacity, "typed numeric settings projection");
         Equal(true, settings.AlwaysOnTop, "wrong scalar type retains default boolean");
         Equal(14d, settings.FontSize, "wrong scalar type retains default number");
         Equal(false, settings.Fields["context"], "wrong nested scalar type retains default");
