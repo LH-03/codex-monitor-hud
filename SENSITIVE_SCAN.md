@@ -1,5 +1,12 @@
 # Sensitive information scan
 
+## Windows 2.2.1 maintenance source - 2026-08-03
+
+- The public Release package boundary remains unchanged: it excludes `private/`, local settings, session JSONL, logs, databases, Git/agent metadata, test output, and compiled `bin/obj` directories.
+- The separate owner-only transfer snapshot is explicitly outside the public Release workflow. It may contain the owner's private project handoffs, toolchains, and Git history for a physical cross-PC move; it must never be uploaded as a GitHub Release asset.
+- The public continuation guide and project ledger contain procedures and synthetic examples only. They contain no live Codex records, settings values, credentials, or task names.
+- Exact Release and transfer-archive SHA-256 values are generated beside their artifacts, not copied into this source file, so the source package does not depend on a self-referential checksum.
+
 ## Windows 2.2.0 release candidate - 2026-07-30
 
 - Windows-only package staging excludes `private/`, local settings, session JSONL, logs, databases, test output, local agent directories, and compiled source `bin/obj`.

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "product": "Codex Monitor HUD",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "repository": "https://github.com/LH-03/codex-monitor-hud",
-  "releaseTag": "v2.2.0",
+  "releaseTag": "v2.2.1",
   "checksumAsset": "SHA256SUMS.txt",
   "platforms": {
     "windows-x64": {

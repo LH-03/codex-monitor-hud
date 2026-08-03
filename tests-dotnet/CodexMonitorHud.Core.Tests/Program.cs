@@ -450,7 +450,7 @@ void TestPricing()
     };
     var estimate = catalog.Estimate(snapshot);
     NotNull(estimate, "known model estimate");
-    Equal(1.15d, Math.Round(estimate!.CostUsd, 6), "cached-input pricing");
+    Equal(0.23d, Math.Round(estimate!.CostUsd, 6), "reduced cached-input pricing");
     Equal<CostEstimate?>(null, catalog.Estimate(snapshot with { Model = "not-priced" }), "unknown model is not guessed");
 }
 

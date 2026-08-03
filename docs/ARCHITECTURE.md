@@ -20,7 +20,7 @@ The resident hot path is compiled C#. `CodexMonitorHud.Core` has no WPF, Windows
 
 ## Scope
 
-Codex Monitor HUD 2.2.0 is a local Windows projection over recent Codex Desktop session records. It does not maintain a historical database and does not modify Codex sessions.
+Codex Monitor HUD 2.2.1 is a local Windows projection over recent Codex Desktop session records. It does not maintain a historical database and does not modify Codex sessions.
 
 ```text
 Codex local session JSONL + session_index.jsonl

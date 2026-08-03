@@ -1,10 +1,12 @@
 # Test results
 
-Updated: 2026-07-30
+Updated: 2026-08-03
 
 ## Current result
 
-The repository source is the Windows `2.2.0` release candidate. It is prepared as a Windows x64-only package; macOS is not supported or packaged.
+The repository source is the Windows `2.2.1` release candidate. It is prepared as a Windows x64-only package; macOS is not supported or packaged.
+
+The 2026-08-03 maintenance pass refreshed the local standard API list-price snapshot: GPT-5.6 Terra is `$2.00 / $0.20 / $12.00` and GPT-5.6 Luna is `$0.20 / $0.02 / $1.20` per million input / cached-input / output tokens. The cost regression correctly prices the synthetic Luna sample at `$0.230` after cached input is excluded from the uncached-input component.
 
 The final 2026-07-30 pass verified the new 0–100% opacity normalization, the separate 5-hour allowance metric, and the list-collapse path that preserves detached bubbles. The full source suite, Core executable (13/13), staged compiled runtime checks, 12-task legacy/compiled comparison, transactional installer, installed compiled-host heartbeat, package audit, and checksum generation all passed.
 
@@ -27,6 +29,14 @@ These results use synthetic task names and isolated state/profile roots. They do
 - Isolated terminal departure: PASS for list and split beacon modes.
 - Deterministic Windows repository install protocol: PASS for three vague prompts, verified Release preference, missing-Release source fallback, checksum stop, settings preservation, repair and rollback.
 - Final local Release package audit: PASS with 657 files (662 ZIP entries including directories), matching SHA-256, no macOS paths, and no forbidden private/state/data paths.
+
+## Windows 2.2.1 candidate
+
+- `scripts/test-dotnet.ps1`: PASS, Core regression executable `13/13`.
+- `scripts/build-dotnet.ps1 -RunRuntimeTests`: PASS with `0` warnings and `0` errors; compiled 5-task list and split runtime gates passed.
+- `scripts/test.ps1 -TestOutputRoot .test-output-2.2.1`: PASS, including transactional installation, deterministic repository install, parser/accounting, allowance, price, locale, UI-contract, package-boundary, and 10,000-task-churn checks.
+- Price snapshot regression: PASS in both Core and PowerShell hosts. Unknown models remain unpriced and cost estimates remain opt-in.
+- Second-PC transfer-kit script: source-contract coverage added. The owner-snapshot artifact is verified separately and is intentionally not a public Release asset.
 
 ## Source and parser suite
 

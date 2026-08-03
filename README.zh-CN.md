@@ -74,10 +74,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-releas
 
 安装包自带私有 .NET 运行时。源码开发需要 Windows PowerShell 5.1+、供插件宿主使用的 Node.js，以及仓库中的工具链。
 
-提交和发布时可直接使用 [GITHUB_RELEASE_DRAFT_2.2.0.md](GITHUB_RELEASE_DRAFT_2.2.0.md)：其中包括 GitHub Desktop 可复制的提交文案、Release 正文、资产名称、校验和流程和上传前检查表。
+提交和发布时可直接使用 [GITHUB_RELEASE_DRAFT_2.2.1.md](GITHUB_RELEASE_DRAFT_2.2.1.md)：其中包括 GitHub Desktop 可复制的提交文案、Release 正文、资产名称、校验和流程和上传前检查表。若要通过 U 盘等私有渠道转交另一台 Windows 电脑，可运行 `scripts/prepare-transfer-kit.ps1`；它会打包公开源码、Release 产物和交接指南，不会带入本机设置或 Codex 会话数据。
 
 ## 当前状态
 
-`2.2.0` 是 Windows x64 Release 候选版。常驻监控已迁移为编译型 .NET/WPF 宿主；设置进程与 `-Legacy` 回退路径仍保留用于恢复。这是独立、非官方项目，与 OpenAI 没有隶属或背书关系。
+`2.2.1` 是 Windows x64 Release 候选版。可选成本显示仅使用离线的标准 API 标价快照，不是 Codex 积分或订阅账单计算。常驻监控已迁移为编译型 .NET/WPF 宿主；设置进程与 `-Legacy` 回退路径仍保留用于恢复。这是独立、非官方项目，与 OpenAI 没有隶属或背书关系。
 
 MIT License.

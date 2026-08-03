@@ -140,7 +140,7 @@ if (($rateMetrics | Where-Object Key -eq 'fiveHourRemaining').Value -ne '86%') {
 $pricingCatalog = Get-HudPricingCatalog $root (Join-Path $root 'pricing.default.json')
 $costSnapshot = [pscustomobject]@{ Model='gpt-5.6-luna'; Input=100; Cached=50; Output=20; TaskInput=1000000; TaskCached=500000; TaskOutput=100000 }
 $costEstimate = Get-HudCostEstimate $costSnapshot $pricingCatalog
-if (-not $pricingCatalog.Loaded -or [Math]::Abs([double]$costEstimate.CostUsd - 1.15) -gt 0.000001 -or (Format-HudCost $costEstimate.CostUsd) -ne '~$1.15') { throw 'Local API-equivalent cost estimate self-test failed.' }
+if (-not $pricingCatalog.Loaded -or [Math]::Abs([double]$costEstimate.CostUsd - 0.23) -gt 0.000001 -or (Format-HudCost $costEstimate.CostUsd) -ne '~$0.230') { throw 'Local API-equivalent cost estimate self-test failed.' }
 $costSnapshot | Add-Member -NotePropertyName EstimatedCostUsd -NotePropertyValue ([double]$costEstimate.CostUsd)
 $costSnapshot | Add-Member -NotePropertyName Uncached -NotePropertyValue 50
 $costSnapshot | Add-Member -NotePropertyName Reasoning -NotePropertyValue 0
@@ -150,7 +150,7 @@ $costSnapshot | Add-Member -NotePropertyName ContextPercent -NotePropertyValue 1
 $costSnapshot | Add-Member -NotePropertyName Timestamp -NotePropertyValue ([DateTimeOffset]::Now)
 $costConfig = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'config.default.json') | ConvertFrom-Json
 foreach($field in $costConfig.fields.PSObject.Properties){$costConfig.fields.($field.Name)=$false};$costConfig.fields.estimatedCost=$true
-if ((@(Get-HudMetrics $costSnapshot $costConfig $locale) | Select-Object -First 1).Value -ne '~$1.15') { throw 'HUD cost metric rendering self-test failed.' }
+if ((@(Get-HudMetrics $costSnapshot $costConfig $locale) | Select-Object -First 1).Value -ne '~$0.230') { throw 'HUD cost metric rendering self-test failed.' }
 $unknownCost = Get-HudCostEstimate ([pscustomobject]@{Model='not-priced';Input=1;Cached=0;Output=1}) $pricingCatalog
 if ($null -ne $unknownCost) { throw 'Unpriced models must not produce a guessed cost.' }
 
@@ -202,9 +202,9 @@ $mcpText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\mc
 $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\SettingsWindow.xaml')
 $installText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install.ps1')
 $manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.codex-plugin\plugin.json') | ConvertFrom-Json
-if ([string]$manifest.version -ne '2.2.0' -or $mcpText -notmatch 'version: "2\.2\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v2.2.0 manifest and MCP version are not aligned.' }
+if ([string]$manifest.version -ne '2.2.1' -or $mcpText -notmatch 'version: "2\.2\.1"' -or [string]$manifest.version -match 'preview') { throw 'Stable v2.2.1 manifest and MCP version are not aligned.' }
 $installManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'install-manifest.json') | ConvertFrom-Json
-if ([string]$installManifest.version -ne '2.2.0' -or [string]$installManifest.releaseTag -ne 'v2.2.0' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v2.2.0 repository-install manifest is invalid.' }
+if ([string]$installManifest.version -ne '2.2.1' -or [string]$installManifest.releaseTag -ne 'v2.2.1' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v2.2.1 repository-install manifest is invalid.' }
 $dotnetRequired = @(
     'CodexMonitorHud.slnx',
     'src-dotnet/CodexMonitorHud.Core/CodexMonitorHud.Core.csproj',
@@ -218,7 +218,7 @@ $dotnetRequired = @(
     'scripts/compare-runtime-performance.ps1'
 )
 foreach ($relativePath in $dotnetRequired) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v2.2.0 compiled architecture file is missing: $relativePath" }
+    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v2.2.1 compiled architecture file is missing: $relativePath" }
 }
 $coreProjectText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core\CodexMonitorHud.Core.csproj')
 $coreSourceText = (Get-ChildItem -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core') -Recurse -Filter *.cs | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_.FullName }) -join "`n"
@@ -285,10 +285,14 @@ foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','docs/MACOS_PREVIEW_
 }
 if ($installText -notmatch '\$excludedRootNames' -or $installText -notmatch '\$excludedRelativePaths') { throw 'Installer exclusion boundary is missing.' }
 $releaseText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\prepare-release.ps1')
-foreach ($required in @("[string]`$Version = '2.2.0'",'$excludedDirectoryNames',"'.agents'","'.codex'","'bin'","'obj'",'$excludedRelativePaths')) {
-    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 2.2.0 default '$required' is missing." }
+foreach ($required in @("[string]`$Version = '2.2.1'",'$excludedDirectoryNames',"'.agents'","'.codex'","'bin'","'obj'",'$excludedRelativePaths')) {
+    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 2.2.1 default '$required' is missing." }
 }
 if ([string]$installManifest.platforms.'windows-x64'.asset -ne 'CodexMonitorHUD-windows-x64.zip' -or $releaseText -notmatch [regex]::Escape("'CodexMonitorHUD-windows-x64.zip'")) { throw 'Release asset name and Windows install manifest are not aligned.' }
+$transferText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\prepare-transfer-kit.ps1')
+foreach ($required in @('ReleasePackage','IncludeOwnerPrivate','START_HERE_ON_SECOND_PC.md','CodexMonitorHUD-windows-x64.zip','TRANSFER_KIT_CONTENTS.md')) {
+    if ($transferText -notmatch [regex]::Escape($required)) { throw "Second-PC transfer-kit contract '$required' is missing." }
+}
 if ($installText -notmatch 'DefaultLanguage' -or $installText -notmatch 'Test-Path -LiteralPath \$settingsPath') { throw 'First-install prompt-language selection or upgrade-preservation guard is missing.' }
 foreach ($required in @('RollbackVersion','Switch-InstalledTree','.codex-monitor-hud-stage-','.codex-monitor-hud-rollback-','compare-runtime-performance.ps1')) {
     if ($installText -notmatch [regex]::Escape($required)) { throw "Transactional install or rollback path '$required' is missing." }

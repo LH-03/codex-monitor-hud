@@ -1,10 +1,10 @@
 # Project status
 
-Updated: 2026-07-23
+Updated: 2026-08-03
 
 ## Current line
 
-The Windows release candidate is `2.2.0`. It uses the compiled WPF host, keeps the on-demand Settings compatibility process, and retains `scripts/start.ps1 -Legacy` as a recovery path.
+The Windows release candidate is `2.2.1`. It uses the compiled WPF host, keeps the on-demand Settings compatibility process, and retains `scripts/start.ps1 -Legacy` as a recovery path.
 
 The repository source is the product authority. An installed copy is a deployment target, not a source of truth. Publication, release creation, and installation are separate user-controlled actions.
 
@@ -49,13 +49,13 @@ During the latest visual pass, a fully populated top metric row exposed clipping
 
 ## Known limits
 
-- The compiled build, Core regression executable, list/split isolated fixtures, same-fixture performance gate, transactional install, installed health check, source/install parity, and fresh compiled heartbeat must be re-run for each release candidate. They passed for the current Windows 2.2.0 preparation on 2026-07-23.
+- The compiled build, Core regression executable, list/split isolated fixtures, same-fixture performance gate, transactional install, installed health check, source/install parity, and fresh compiled heartbeat must be re-run for each release candidate.
 - Measurements are machine- and workload-specific; do not treat one number as a product guarantee.
 - Split mode creates real top-level WPF windows. The hard limit is 12 even when more sessions are monitored.
 - The weekly allowance value is only the latest value observed in local Codex records and can lag another Codex surface.
 - Weekly and 5-hour allowance windows are shown only when the newest local `rate_limits` record provides them. They are account-level observations, not task sums or live account queries.
-- API-equivalent cost is an estimate based on local pricing data, not a bill or exact credit conversion.
-- `2.2.0` is Windows x64 only. macOS is not supported or packaged; community source adaptations are welcome but are outside this project's validation and release scope.
+- API-equivalent cost is an estimate based on local pricing data, not a bill or exact credit conversion. The built-in `2.2.1` snapshot is standard short-context API list price only; it excludes long-context, Batch, Flex, Fast mode, regional-processing, and cache-write prices.
+- `2.2.1` is Windows x64 only. macOS is not supported or packaged; community source adaptations are welcome but are outside this project's validation and release scope.
 
 ## Next architectural decision
 
@@ -71,6 +71,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-i
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-runtime-isolated.ps1 -HostMode compiled -Mode split -TaskCount 5
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\compare-runtime-performance.ps1 -TaskCount 12 -ChurnCycles 1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-behavior-isolated.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-transfer-kit.ps1 -ReleasePackage <prepared-release-zip>
 ```
 
 All runtime fixtures must use synthetic data and isolated state/profile roots.

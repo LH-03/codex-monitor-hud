@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1 - Windows maintenance release
+
+- Refresh the bundled standard API list-price snapshot from OpenAI's official pricing page on 2026-08-03: GPT-5.6 Terra is now `$2.00 / $0.20 / $12.00`, and GPT-5.6 Luna is now `$0.20 / $0.02 / $1.20`, per million input / cached-input / output tokens.
+- Keep estimates deliberately scoped to standard short-context API list price. They do not represent ChatGPT/Codex subscription billing, credits, long-context, Batch, Flex, Fast mode, regional-processing, or cache-write prices.
+- Add a safe second-PC transfer-kit builder and public continuation/ledger documentation so another Codex instance can install, verify, and maintain the Windows project without receiving local settings, session data, logs, or private experiments.
+
 ## 2.2.0 - Windows release candidate
 
 - Permit the full 0% to 100% HUD opacity range in Settings, configuration normalization, live preview, and the compatible fallback host.

@@ -74,10 +74,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-releas
 
 The installed build carries its own private .NET runtime. Source development requires Windows PowerShell 5.1+, Node.js for the plugin host, and the repository toolchain.
 
-Release operators can use [GITHUB_RELEASE_DRAFT_2.2.0.md](GITHUB_RELEASE_DRAFT_2.2.0.md) for copy-ready commit text, the Release body, asset names, checksum handling, and the final upload checklist.
+Release operators can use [GITHUB_RELEASE_DRAFT_2.2.1.md](GITHUB_RELEASE_DRAFT_2.2.1.md) for copy-ready commit text, the Release body, asset names, checksum handling, and the final upload checklist. For a private physical transfer to another Windows PC, use `scripts/prepare-transfer-kit.ps1`; it packages public source, release artifacts, and continuation guidance without local settings or Codex session data.
 
 ## Project status
 
-`2.2.0` is a Windows x64 release candidate. The resident host is compiled .NET/WPF, while the Settings process and `-Legacy` fallback remain available for recovery. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI.
+`2.2.1` is a Windows x64 release candidate. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. The resident host is compiled .NET/WPF, while the Settings process and `-Legacy` fallback remain available for recovery. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI.
 
 MIT License.
