@@ -215,19 +215,25 @@ function New-HudBrush {
 function Get-HudRoleOpacity {
     param([ValidateSet('background','primary','secondary','decoration','status')][string]$Role)
     if ([string]$config.transparencyMode -eq 'uniform') { return 1.0 }
-    $level = [double]$config.opacity
-    if ([string]$config.transparencyMode -eq 'focus') {
-        $status = Get-HudStatus
-        $hasAttention = @(Get-HudUserTaskStates | Where-Object { $_.AttentionUntil -gt [DateTimeOffset]::Now }).Count -gt 0
-        if ($hasAttention -or @('active','completed','aborted','error') -contains $status) { $level = [Math]::Max($level, 0.72) }
-        elseif ($status -eq 'listening') { $level = [Math]::Max($level, 0.48) }
-        else { $level = [Math]::Max(0.08, $level * 0.55) }
+    $level = [Math]::Max(0.0,[Math]::Min(1.0,[double]$config.opacity))
+    if ([string]$config.transparencyMode -eq 'layered') {
+        switch ($Role) {
+            'background' { return 0.18 + (0.55 * $level) }
+            'primary' { return 1.0 }
+            'secondary' { return 0.54 + (0.25 * $level) }
+            'decoration' { return 0.28 + (0.27 * $level) }
+            default { return 1.0 }
+        }
     }
+    $status = Get-HudStatus
+    $hasAttention = @(Get-HudUserTaskStates | Where-Object { $_.AttentionUntil -gt [DateTimeOffset]::Now }).Count -gt 0
+    $focused = $hasAttention -or @('active','completed','aborted','error') -contains $status
+    $listening = $status -eq 'listening'
     switch ($Role) {
-        'background' { return $level }
-        'primary' { return [Math]::Min(1.0, [Math]::Max(0.82, 0.76 + (0.22 * $level))) }
-        'secondary' { return [Math]::Min(1.0, [Math]::Max(0.42, 0.34 + (0.48 * $level))) }
-        'decoration' { return [Math]::Min(1.0, [Math]::Max(0.20, $level)) }
+        'background' { if ($focused) { return 0.62 + (0.30 * $level) }; if ($listening) { return 0.36 + (0.25 * $level) }; return 0.14 + (0.22 * $level) }
+        'primary' { if ($focused) { return 1.0 }; if ($listening) { return 0.94 }; return 0.84 }
+        'secondary' { if ($focused) { return 0.84 }; if ($listening) { return 0.68 }; return 0.52 }
+        'decoration' { if ($focused) { return 0.70 }; if ($listening) { return 0.48 }; return 0.30 }
         default { return 1.0 }
     }
 }
@@ -235,7 +241,15 @@ function Get-HudRoleOpacity {
 function New-HudRoleBrush {
     param([string]$Value, [string]$Fallback = '#FFFFFFFF', [ValidateSet('background','primary','secondary','decoration','status')][string]$Role = 'primary')
     $brush = New-HudBrush $Value $Fallback
-    if ([string]$config.transparencyMode -eq 'uniform' -or $Role -eq 'status' -or $brush -isnot [Windows.Media.SolidColorBrush]) { return $brush }
+    if ([string]$config.transparencyMode -eq 'uniform') {
+        if ($Role -eq 'background' -and $brush -is [Windows.Media.SolidColorBrush]) {
+            $color = $brush.Color
+            $color.A = [byte]255
+            return New-Object Windows.Media.SolidColorBrush($color)
+        }
+        return $brush
+    }
+    if ($Role -eq 'status' -or $brush -isnot [Windows.Media.SolidColorBrush]) { return $brush }
     $color = $brush.Color
     $color.A = [byte][Math]::Round($color.A * (Get-HudRoleOpacity $Role))
     return New-Object Windows.Media.SolidColorBrush($color)
@@ -252,7 +266,7 @@ function New-HudSurfaceBrush {
             $bitmap.Freeze()
             $brush = New-Object Windows.Media.ImageBrush($bitmap)
             $brush.Stretch = [Windows.Media.Stretch]([string]$config.themeStyle.imageStretch)
-            $brush.Opacity = [double]$config.themeStyle.imageOpacity
+            $brush.Opacity = if ([string]$config.transparencyMode -eq 'uniform') { 1.0 } else { [double]$config.themeStyle.imageOpacity }
             return $brush
         } catch { }
     }
@@ -263,6 +277,7 @@ function New-HudSurfaceBrush {
             $factor = Get-HudRoleOpacity 'background'
             $start.A = [byte][Math]::Round($start.A * $factor)
             $end.A = [byte][Math]::Round($end.A * $factor)
+            if ([string]$config.transparencyMode -eq 'uniform') { $start.A = [byte]255; $end.A = [byte]255 }
             $angle = [double]$config.themeStyle.gradientAngle * [Math]::PI / 180.0
             $dx = [Math]::Cos($angle) * 0.5
             $dy = [Math]::Sin($angle) * 0.5
@@ -539,6 +554,7 @@ $settingsTabControls = [ordered]@{
     AppearanceTab = Find-Control $settings 'AppearanceTab'
 }
 $sourceDesktopCheck = Find-Control $settings 'SourceDesktopCheck'
+$sourceVsCodeCheck = Find-Control $settings 'SourceVsCodeCheck'
 $sourceDefaultCliCheck = Find-Control $settings 'SourceDefaultCliCheck'
 $sourceDeepSeekCliCheck = Find-Control $settings 'SourceDeepSeekCliCheck'
 $listDetailCombo = Find-Control $settings 'ListDetailCombo'
@@ -559,7 +575,7 @@ foreach ($key in @('Input','Cached','CacheHitRate','Uncached','Output','Reasonin
 
 $settingsTextControls = @{}
 foreach ($name in @(
-    'SettingsSubtitle','PresetsTitle','PresetsHint','ThemeWorkshopTitle','ThemeWorkshopHint','LanguageLayoutTitle','DisplayLanguageLabel','BubbleStyleLabel','SessionSourcesTitle','SessionSourcesHint','SessionSourcesPrivacy','SourceDesktopOptionText','SourceDefaultCliOptionText','SourceDeepSeekCliOptionText',
+    'SettingsSubtitle','PresetsTitle','PresetsHint','ThemeWorkshopTitle','ThemeWorkshopHint','LanguageLayoutTitle','DisplayLanguageLabel','BubbleStyleLabel','SessionSourcesTitle','SessionSourcesHint','SessionSourcesPrivacy','SourceDesktopOptionText','SourceVsCodeOptionText','SourceDefaultCliOptionText','SourceDeepSeekCliOptionText',
     'NumberFormatLabel','PositionLabel','MonitorScopeLabel','ActiveWindowLabel','TaskRetentionLabel','TerminalExitModeLabel','TerminalExitHint','MetricsTitle','MetricsHint','PricingSourceTitle','PricingSourceHint','PricingPathLabel',
     'AppearanceTitle','FontSizeLabel','RadiusLabel','OpacityLabel','BackgroundColorLabel','ForegroundColorLabel','AccentColorLabel',
     'MousePassthroughHint','StatusPalettesTitle','StatusPalettesHint','StatusPaletteCodexMicroSource','MultiTaskTitle','MultiTaskExplanation',
@@ -677,7 +693,7 @@ function Apply-SettingsLanguage {
     $map = @{
         SettingsSubtitle='settingsSubtitle'; PresetsTitle='presetsTitle'; PresetsHint='presetsHint'; ThemeWorkshopTitle='themeWorkshopTitle'; ThemeWorkshopHint='themeWorkshopHint';
         LanguageLayoutTitle='languageLayoutTitle'; DisplayLanguageLabel='displayLanguage'; BubbleStyleLabel='bubbleStyle';
-        SessionSourcesTitle='sessionSourcesTitle'; SessionSourcesHint='sessionSourcesHint'; SessionSourcesPrivacy='sessionSourcesPrivacy'; SourceDesktopOptionText='sourceDesktopOption'; SourceDefaultCliOptionText='sourceDefaultCliOption'; SourceDeepSeekCliOptionText='sourceDeepSeekCliOption';
+        SessionSourcesTitle='sessionSourcesTitle'; SessionSourcesHint='sessionSourcesHint'; SessionSourcesPrivacy='sessionSourcesPrivacy'; SourceDesktopOptionText='sourceDesktopOption'; SourceVsCodeOptionText='sourceVsCodeOption'; SourceDefaultCliOptionText='sourceDefaultCliOption'; SourceDeepSeekCliOptionText='sourceDeepSeekCliOption';
         NumberFormatLabel='numberFormat'; PositionLabel='position'; MonitorScopeLabel='monitorScope'; ActiveWindowLabel='activeWindow'; TaskRetentionLabel='taskRetention'; TerminalExitModeLabel='terminalExitMode'; TerminalExitHint='terminalExitHint';
         MetricsTitle='metricsTitle'; MetricsHint='metricsHint'; PricingSourceTitle='pricingSourceTitle'; PricingSourceHint='pricingSourceHint'; PricingPathLabel='pricingPathLabel'; AppearanceTitle='appearanceTitle'; FontSizeLabel='fontSize';
         RadiusLabel='cornerRadius'; OpacityLabel='opacity'; BackgroundColorLabel='backgroundColor';
@@ -961,7 +977,14 @@ if (-not [string]::IsNullOrWhiteSpace($RenderColorPickerPreview)) {
 }
 
 function Move-HudToConfiguredPosition {
-    $screen = [Windows.SystemParameters]::WorkArea
+    $screen = [pscustomobject]@{
+        Left = [Windows.SystemParameters]::VirtualScreenLeft
+        Top = [Windows.SystemParameters]::VirtualScreenTop
+        Width = [Windows.SystemParameters]::VirtualScreenWidth
+        Height = [Windows.SystemParameters]::VirtualScreenHeight
+        Right = [Windows.SystemParameters]::VirtualScreenLeft + [Windows.SystemParameters]::VirtualScreenWidth
+        Bottom = [Windows.SystemParameters]::VirtualScreenTop + [Windows.SystemParameters]::VirtualScreenHeight
+    }
     $hud.MaxWidth = [Math]::Max(480,$screen.Width + 36)
     $hud.UpdateLayout()
     $inset = 18.0
@@ -1102,6 +1125,7 @@ function Get-TaskSourceLabel {
     $provider = if ($null -ne $State.PSObject.Properties['ModelProvider']) { [string]$State.ModelProvider } else { '' }
     $profile = if ($null -ne $State.PSObject.Properties['ProfileId']) { [string]$State.ProfileId } else { 'codex' }
     if ($client -eq 'desktop') { return [string]$settingsLocale.sourceDesktop }
+    if ($client -eq 'vscode') { return [string]$settingsLocale.sourceVsCode }
     if ($client -eq 'cli' -or $profile -eq 'deepseek') {
         if ($provider -eq 'deepseek' -or $profile -eq 'deepseek') { return [string]$settingsLocale.sourceCliDeepSeek }
         if ([string]::IsNullOrWhiteSpace($provider) -or $provider -eq 'openai') { return [string]$settingsLocale.sourceCliOpenAI }
@@ -1118,6 +1142,7 @@ function Get-TaskSourceColor {
     $provider = if ($null -ne $State.PSObject.Properties['ModelProvider']) { [string]$State.ModelProvider } else { '' }
     $profile = if ($null -ne $State.PSObject.Properties['ProfileId']) { [string]$State.ProfileId } else { 'codex' }
     if ($client -eq 'desktop') { return [string]$config.accent }
+    if ($client -eq 'vscode') { return '#FF007ACC' }
     if ($provider -eq 'deepseek' -or $profile -eq 'deepseek') { return '#FF00A7B5' }
     if ($client -eq 'cli') { return '#FF8B5CF6' }
     return [string]$config.muted
@@ -1129,6 +1154,7 @@ function Get-TaskSourceGeometry {
     $provider = if ($null -ne $State.PSObject.Properties['ModelProvider']) { [string]$State.ModelProvider } else { '' }
     $profile = if ($null -ne $State.PSObject.Properties['ProfileId']) { [string]$State.ProfileId } else { 'codex' }
     if ($client -eq 'desktop') { return 'M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M1.4,4.8 L12.6,4.8 M3,3.45 L3.08,3.45 M4.75,3.45 L4.83,3.45' }
+    if ($client -eq 'vscode') { return 'M11.52,0.29 A0.98,0.98 0 0 0 10.82,0.33 L4.21,3.33 L1.5,1.29 A1,1 0 0 0 0,2.09 L0,13.91 A1,1 0 0 0 1.5,14.71 L4.21,12.68 L10.82,15.67 A0.98,0.98 0 0 0 11.52,15.71 L15,14.11 A1,1 0 0 0 15.6,13 L15.6,3 A1,1 0 0 0 15,2.09 Z M11,11.26 L5.73,8 L11,4.74 Z' }
     if ($provider -eq 'deepseek' -or $profile -eq 'deepseek') { return 'M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M2.8,8.4 C4.1,5.7 5.55,10.4 7.05,7.65 C8.15,5.65 9.3,7.25 11.2,5.75' }
     return 'M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M3,5.15 L5.85,7.15 L3,9.15 M7.15,9.15 L10.65,9.15'
 }
@@ -1144,6 +1170,8 @@ function New-HudTaskSourceBadge {
     $icon.StrokeStartLineCap = [Windows.Media.PenLineCap]::Round
     $icon.StrokeEndLineCap = [Windows.Media.PenLineCap]::Round
     $icon.StrokeLineJoin = [Windows.Media.PenLineJoin]::Round
+    if ([string]$State.ClientSurface -eq 'vscode') { $icon.Fill = $icon.Stroke }
+    if ([string]$State.ClientSurface -eq 'vscode') { $icon.StrokeThickness = 0.45 }
     $viewbox = New-Object Windows.Controls.Viewbox
     $viewbox.Width = 14; $viewbox.Height = 14; $viewbox.Child = $icon
     $badge = New-Object Windows.Controls.Border
@@ -1214,8 +1242,9 @@ function Test-HudUserTaskState {
     if ($profile -eq 'deepseek') {
         if (-not [bool]$config.sessionSources.deepSeekCli) { return $false }
     } elseif (($client -eq 'desktop' -and -not [bool]$config.sessionSources.desktop) -or
+              ($client -eq 'vscode' -and -not [bool]$config.sessionSources.vscode) -or
               ($client -eq 'cli' -and -not [bool]$config.sessionSources.defaultCli) -or
-              ($client -eq 'unknown' -and -not ([bool]$config.sessionSources.desktop -or [bool]$config.sessionSources.defaultCli))) {
+              ($client -eq 'unknown' -and -not ([bool]$config.sessionSources.desktop -or [bool]$config.sessionSources.vscode -or [bool]$config.sessionSources.defaultCli))) {
         return $false
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$State.TerminalStatus) -and $State.TerminalAt -ne [DateTimeOffset]::MinValue) {
@@ -2875,10 +2904,10 @@ function Export-HudPreview {
                 Workspace = $workspaces[$index]
                 ConversationLabel = $conversationTitles[$index]
                 SessionId = ('preview-thread-{0}' -f ($index + 1))
-                ProfileId = if ($index -eq 2) { 'deepseek' } else { 'codex' }
-                ProfileLabel = if ($index -eq 2) { 'DeepSeek' } else { 'Codex' }
-                ClientSurface = if (@(1,2) -contains $index) { 'cli' } else { 'desktop' }
-                ModelProvider = if ($index -eq 2) { 'deepseek' } else { 'openai' }
+                ProfileId = if ($index -eq 3) { 'deepseek' } else { 'codex' }
+                ProfileLabel = if ($index -eq 3) { 'DeepSeek' } else { 'Codex' }
+                ClientSurface = if ($index -eq 1) { 'vscode' } elseif (@(2,3) -contains $index) { 'cli' } else { 'desktop' }
+                ModelProvider = if ($index -eq 3) { 'deepseek' } else { 'openai' }
                 Snapshot = $taskSnapshot
                 LastUsageAt = if ($PreviewQuietLayout -ne 'none') { [DateTimeOffset]::Now.AddMinutes(-20) } elseif ($index -lt 2) { [DateTimeOffset]::Now.AddSeconds(-$index) } elseif ($index -eq 2) { [DateTimeOffset]::Now.AddSeconds(-36) } else { [DateTimeOffset]::Now.AddMinutes(-5) }
                 LastReadErrorAt = [DateTimeOffset]::MinValue
@@ -3110,6 +3139,7 @@ function Set-StatusPalette {
     $config.statusPalette = $Name
     Sync-ControlsFromConfig
     Save-HudConfig $paths $config
+    if ($SettingsHost) { [IO.File]::WriteAllText($reloadSettingsSignal, [DateTime]::UtcNow.ToString('O')) }
     Update-DisplaySnapshot
 }
 
@@ -3164,6 +3194,7 @@ function Sync-ControlsFromConfig {
         $animateCheck.IsChecked = [bool]$config.animateUpdates
         $autoSplitCheck.IsChecked = [bool]$config.multiTask.autoSplitNewTasks
         $sourceDesktopCheck.IsChecked = [bool]$config.sessionSources.desktop
+        $sourceVsCodeCheck.IsChecked = [bool]$config.sessionSources.vscode
         $sourceDefaultCliCheck.IsChecked = [bool]$config.sessionSources.defaultCli
         $sourceDeepSeekCliCheck.IsChecked = [bool]$config.sessionSources.deepSeekCli
         $attentionCompletedCheck.IsChecked = [bool]$config.attention.onCompleted
@@ -3328,6 +3359,7 @@ function Apply-ControlsToConfig {
     $config.animateUpdates = [bool]$animateCheck.IsChecked
     $config.multiTask.autoSplitNewTasks = [bool]$autoSplitCheck.IsChecked
     $config.sessionSources.desktop = [bool]$sourceDesktopCheck.IsChecked
+    $config.sessionSources.vscode = [bool]$sourceVsCodeCheck.IsChecked
     $config.sessionSources.defaultCli = [bool]$sourceDefaultCliCheck.IsChecked
     $config.sessionSources.deepSeekCli = [bool]$sourceDeepSeekCliCheck.IsChecked
     $config.attention.onCompleted = [bool]$attentionCompletedCheck.IsChecked
@@ -3389,6 +3421,7 @@ function Apply-ControlsToConfig {
         }
     }
     Save-HudConfig $paths $config
+    if ($SettingsHost) { [IO.File]::WriteAllText($reloadSettingsSignal, [DateTime]::UtcNow.ToString('O')) }
     Update-DisplaySnapshot
     $saveStatus.Text = if ($contextThresholdsValid) { ('{0}  {1}' -f [string]$settingsLocale.savedAt, (Get-Date).ToString('HH:mm:ss')) } else { [string]$settingsLocale.contextThresholdsInvalid }
 }
@@ -3462,7 +3495,8 @@ function Get-HudSessionIdentity {
                 }
                 $originator = if ($null -ne $record.payload.PSObject.Properties['originator']) { [string]$record.payload.originator } else { '' }
                 $sourceName = if ($null -ne $record.payload.PSObject.Properties['source'] -and $record.payload.source -is [string]) { [string]$record.payload.source } else { '' }
-                if ($originator -eq 'Codex Desktop' -or $sourceName -eq 'vscode') { $identity.ClientSurface = 'desktop' }
+                if ($originator -eq 'codex_vscode' -or $originator -eq 'Codex VS Code') { $identity.ClientSurface = 'vscode' }
+                elseif ($originator -eq 'Codex Desktop' -or $sourceName -eq 'vscode') { $identity.ClientSurface = 'desktop' }
                 elseif ($originator -match 'codex-tui' -or $sourceName -eq 'cli') { $identity.ClientSurface = 'cli' }
                 if ($null -ne $record.payload.PSObject.Properties['model_provider']) {
                     $provider = ([string]$record.payload.model_provider).Trim()
@@ -3711,7 +3745,8 @@ function Set-HudSessionIdentityFromRecord {
         }
         $originator = if ($null -ne $Record.payload.PSObject.Properties['originator']) { [string]$Record.payload.originator } else { '' }
         $sourceName = if ($null -ne $Record.payload.PSObject.Properties['source'] -and $Record.payload.source -is [string]) { [string]$Record.payload.source } else { '' }
-        if ($originator -eq 'Codex Desktop' -or $sourceName -eq 'vscode') { $State.ClientSurface = 'desktop' }
+        if ($originator -eq 'codex_vscode' -or $originator -eq 'Codex VS Code') { $State.ClientSurface = 'vscode' }
+        elseif ($originator -eq 'Codex Desktop' -or $sourceName -eq 'vscode') { $State.ClientSurface = 'desktop' }
         elseif ($originator -match 'codex-tui' -or $sourceName -eq 'cli') { $State.ClientSurface = 'cli' }
         if ($null -ne $Record.payload.PSObject.Properties['model_provider']) {
             $provider = ([string]$Record.payload.model_provider).Trim()
@@ -3945,7 +3980,7 @@ function Refresh-ActiveSessions {
         $enabled = if ([string]$profile.Id -eq 'deepseek') {
             [bool]$config.sessionSources.deepSeekCli
         } else {
-            [bool]$config.sessionSources.desktop -or [bool]$config.sessionSources.defaultCli
+            [bool]$config.sessionSources.desktop -or [bool]$config.sessionSources.vscode -or [bool]$config.sessionSources.defaultCli
         }
         if (-not $enabled) { continue }
         if (Refresh-HudSessionIndex $profile) { $indexChanged = $true }
@@ -4116,7 +4151,7 @@ $liveControls = @(
     $summaryAttentionModeCombo,$listAttentionModeCombo,$taskBubbleAttentionModeCombo,$dotPatternCombo,$dotBrightnessCombo,$dotSpeedCombo,$attentionDurationCombo,$transparencyModeCombo,
     $agentNotificationPermissionCombo,$agentNotificationModeCombo,$agentNotificationIntensityCombo,$agentNotificationDurationCombo,
     $idleIndicatorDelayCombo,$idleIndicatorLayoutCombo,$idleIndicatorTaskStyleCombo,
-    $alwaysOnTopCheck,$mousePassthroughCheck,$statusDotCheck,$animateCheck,$autoSplitCheck,$sourceDesktopCheck,$sourceDefaultCliCheck,$sourceDeepSeekCliCheck,
+    $alwaysOnTopCheck,$mousePassthroughCheck,$statusDotCheck,$animateCheck,$autoSplitCheck,$sourceDesktopCheck,$sourceVsCodeCheck,$sourceDefaultCliCheck,$sourceDeepSeekCliCheck,
     $attentionCompletedCheck,$attentionErrorCheck,$attentionSettledCheck,$dotAttentionEnabledCheck,$dotBreathingCheck,$agentNotificationEnabledCheck,
     $openTaskOnDoubleClickCheck,$idleIndicatorEnabledCheck,$idleIndicatorBubblesCheck
 ) + @($fieldControls.GetEnumerator() | Where-Object { [string]$_.Key -ne 'context' } | ForEach-Object { $_.Value }) + @($bubbleFieldControls.Values)
@@ -4261,9 +4296,21 @@ $hud.Add_MouseLeftButtonDown({
     if ($_.ButtonState -eq [Windows.Input.MouseButtonState]::Pressed) {
         try {
             $hud.DragMove()
+            $screenLeft = [double][Windows.SystemParameters]::VirtualScreenLeft
+            $screenTop = [double][Windows.SystemParameters]::VirtualScreenTop
+            $screenRight = $screenLeft + [double][Windows.SystemParameters]::VirtualScreenWidth
+            $screenBottom = $screenTop + [double][Windows.SystemParameters]::VirtualScreenHeight
+            $cursorPosition = [System.Windows.Forms.Cursor]::Position
+            $dpi = [Windows.Media.VisualTreeHelper]::GetDpi($hud)
+            $cursorLeft = [double]$cursorPosition.X / [double]$dpi.DpiScaleX
+            $cursorTop = [double]$cursorPosition.Y / [double]$dpi.DpiScaleY
+            if ([double]$hud.Left -ge $screenLeft -and $cursorLeft -le ($screenLeft + 1)) { $hud.Left = $screenLeft - 18 }
+            elseif (([double]$hud.Left + [double]$hud.ActualWidth) -le $screenRight -and $cursorLeft -ge ($screenRight - 1)) { $hud.Left = $screenRight - [double]$hud.ActualWidth + 18 }
+            if ([double]$hud.Top -ge $screenTop -and $cursorTop -le ($screenTop + 1)) { $hud.Top = $screenTop - 18 }
+            elseif (([double]$hud.Top + [double]$hud.ActualHeight) -le $screenBottom -and $cursorTop -ge ($screenBottom - 1)) { $hud.Top = $screenBottom - [double]$hud.ActualHeight + 18 }
             $config.position = 'custom'
-            $config.customLeft = $hud.Left + 18
-            $config.customTop = $hud.Top + 18
+            $config.customLeft = [double]$hud.Left + 18
+            $config.customTop = [double]$hud.Top + 18
             Save-HudConfig $paths $config
             Position-TaskBubbles
         } catch { }

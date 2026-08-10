@@ -2,7 +2,7 @@
 
 > [简体中文](README.zh-CN.md) · Windows x64 only
 
-Codex Monitor HUD is a local, real-time Windows overlay for the Codex work that is active now: Codex Desktop, the normal Codex CLI profile (usually OpenAI/GPT), and an optional isolated DeepSeek CLI profile. It is deliberately a monitor, not a chat archive, billing dashboard, or cloud service.
+Codex Monitor HUD is a local, real-time Windows overlay for the Codex work that is active now: Codex Desktop, Codex in VS Code, the normal Codex CLI profile (usually OpenAI/GPT), and an optional isolated DeepSeek CLI profile. It is deliberately a monitor, not a chat archive, billing dashboard, or cloud service.
 
 ## Install with one short prompt
 
@@ -16,13 +16,15 @@ Manual installation:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
+The Windows Release bundles a private .NET/WPF runtime so it can run without requiring a matching system-wide .NET installation; most of the download size comes from that runtime rather than the HUD itself.
+
 ## What you see
 
 - Active, listening, idle, paused, read-error, completed, and aborted task state.
 - Cached / uncached input, output, reasoning output, per-call and per-task totals, context usage, model, and task count.
 - Latest observed account-wide weekly and 5-hour allowance windows when Codex writes them to the local `rate_limits` record.
 - Stable task numbers, workspace labels, and the official local conversation title from `session_index.jsonl`.
-- A source badge before every task number, so Desktop, OpenAI CLI, and DeepSeek CLI work cannot be mistaken for one another.
+- A source badge before every task number, so Desktop, VS Code, OpenAI CLI, and DeepSeek CLI work cannot be mistaken for one another.
 - Cache hit rate and context usage are per-task signals, so they stay on list rows and detached bubbles instead of being meaninglessly added into the summary. Each row uses that task's provider-reported context window; GPT and DeepSeek values are never mixed.
 - Optional API-list-price equivalent cost estimate, clearly marked as an estimate rather than a subscription bill or credit balance.
 
@@ -30,19 +32,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 
 The weekly and 5-hour values are not guessed, summed across tasks, or fetched from an account API. They show the newest local observation only. If the installed Codex version does not emit a window, the enabled metric shows `--`.
 
-## Desktop and CLI sources
+## Desktop, VS Code, and CLI sources
 
 The HUD uses one compact visual language across every surface, while giving each runtime a distinct mark:
 
 | Source | Badge | Local profile watched |
 | --- | --- | --- |
 | Codex Desktop | Window outline | the normal `CODEX_HOME` (`~/.codex` by default) |
+| Codex in VS Code | VS Code ribbon | the normal `CODEX_HOME` (`~/.codex` by default) |
 | Codex CLI · OpenAI | Terminal `>_` | the normal `CODEX_HOME` |
 | Codex CLI · DeepSeek | Terminal with a wave | `~/.codex-deepseek` |
 
-The badge appears after the status dot and before the stable task number in both list rows and detached bubbles. The summary can show a source-count breakdown, and **Settings > Sources** can independently include or exclude all three categories. The classifier uses bounded session metadata, not a hard-coded model-name allowlist, so future models continue to be monitored even when no price is known for them.
+The badge appears after the status dot and before the stable task number in both list rows and detached bubbles. The summary can show a source-count breakdown, and **Settings > Sources** can independently include or exclude all four categories. VS Code is identified from its own `codex_vscode` session originator, so it is not presented as a Desktop task. The classifier uses bounded session metadata, not a hard-coded model-name allowlist, so future models continue to be monitored even when no price is known for them.
 
-Desktop rows may use Codex's local task deep link. CLI rows deliberately do not pretend to be Desktop tasks: resume them from the matching CLI profile instead.
+Desktop rows may use Codex's local task deep link. VS Code and CLI rows deliberately do not pretend to be Desktop tasks: resume them from VS Code or the matching CLI profile instead.
 
 Native Codex CLI monitoring works without any special setup. The second `~/.codex-deepseek` root is an optional, tested isolation convention for advanced users; arbitrary custom roots are not yet configurable. See [Codex CLI profiles and optional provider isolation](docs/CLI_PROFILE_ISOLATION.md) before creating one. The guide keeps credentials out of files and explains how to return to the untouched normal profile.
 
@@ -56,7 +59,7 @@ Native Codex CLI monitoring works without any special setup. The second `~/.code
 
 The aggregate count button is only a list expand/collapse control. If task bubbles have been detached, collapsing the list leaves those independent bubbles open. Use **Merge all task bubbles** from the HUD or tray menu when you actually want to merge them.
 
-![English Sources settings for Desktop, native CLI, and isolated DeepSeek CLI](assets/settings-sources-en.png)
+![English Sources settings for Desktop, VS Code, native CLI, and isolated DeepSeek CLI](assets/settings-sources-en.png)
 
 ## Everyday controls
 
@@ -86,6 +89,6 @@ macOS support has been intentionally dropped from this project. macOS users are 
 
 ## Project status
 
-`3.0.0` is the Windows x64 release that adds first-class Codex CLI monitoring beside Codex Desktop, including optional identification of an isolated DeepSeek-backed Codex CLI profile. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. The resident host is compiled .NET/WPF, while the Settings process and `-Legacy` fallback remain available for recovery. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI or DeepSeek.
+`3.1.0` is the Windows x64 release that adds Codex in VS Code as a distinct monitored source alongside Codex Desktop and CLI. It also makes the three transparency modes visibly different, applies them immediately from Settings, and keeps free dragging free of proximity snapping. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI, Microsoft, or DeepSeek.
 
 MIT License.

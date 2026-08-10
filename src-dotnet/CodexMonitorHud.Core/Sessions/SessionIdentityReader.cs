@@ -103,6 +103,14 @@ public static class SessionIdentityReader
 
     private static string GetClientSurface(string originator, string source)
     {
+        // The VS Code extension writes source=vscode for both surfaces, but its
+        // own session header has the distinct codex_vscode originator.
+        if (originator.Equals("codex_vscode", StringComparison.OrdinalIgnoreCase) ||
+            originator.Equals("Codex VS Code", StringComparison.OrdinalIgnoreCase))
+        {
+            return "vscode";
+        }
+
         if (originator.Equals("Codex Desktop", StringComparison.OrdinalIgnoreCase) ||
             source.Equals("vscode", StringComparison.OrdinalIgnoreCase))
         {

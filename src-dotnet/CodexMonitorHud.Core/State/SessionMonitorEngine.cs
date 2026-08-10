@@ -1014,7 +1014,7 @@ public sealed class SessionMonitorEngine
     private bool IsProfileDiscoveryEnabled(SessionProfile profile) =>
         profile.Id == SessionProfile.DeepSeekId
             ? Options.DeepSeekCliSessionsEnabled
-            : Options.DesktopSessionsEnabled || Options.DefaultCliSessionsEnabled;
+            : Options.DesktopSessionsEnabled || Options.VsCodeSessionsEnabled || Options.DefaultCliSessionsEnabled;
 
     private bool IsSourceEnabled(SessionState state)
     {
@@ -1026,13 +1026,14 @@ public sealed class SessionMonitorEngine
         return state.ClientSurface switch
         {
             "desktop" => Options.DesktopSessionsEnabled,
+            "vscode" => Options.VsCodeSessionsEnabled,
             "cli" => Options.DefaultCliSessionsEnabled,
-            _ => Options.DesktopSessionsEnabled || Options.DefaultCliSessionsEnabled
+            _ => Options.DesktopSessionsEnabled || Options.VsCodeSessionsEnabled || Options.DefaultCliSessionsEnabled
         };
     }
 
     private static string ResolveClientSurface(string value, SessionProfile profile) =>
-        value is "desktop" or "cli" ? value : profile.DefaultClientSurface;
+        value is "desktop" or "vscode" or "cli" ? value : profile.DefaultClientSurface;
 
     private static string ResolveProvider(string value, SessionProfile profile) =>
         string.IsNullOrWhiteSpace(value) ? profile.DefaultProvider : value;

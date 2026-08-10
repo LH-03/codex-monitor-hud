@@ -90,6 +90,7 @@ public static partial class HudConfigStore
     {
         SetAllowed(result, "summary", new[] { "summary", "list", "split" }, "multiTask", "displayMode");
         SetBool(result, GetBool(result, true, "sessionSources", "desktop"), "sessionSources", "desktop");
+        SetBool(result, GetBool(result, true, "sessionSources", "vscode"), "sessionSources", "vscode");
         SetBool(result, GetBool(result, true, "sessionSources", "defaultCli"), "sessionSources", "defaultCli");
         SetBool(result, GetBool(result, true, "sessionSources", "deepSeekCli"), "sessionSources", "deepSeekCli");
         SetAllowed(result, "rows", new[] { "rows", "cards", "rail" }, "multiTask", "listStyle");

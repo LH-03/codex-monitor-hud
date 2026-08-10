@@ -1,6 +1,6 @@
 # Codex CLI 配置与可选 Provider 隔离
 
-> [English](CLI_PROFILE_ISOLATION.md) · Windows x64 · Codex Monitor HUD 3.0.0
+> [English](CLI_PROFILE_ISOLATION.md) · Windows x64 · Codex Monitor HUD 3.1.0
 
 Codex Monitor HUD 开箱即可监控正常安装的 Codex CLI。只想监控原生 Codex CLI 的用户，**不需要**创建第二套配置。本页的隔离方案只适合主动让 Codex CLI 连接另一套兼容模型 Provider，并希望把配置、认证状态、会话和 HUD 来源标识与正常 OpenAI 配置彻底分开的用户。
 
@@ -13,7 +13,7 @@ Codex Monitor HUD 开箱即可监控正常安装的 Codex CLI。只想监控原�
 | 任意其他自定义 `CODEX_HOME` 路径 | 当前 HUD 尚不能自定义添加 |
 | 不写入 Codex 会话记录的其他 CLI | 不支持 |
 
-界面把第二种来源称为“DeepSeek CLI”，因为这是 v3.0.0 实测过的隔离约定。它仍然是 Codex CLI，只是 Provider 与配置根目录不同。Codex 或第三方 Provider 更新后，兼容性都可能改变；HUD 能显示 Codex 已经写出的会话，但不能让本来不兼容的 Provider 变得兼容。
+界面把第二种来源称为“DeepSeek CLI”，因为这是 v3.1.0 实测过的隔离约定。它仍然是 Codex CLI，只是 Provider 与配置根目录不同。Codex 或第三方 Provider 更新后，兼容性都可能改变；HUD 能显示 Codex 已经写出的会话，但不能让本来不兼容的 Provider 变得兼容。
 
 ## 先理解三层结构
 
@@ -29,7 +29,7 @@ CODEX_HOME       -> Codex 配置、认证状态和会话
 %USERPROFILE%\.codex
 ```
 
-HUD 3.0.0 额外识别的隔离配置是：
+HUD 3.1.0 额外识别的隔离配置是：
 
 ```text
 %USERPROFILE%\.codex-deepseek
@@ -82,7 +82,7 @@ function codex-isolated {
 5. 真实 API Key 应放进 Provider 文档要求的环境变量或其他受支持的密钥机制；绝不能写进本仓库、启动脚本、截图或教程。
 6. 正式使用前做一次小型冒烟测试：读取临时文件、新建并回读临时文件、执行无害命令、连续完成数轮工具调用，再测试 `codex resume`。
 
-Codex 配置格式会演进，不要从旧教程盲目复制 Provider 配置块。准备 v3.0.0 时，Codex 文档把 `responses` 列为受支持的自定义 Provider wire API；以后配置或升级 Codex 时应重新查看当天官方文档。
+Codex 配置格式会演进，不要从旧教程盲目复制 Provider 配置块。准备 v3.1.0 时，Codex 文档把 `responses` 列为受支持的自定义 Provider wire API；以后配置或升级 Codex 时应重新查看当天官方文档。
 
 ## 让 HUD 同时看到两套 Profile
 

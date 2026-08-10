@@ -20,7 +20,7 @@ The resident hot path is compiled C#. `CodexMonitorHud.Core` has no WPF, Windows
 
 ## Scope
 
-Codex Monitor HUD 3.0.0 is a local Windows projection over recent Codex Desktop and CLI session records. It combines the normal `CODEX_HOME` (`~/.codex` by default) with an optional isolated `~/.codex-deepseek` profile without reading either profile's provider configuration or authentication files. It does not maintain a historical database and does not modify Codex sessions.
+Codex Monitor HUD 3.1.0 is a local Windows projection over recent Codex Desktop, VS Code, and CLI session records. It combines the normal `CODEX_HOME` (`~/.codex` by default) with an optional isolated `~/.codex-deepseek` profile without reading either profile's provider configuration or authentication files. It does not maintain a historical database and does not modify Codex sessions.
 
 ```text
 Codex local session JSONL + session_index.jsonl
@@ -56,7 +56,7 @@ Discovery scans every enabled profile's Codex session date folders for files wri
 
 On discovery, the core reverse-reads 64 KiB chunks until it has the bounded 2,000-line tail instead of decoding the whole scan window. During monitoring, each state stores its file identity and byte offset and reads only appended data. The compiled reader rents a 64 KiB buffer; the monitor gives one session at most 256 KiB and all sessions together at most 4 MiB in one dispatcher pass. It carries only the incomplete record between reads and rejects a single pending record beyond 8 MiB. Unread session and official-title work remains in explicit backlogs for later responsive ticks. Records whose top-level type cannot affect identity, lifecycle, accounting, allowance, or model/workspace context are rejected before a full object graph is created.
 
-Session identity, client surface, originator, and bounded model-provider label come from `session_meta`; user-facing conversation titles come from the matching profile's separate local `session_index.jsonl`. Prompt, assistant, and tool-output text are not used for naming, source classification, or lifecycle inference. Internal/subagent source objects remain excluded. Model IDs are not allowlisted, so unknown future models keep all non-price monitoring behavior.
+Session identity, client surface, originator, and bounded model-provider label come from `session_meta`; user-facing conversation titles come from the matching profile's separate local `session_index.jsonl`. `codex_vscode` is classified as VS Code before the historical `source=vscode` Desktop fallback. Prompt, assistant, and tool-output text are not used for naming, source classification, or lifecycle inference. Internal/subagent source objects remain excluded. Model IDs are not allowlisted, so unknown future models keep all non-price monitoring behavior.
 
 ## State and projections
 
@@ -64,7 +64,7 @@ All surfaces read the same state objects. Split bubbles do not create new parser
 
 Task numbering is in-memory and stable for the visible lifetime of a task. Released numbers enter a bounded cooldown queue before reuse.
 
-The task registry is deliberately smaller than the UI state. Registry v2 stores only task number, workspace leaf, coarse status, update time, and bounded client/provider/profile labels so MCP controls can target the correct Desktop, OpenAI CLI, or DeepSeek CLI task without exposing titles or transcript content.
+The task registry is deliberately smaller than the UI state. Registry v2 stores only task number, workspace leaf, coarse status, update time, and bounded client/provider/profile labels so MCP controls can target the correct Desktop, VS Code, OpenAI CLI, or DeepSeek CLI task without exposing titles or transcript content.
 
 ## Rendering
 
@@ -83,7 +83,7 @@ Metric values update in place. List rows rebuild only when their structural proj
 
 Attention is surface-local: summary mode affects the summary, list mode the matching row, and split mode the matching independent bubble. Context alerts animate only the context metric.
 
-Each visible task has exactly one source badge after its status dot and before its stable number. Desktop uses a window outline, normal OpenAI CLI uses a terminal mark, and the isolated DeepSeek CLI profile uses a wave-terminal mark. Closing a detached bubble changes only its projection ownership and merges it back into the main HUD; list-row dismissal is the separate operation that temporarily removes a task from the visible set.
+Each visible task has exactly one source badge after its status dot and before its stable number. Desktop uses a window outline, VS Code uses its compact ribbon, normal OpenAI CLI uses a terminal mark, and the isolated DeepSeek CLI profile uses a wave-terminal mark. Closing a detached bubble changes only its projection ownership and merges it back into the main HUD; list-row dismissal is the separate operation that temporarily removes a task from the visible set.
 
 ## Settings process
 

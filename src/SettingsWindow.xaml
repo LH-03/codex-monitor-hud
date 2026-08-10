@@ -498,6 +498,16 @@
                         <TextBlock x:Name="SourceDesktopOptionText" Text="Codex 桌面端（OpenAI）" VerticalAlignment="Center" TextWrapping="Wrap" />
                       </StackPanel>
                     </CheckBox>
+                    <CheckBox x:Name="SourceVsCodeCheck" Margin="0,0,0,10">
+                      <StackPanel Orientation="Horizontal">
+                        <Border Width="28" Height="28" CornerRadius="9" Background="#12007ACC" BorderBrush="#30007ACC" BorderThickness="1" Margin="2,0,10,0">
+                          <Viewbox Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path Data="M11.52,0.29 A0.98,0.98 0 0 0 10.82,0.33 L4.21,3.33 L1.5,1.29 A1,1 0 0 0 0,2.09 L0,13.91 A1,1 0 0 0 1.5,14.71 L4.21,12.68 L10.82,15.67 A0.98,0.98 0 0 0 11.52,15.71 L15,14.11 A1,1 0 0 0 15.6,13 L15.6,3 A1,1 0 0 0 15,2.09 Z M11,11.26 L5.73,8 L11,4.74 Z" Fill="#FF007ACC" Stroke="#FF007ACC" StrokeThickness="0.8" StrokeLineJoin="Round" />
+                          </Viewbox>
+                        </Border>
+                        <TextBlock x:Name="SourceVsCodeOptionText" Text="Codex in VS Code (OpenAI)" VerticalAlignment="Center" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </CheckBox>
                     <CheckBox x:Name="SourceDefaultCliCheck" Margin="0,0,0,10">
                       <StackPanel Orientation="Horizontal">
                         <Border Width="28" Height="28" CornerRadius="9" Background="#128B5CF6" BorderBrush="#308B5CF6" BorderThickness="1" Margin="2,0,10,0">

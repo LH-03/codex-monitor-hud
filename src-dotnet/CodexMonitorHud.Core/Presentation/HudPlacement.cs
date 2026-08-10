@@ -50,4 +50,5 @@ public static class HudPlacement
             Math.Clamp(left, minLeft, maxLeft),
             Math.Clamp(top, minTop, maxTop));
     }
+
 }

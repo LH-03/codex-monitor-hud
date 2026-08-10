@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.1.0 - VS Code monitoring and polish
+
+- Monitor Codex in VS Code as its own source beside Codex Desktop and CLI. The new VS Code ribbon badge, source filter, and summary count make it clear where each active task came from.
+- Keep free positioning truly free: dragging no longer snaps when a bubble merely approaches an edge. The visible surface reaches an edge only when the cursor reaches that physical display edge.
+- Make the three transparency modes visibly distinct, allow a genuinely opaque 100% setting, and apply a mode change immediately from Settings without touching the opacity slider.
+- Keep per-task context usage, cache hit rate, source identity, task title, and independent bubble behavior intact across Desktop, VS Code, normal CLI, and the optional isolated DeepSeek CLI profile.
+- Streamline the public documentation around installing, using, theming, integrating, and adapting the HUD.
+
 ## 3.0.0 - Desktop and CLI monitoring
 
 - Keep task discovery responsive during long Desktop work by reconciling the privacy-safe runtime heartbeat every two seconds without increasing full JSONL directory scans. Silent `task_complete` records no longer terminate or hide a conversation; visible turn completions retain the continuation guard and are cancelled by newer runtime activity.
@@ -27,7 +35,7 @@
 
 - Refresh the bundled standard API list-price snapshot from OpenAI's official pricing page on 2026-08-03: GPT-5.6 Terra is now `$2.00 / $0.20 / $12.00`, and GPT-5.6 Luna is now `$0.20 / $0.02 / $1.20`, per million input / cached-input / output tokens.
 - Keep estimates deliberately scoped to standard short-context API list price. They do not represent ChatGPT/Codex subscription billing, credits, long-context, Batch, Flex, Fast mode, regional-processing, or cache-write prices.
-- Add a safe second-PC transfer-kit builder and public continuation/ledger documentation so another Codex instance can install, verify, and maintain the Windows project without receiving local settings, session data, logs, or private experiments.
+- Improve portable setup guidance while keeping local settings, session data, logs, and private experiments out of the public package.
 
 ## 2.2.0 - Windows release candidate
 

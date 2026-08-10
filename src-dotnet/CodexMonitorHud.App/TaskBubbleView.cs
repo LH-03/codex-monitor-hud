@@ -156,6 +156,10 @@ internal sealed class TaskBubbleView : IDisposable
             _number.Foreground = _brushes.Create(settings.Accent, "#FF0A84FF", BrushRole.Primary, settings, status, hasAttention);
             _sourceIcon.Data = Geometry.Parse(GetSourceGeometry(state));
             _sourceIcon.Stroke = _brushes.Create(sourceColor, "#FF64748B", BrushRole.Primary, settings, status, hasAttention);
+            _sourceIcon.Fill = string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase)
+                ? _sourceIcon.Stroke
+                : null;
+            _sourceIcon.StrokeThickness = string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase) ? 0.45 : 1.45;
             _sourceBadge.Background = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 24);
             _sourceBadge.BorderBrush = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 72);
             _sourceBadge.ToolTip = sourceLabel;
@@ -389,6 +393,10 @@ internal sealed class TaskBubbleView : IDisposable
 
     private static string GetSourceGeometry(SessionState state)
     {
+        if (string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase))
+        {
+            return "M11.52,0.29 A0.98,0.98 0 0 0 10.82,0.33 L4.21,3.33 L1.5,1.29 A1,1 0 0 0 0,2.09 L0,13.91 A1,1 0 0 0 1.5,14.71 L4.21,12.68 L10.82,15.67 A0.98,0.98 0 0 0 11.52,15.71 L15,14.11 A1,1 0 0 0 15.6,13 L15.6,3 A1,1 0 0 0 15,2.09 Z M11,11.26 L5.73,8 L11,4.74 Z";
+        }
         if (string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
         {
             return "M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M1.4,4.8 L12.6,4.8 M3,3.45 L3.08,3.45 M4.75,3.45 L4.83,3.45";

@@ -21,9 +21,9 @@ var tests = new (string Name, Action Run)[]
     ("session state engine", TestSessionEngine),
     ("locked long-running session recovery", TestLockedSessionRecovery),
     ("state database long-running session heartbeat", TestStateDatabaseHeartbeat),
-    ("desktop and CLI source identity", TestSessionSources),
+    ("desktop, VS Code, and CLI source identity", TestSessionSources),
     ("formatting and deep links", TestFormatting),
-    ("edge-aware HUD placement", TestPlacement),
+    ("direct HUD placement", TestPlacement),
     ("surface effect adaptation", TestSurfaceEffects),
     ("structural config recovery", TestConfiguration),
     ("macOS path and watcher portability", TestMacPortability),
@@ -343,6 +343,9 @@ void TestSessionSources()
     var desktopIdentity = SessionIdentityReader.ParseLine("""{"type":"session_meta","payload":{"id":"desktop","cwd":"C:\\Synthetic\\desktop","originator":"Codex Desktop","source":"vscode","model_provider":"openai"}}""");
     Equal("desktop", desktopIdentity.ClientSurface, "desktop source classification");
     Equal("openai", desktopIdentity.ModelProvider, "desktop provider classification");
+    var vsCodeIdentity = SessionIdentityReader.ParseLine("""{"type":"session_meta","payload":{"id":"vscode","cwd":"C:\\Synthetic\\vscode","originator":"codex_vscode","source":"vscode","model_provider":"openai"}}""");
+    Equal("vscode", vsCodeIdentity.ClientSurface, "VS Code source classification");
+    Equal("openai", vsCodeIdentity.ModelProvider, "VS Code provider classification");
     var cliIdentity = SessionIdentityReader.ParseLine("""{"type":"session_meta","payload":{"id":"cli","cwd":"C:\\Synthetic\\cli","originator":"codex-tui","source":"cli","model_provider":"openai"}}""");
     Equal("cli", cliIdentity.ClientSurface, "CLI source classification");
     Equal("openai", cliIdentity.ModelProvider, "CLI OpenAI provider classification");
@@ -370,33 +373,36 @@ void TestSessionSources()
         }) + '\n';
 
         var desktopPath = Path.Combine(defaultSessions, "desktop.jsonl");
+        var vsCodePath = Path.Combine(defaultSessions, "vscode.jsonl");
         var cliPath = Path.Combine(defaultSessions, "cli.jsonl");
         var deepSeekPath = Path.Combine(deepSeekSessions, "deepseek.jsonl");
         File.WriteAllText(desktopPath, Session("desktop-1", "desktop-project", "Codex Desktop", "vscode", "openai", "gpt-future"), new UTF8Encoding(false));
+        File.WriteAllText(vsCodePath, Session("vscode-1", "vscode-project", "codex_vscode", "vscode", "openai", "gpt-future"), new UTF8Encoding(false));
         File.WriteAllText(cliPath, Session("cli-1", "cli-project", "codex-tui", "cli", "openai", "gpt-next"), new UTF8Encoding(false));
         File.WriteAllText(deepSeekPath, Session("deepseek-1", "deepseek-project", "codex-tui", "cli", "deepseek", "deepseek-next"), new UTF8Encoding(false));
-        foreach (var path in new[] { desktopPath, cliPath, deepSeekPath }) File.SetLastWriteTimeUtc(path, now.UtcDateTime);
+        foreach (var path in new[] { desktopPath, vsCodePath, cliPath, deepSeekPath }) File.SetLastWriteTimeUtc(path, now.UtcDateTime);
 
         var profiles = new[]
         {
             new SessionProfile("codex", "Codex", Path.Combine(defaultRoot, "sessions"), Path.Combine(defaultRoot, "session_index.jsonl"), "unknown", string.Empty),
             new SessionProfile("deepseek", "DeepSeek", Path.Combine(deepSeekRoot, "sessions"), Path.Combine(deepSeekRoot, "session_index.jsonl"), "cli", "deepseek")
         };
-        var options = new HudRuntimeOptions { ActiveWindowMinutes = 60, DesktopSessionsEnabled = true, DefaultCliSessionsEnabled = true, DeepSeekCliSessionsEnabled = true };
+        var options = new HudRuntimeOptions { ActiveWindowMinutes = 60, DesktopSessionsEnabled = true, VsCodeSessionsEnabled = true, DefaultCliSessionsEnabled = true, DeepSeekCliSessionsEnabled = true };
         var engine = new SessionMonitorEngine(profiles, options);
         IsTrue(engine.RefreshActiveSessions(now), "multi-profile discovery");
         var states = engine.GetVisibleStates(now);
-        Equal(3, states.Count, "desktop, OpenAI CLI and DeepSeek CLI are all visible");
-        Equal(3, states.Select(static state => state.Number).Distinct().Count(), "task numbering is global across profiles");
+        Equal(4, states.Count, "desktop, VS Code, OpenAI CLI and DeepSeek CLI are all visible");
+        Equal(4, states.Select(static state => state.Number).Distinct().Count(), "task numbering is global across profiles");
         Equal("desktop", states.Single(state => state.SessionId == "desktop-1").ClientSurface, "desktop state source");
+        Equal("vscode", states.Single(state => state.SessionId == "vscode-1").ClientSurface, "VS Code state source");
         Equal("openai", states.Single(state => state.SessionId == "cli-1").ModelProvider, "default CLI provider");
         Equal("deepseek", states.Single(state => state.SessionId == "deepseek-1").ModelProvider, "DeepSeek profile provider");
 
         engine.UpdateOptions(options with { DefaultCliSessionsEnabled = false });
-        Equal(2, engine.GetVisibleStates(now).Count, "default CLI filter does not hide desktop or DeepSeek");
+        Equal(3, engine.GetVisibleStates(now).Count, "default CLI filter does not hide desktop, VS Code, or DeepSeek");
         engine.UpdateOptions(options with { DeepSeekCliSessionsEnabled = false });
-        Equal(2, engine.GetVisibleStates(now).Count, "DeepSeek filter does not hide default profile tasks");
-        engine.UpdateOptions(options with { DesktopSessionsEnabled = false, DefaultCliSessionsEnabled = true, DeepSeekCliSessionsEnabled = false });
+        Equal(3, engine.GetVisibleStates(now).Count, "DeepSeek filter does not hide default-profile tasks");
+        engine.UpdateOptions(options with { DesktopSessionsEnabled = false, VsCodeSessionsEnabled = false, DefaultCliSessionsEnabled = true, DeepSeekCliSessionsEnabled = false });
         var cliOnly = engine.GetVisibleStates(now);
         Equal(1, cliOnly.Count, "source filters isolate default CLI");
         Equal("cli-1", cliOnly.Single().SessionId, "correct default CLI task remains");
@@ -627,6 +633,9 @@ void TestPlacement()
     var custom = HudPlacement.ClampCustom(-1000, 5000, 0, 0, 1920, 1040, 700, 80, 18);
     Equal(-18d, custom.Left, "custom position clamps to visible left edge");
     Equal(978d, custom.Top, "custom position clamps to visible bottom edge");
+    var unsnapped = HudPlacement.ClampCustom(12 - 18, 15 - 18, 0, 0, 1920, 1040, 700, 80, 18);
+    Equal(-6d, unsnapped.Left, "near-left custom placement is not snapped");
+    Equal(-3d, unsnapped.Top, "near-top custom placement is not snapped");
 }
 
 void TestSurfaceEffects()
@@ -658,6 +667,7 @@ void TestConfiguration()
         Equal(0d, config["opacity"]!.GetValue<double>(), "opacity clamp");
         var settings = HudSettings.From(config);
         Equal("summary", settings.MultiTask.DisplayMode, "typed settings projection");
+        Equal(true, settings.SessionSources.VsCode, "missing VS Code source setting defaults to enabled");
         Equal("always", settings.MultiTask.NameMode, "conversation subtitle is visible by default");
         Equal(0d, settings.Opacity, "typed numeric settings projection");
         Equal(true, settings.AlwaysOnTop, "wrong scalar type retains default boolean");

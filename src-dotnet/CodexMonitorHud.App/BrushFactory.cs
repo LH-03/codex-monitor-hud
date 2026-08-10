@@ -34,7 +34,23 @@ internal sealed class BrushFactory
             return cached;
         }
         var brush = Convert(value, fallback);
-        if (settings.TransparencyMode == "uniform" || role == BrushRole.Status || brush is not SolidColorBrush solid)
+        if (settings.TransparencyMode == "uniform")
+        {
+            // Uniform opacity is applied to the whole window.  Make the shell
+            // source color opaque first, so 100% is truly opaque instead of
+            // inheriting a translucent ARGB background from a theme.
+            if (role == BrushRole.Background && brush is SolidColorBrush uniformSolid)
+            {
+                var opaque = uniformSolid.Color;
+                opaque.A = byte.MaxValue;
+                brush = new SolidColorBrush(opaque);
+                brush.Freeze();
+            }
+            CacheBrush(key, brush);
+            return brush;
+        }
+
+        if (role == BrushRole.Status || brush is not SolidColorBrush solid)
         {
             CacheBrush(key, brush);
             return brush;
@@ -95,7 +111,7 @@ internal sealed class BrushFactory
             var imageBrush = new ImageBrush(source)
             {
                 Stretch = ParseStretch(settings.ThemeStyle.ImageStretch),
-                Opacity = settings.ThemeStyle.ImageOpacity
+                Opacity = settings.TransparencyMode == "uniform" ? 1 : settings.ThemeStyle.ImageOpacity
             };
             imageBrush.Freeze();
             result = imageBrush;
@@ -107,6 +123,11 @@ internal sealed class BrushFactory
             var factor = GetRoleOpacity(BrushRole.Background, settings, status, hasAttention);
             start.A = (byte)Math.Round(start.A * factor);
             end.A = (byte)Math.Round(end.A * factor);
+            if (settings.TransparencyMode == "uniform")
+            {
+                start.A = byte.MaxValue;
+                end.A = byte.MaxValue;
+            }
             var angle = settings.ThemeStyle.GradientAngle * Math.PI / 180;
             var dx = Math.Cos(angle) * 0.5;
             var dy = Math.Sin(angle) * 0.5;
@@ -166,22 +187,27 @@ internal sealed class BrushFactory
             return 1;
         }
 
-        var level = settings.Opacity;
-        if (settings.TransparencyMode == "focus")
+        var level = Math.Clamp(settings.Opacity, 0, 1);
+        if (settings.TransparencyMode == "layered")
         {
-            level = hasAttention || status is "active" or "completed" or "aborted" or "error"
-                ? Math.Max(level, 0.72)
-                : status == "listening"
-                    ? Math.Max(level, 0.48)
-                    : Math.Max(0.08, level * 0.55);
+            return role switch
+            {
+                BrushRole.Background => 0.18 + 0.55 * level,
+                BrushRole.Primary => 1,
+                BrushRole.Secondary => 0.54 + 0.25 * level,
+                BrushRole.Decoration => 0.28 + 0.27 * level,
+                _ => 1
+            };
         }
 
+        var focused = hasAttention || status is "active" or "completed" or "aborted" or "error";
+        var listening = status == "listening";
         return role switch
         {
-            BrushRole.Background => level,
-            BrushRole.Primary => Math.Min(1, Math.Max(0.82, 0.76 + 0.22 * level)),
-            BrushRole.Secondary => Math.Min(1, Math.Max(0.42, 0.34 + 0.48 * level)),
-            BrushRole.Decoration => Math.Min(1, Math.Max(0.20, level)),
+            BrushRole.Background => focused ? 0.62 + 0.30 * level : listening ? 0.36 + 0.25 * level : 0.14 + 0.22 * level,
+            BrushRole.Primary => focused ? 1 : listening ? 0.94 : 0.84,
+            BrushRole.Secondary => focused ? 0.84 : listening ? 0.68 : 0.52,
+            BrushRole.Decoration => focused ? 0.70 : listening ? 0.48 : 0.30,
             _ => 1
         };
     }

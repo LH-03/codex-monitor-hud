@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using Forms = System.Windows.Forms;
 using CodexMonitorHud.Core.Configuration;
 using CodexMonitorHud.Core.Models;
 using CodexMonitorHud.Core.Presentation;
@@ -561,11 +562,15 @@ internal sealed class MainHudView : IDisposable
             {
                 Data = Geometry.Parse(GetSourceGeometry(state)),
                 Stroke = _brushes.Create(sourceColor, "#FF64748B", BrushRole.Primary, settings, status, false),
-                StrokeThickness = 1.45,
+                StrokeThickness = string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase) ? 0.45 : 1.45,
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap = PenLineCap.Round,
                 StrokeLineJoin = PenLineJoin.Round
             };
+            if (string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase))
+            {
+                sourceIcon.Fill = sourceIcon.Stroke;
+            }
             var sourceViewbox = new Viewbox { Width = 14, Height = 14, Child = sourceIcon };
             var sourceBadge = new Border
             {
@@ -1193,9 +1198,29 @@ internal sealed class MainHudView : IDisposable
         return (now - reference).TotalMinutes >= settings.Behavior.IdleIndicator.AfterMinutes;
     }
 
+    private Rect GetCurrentScreenBounds()
+    {
+        if (_handle != 0)
+        {
+            var bounds = Forms.Screen.FromHandle(_handle).Bounds;
+            var dpi = VisualTreeHelper.GetDpi(Window);
+            return new Rect(
+                bounds.Left / dpi.DpiScaleX,
+                bounds.Top / dpi.DpiScaleY,
+                bounds.Width / dpi.DpiScaleX,
+                bounds.Height / dpi.DpiScaleY);
+        }
+
+        return new Rect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight);
+    }
+
     private void UpdatePosition(HudSettings settings)
     {
-        var screen = SystemParameters.WorkArea;
+        var screen = GetCurrentScreenBounds();
         Window.MaxWidth = Math.Max(480, screen.Width + MainChromeInset * 2);
         Window.UpdateLayout();
         var width = Math.Max(1, Window.ActualWidth);
@@ -1345,6 +1370,29 @@ internal sealed class MainHudView : IDisposable
             try
             {
                 Window.DragMove();
+                var screen = GetCurrentScreenBounds();
+                var screenRight = screen.Left + screen.Width;
+                var screenBottom = screen.Top + screen.Height;
+                var pixelBounds = Forms.Screen.FromHandle(_handle).Bounds;
+                if (NativeMethods.GetCursorPos(out var cursor) &&
+                    Window.Left >= screen.Left && cursor.X <= pixelBounds.Left + PhysicalEdgeTolerance)
+                {
+                    Window.Left = screen.Left - MainChromeInset;
+                }
+                else if (cursor.X >= pixelBounds.Right - PhysicalEdgeTolerance &&
+                         Window.Left + Window.ActualWidth <= screenRight)
+                {
+                    Window.Left = screenRight - Window.ActualWidth + MainChromeInset;
+                }
+                if (cursor.Y <= pixelBounds.Top + PhysicalEdgeTolerance && Window.Top >= screen.Top)
+                {
+                    Window.Top = screen.Top - MainChromeInset;
+                }
+                else if (cursor.Y >= pixelBounds.Bottom - PhysicalEdgeTolerance &&
+                         Window.Top + Window.ActualHeight <= screenBottom)
+                {
+                    Window.Top = screenBottom - Window.ActualHeight + MainChromeInset;
+                }
                 PositionChanged?.Invoke(Window.Left + MainChromeInset, Window.Top + MainChromeInset);
             }
             catch (InvalidOperationException)
@@ -1491,6 +1539,10 @@ internal sealed class MainHudView : IDisposable
 
     private static string GetSourceLabel(SessionState state, IReadOnlyDictionary<string, string> locale)
     {
+        if (string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase))
+        {
+            return Get(locale, "sourceVsCode");
+        }
         if (string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
         {
             return Get(locale, "sourceDesktop");
@@ -1515,6 +1567,10 @@ internal sealed class MainHudView : IDisposable
 
     private static string GetSourceColor(SessionState state, HudSettings settings)
     {
+        if (string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase))
+        {
+            return "#FF007ACC";
+        }
         if (string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
         {
             return settings.Accent;
@@ -1542,6 +1598,11 @@ internal sealed class MainHudView : IDisposable
 
     private static string GetSourceGeometry(SessionState state)
     {
+        if (string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase))
+        {
+            // Official VS Code ribbon silhouette with an even-odd center cutout.
+            return "M11.52,0.29 A0.98,0.98 0 0 0 10.82,0.33 L4.21,3.33 L1.5,1.29 A1,1 0 0 0 0,2.09 L0,13.91 A1,1 0 0 0 1.5,14.71 L4.21,12.68 L10.82,15.67 A0.98,0.98 0 0 0 11.52,15.71 L15,14.11 A1,1 0 0 0 15.6,13 L15.6,3 A1,1 0 0 0 15,2.09 Z M11,11.26 L5.73,8 L11,4.74 Z";
+        }
         if (string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
         {
             return "M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M1.4,4.8 L12.6,4.8 M3,3.45 L3.08,3.45 M4.75,3.45 L4.83,3.45";
@@ -1624,6 +1685,7 @@ internal sealed class MainHudView : IDisposable
 
     private const double MainChromeInset = 18;
     private const double TaskBubbleChromeInset = 16;
+    private const double PhysicalEdgeTolerance = 1;
 
     private const string DetachGeometry = "M1.5,4.5 L1.5,10.5 L7.5,10.5 M5.2,1.5 L10.5,1.5 L10.5,6.8 M10.2,1.8 L4.5,7.5";
     private const string MergeGeometry = "M1.5,1.5 L10.5,1.5 L10.5,10.5 L1.5,10.5 Z M9.1,2.9 L4.1,7.9 M4.1,4.8 L4.1,7.9 L7.2,7.9";

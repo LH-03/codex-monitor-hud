@@ -1,6 +1,6 @@
 # Codex CLI profiles and optional provider isolation
 
-> [简体中文](CLI_PROFILE_ISOLATION.zh-CN.md) · Windows x64 · Codex Monitor HUD 3.0.0
+> [简体中文](CLI_PROFILE_ISOLATION.zh-CN.md) · Windows x64 · Codex Monitor HUD 3.1.0
 
 Codex Monitor HUD monitors the normal Codex CLI installation out of the box. You do **not** need a second profile to use CLI monitoring. The optional isolated profile described here is only for people who deliberately run Codex CLI against a separate, compatible model provider and want its configuration, authentication state, sessions, and HUD identity kept apart from their normal OpenAI profile.
 
@@ -31,7 +31,7 @@ The normal profile is usually:
 %USERPROFILE%\.codex
 ```
 
-The optional profile recognized by HUD 3.0.0 is:
+The optional profile recognized by HUD 3.1.0 is:
 
 ```text
 %USERPROFILE%\.codex-deepseek
@@ -84,7 +84,7 @@ The environment assignment above affects only that PowerShell process and its ch
 5. Keep the real API key in the provider's documented environment variable or another supported secret mechanism. Never commit it to this repository, a launcher, a screenshot, or a tutorial.
 6. Run a small canary task before trusting the profile with real work: read a disposable file, write and verify another, execute a harmless command, complete several tool-call turns, then test `codex resume`.
 
-Codex's configuration format evolves. Do not blindly paste a provider block from an old guide. As of the 3.0.0 release preparation, Codex documents `responses` as the supported custom-provider wire API; verify the live documentation again when you configure or upgrade Codex.
+Codex's configuration format evolves. Do not blindly paste a provider block from an old guide. As of the 3.1.0 release preparation, Codex documents `responses` as the supported custom-provider wire API; verify the live documentation again when you configure or upgrade Codex.
 
 ## Make the HUD see both profiles
 

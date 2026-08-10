@@ -2,7 +2,7 @@
 
 > [English](README.md) · 仅支持 Windows x64
 
-Codex Monitor HUD 是一个完全本地运行的 Windows 实时悬浮监控器：展示当前活跃的 Codex Desktop、普通 Codex CLI（通常是 OpenAI/GPT），以及可选的独立 DeepSeek CLI Profile。它不是聊天记录库、账单工具，也不是云端服务。
+Codex Monitor HUD 是一个完全本地运行的 Windows 实时悬浮监控器：展示当前活跃的 Codex Desktop、VS Code 中的 Codex、普通 Codex CLI（通常是 OpenAI/GPT），以及可选的独立 DeepSeek CLI Profile。它不是聊天记录库、账单工具，也不是云端服务。
 
 ## 一句话让 Codex 安装
 
@@ -16,13 +16,15 @@ Codex Monitor HUD 是一个完全本地运行的 Windows 实时悬浮监控器�
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -DefaultLanguage zh-CN
 ```
 
+Windows Release 会随包携带一套私有 .NET/WPF 运行时，因此无需用户预先安装匹配的系统级 .NET；下载体积的大部分来自这套运行时，而不是 HUD 本体。
+
 ## 显示什么
 
 - 活跃、监听、空闲、暂停、读取错误、已完成和已中止状态。
 - 缓存/未缓存输入、输出、推理输出、本次合计、任务累计、上下文占用、模型和活跃任务数。
 - Codex 本地 `rate_limits` 记录中最近一次出现的账号级周额度与 5 小时额度窗口。
 - 稳定任务编号、工作区标签，以及来自 `session_index.jsonl` 的本地官方对话标题。
-- 每个任务编号前都有来源徽标，让桌面端、OpenAI CLI 与 DeepSeek CLI 不会混在一起。
+- 每个任务编号前都有来源徽标，让桌面端、VS Code、OpenAI CLI 与 DeepSeek CLI 不会混在一起。
 - 缓存命中率和上下文占用属于单个任务，因此只放在列表行与独立小气泡中，不会被无意义地加总进汇总栏。每一行使用该任务由 Provider 实际报告的上下文窗口，GPT 与 DeepSeek 的窗口不会混用。
 - 可选的公开 API 标价等价成本估算；它会明确标为估算，不是订阅账单或 credits 余额。
 
@@ -30,19 +32,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -D
 
 周额度与 5 小时额度不会被猜测、不会按任务相加，也不会向账号 API 查询。HUD 只显示最新的本地观测值；当前 Codex 版本没有写出某个窗口时，已启用的指标会显示 `--`。
 
-## 桌面端与 CLI 来源
+## 桌面端、VS Code 与 CLI 来源
 
 三类任务沿用同一套简洁视觉语言，但各自有明确标记：
 
 | 来源 | 徽标 | 监听的本地 Profile |
 | --- | --- | --- |
 | Codex Desktop | 窗口轮廓 | 普通 `CODEX_HOME`（默认 `~/.codex`） |
+| VS Code 中的 Codex | VS Code 丝带图形 | 普通 `CODEX_HOME`（默认 `~/.codex`） |
 | Codex CLI · OpenAI | 终端 `>_` | 普通 `CODEX_HOME` |
 | Codex CLI · DeepSeek | 带波形的终端 | `~/.codex-deepseek` |
 
-徽标位于状态点之后、稳定任务编号之前，在主列表和独立小气泡中都会出现。汇总栏可显示各来源数量；**设置 > 监控来源** 可以分别开关三类来源。识别逻辑读取受限的会话元数据，不依赖写死的模型名称列表，因此以后出现新模型时仍能正常监控；只有价格未知时成本显示为 `--`。
+徽标位于状态点之后、稳定任务编号之前，在主列表和独立小气泡中都会出现。汇总栏可显示各来源数量；**设置 > 监控来源** 可以分别开关四类来源。VS Code 通过它自己的 `codex_vscode` 会话来源识别，不会再被显示为桌面端任务。识别逻辑读取受限的会话元数据，不依赖写死的模型名称列表，因此以后出现新模型时仍能正常监控；只有价格未知时成本显示为 `--`。
 
-桌面端任务可以使用 Codex 本地任务链接。CLI 任务不会伪装成桌面任务，请从对应的 CLI Profile 恢复。
+桌面端任务可以使用 Codex 本地任务链接。VS Code 和 CLI 任务不会伪装成桌面任务，请从 VS Code 或对应的 CLI Profile 恢复。
 
 原生 Codex CLI 不需要额外配置即可被监控。第二个 `~/.codex-deepseek` 根目录只是面向进阶用户的可选实测隔离约定；当前还不能任意添加其他自定义根目录。建立隔离配置前请先阅读 [Codex CLI 配置与可选 Provider 隔离](docs/CLI_PROFILE_ISOLATION.zh-CN.md)，其中说明了如何避免把凭据写进文件，以及如何随时回到完全不受影响的普通 Profile。
 
@@ -56,7 +59,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -D
 
 总气泡上的任务数量按钮只负责展开/收起内嵌列表。已经拆出的独立小气泡不会因收起列表而被合并或关闭；只有在 HUD/托盘菜单中明确选择“合并全部任务气泡”才会合并。
 
-![中文监控来源设置：桌面端、原生 CLI 与隔离 DeepSeek CLI 可分别开启](assets/settings-sources.png)
+![中文监控来源设置：桌面端、VS Code、原生 CLI 与隔离 DeepSeek CLI 可分别开启](assets/settings-sources.png)
 
 ## 日常操作
 
@@ -86,6 +89,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -D
 
 ## 当前状态
 
-`3.0.0` 是 Windows x64 正式版本：在 Codex Desktop 之外加入了原生 Codex CLI 监控，并可选识别隔离的 DeepSeek 后端 Codex CLI Profile。可选成本显示仅使用离线的标准 API 标价快照，不是 Codex 积分或订阅账单计算。常驻监控使用编译型 .NET/WPF 宿主；设置进程与 `-Legacy` 回退路径仍保留用于恢复。这是独立、非官方项目，与 OpenAI 或 DeepSeek 均没有隶属或背书关系。
+`3.1.0` 是 Windows x64 版本：在 Codex Desktop 与 CLI 之外，将 VS Code 中的 Codex 作为独立来源监控；三种透明方式有真实可见区别，切换立即生效，拖动也不再有“靠近就吸附”的行为。可选成本显示仅使用离线的标准 API 标价快照，不是 Codex 积分或订阅账单计算。这是独立、非官方项目，与 OpenAI、Microsoft 或 DeepSeek 均没有隶属或背书关系。
 
 MIT License.

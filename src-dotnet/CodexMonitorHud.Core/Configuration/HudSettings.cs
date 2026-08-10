@@ -25,6 +25,7 @@ public sealed record MultiTaskSettings(
 
 public sealed record SessionSourceSettings(
     bool Desktop,
+    bool VsCode,
     bool DefaultCli,
     bool DeepSeekCli);
 
@@ -145,6 +146,7 @@ public sealed record HudSettings
             ActiveWindowMinutes = Integer(document, "activeWindowMinutes", 30),
             SessionSources = new SessionSourceSettings(
                 Boolean(sources, "desktop", true),
+                Boolean(sources, "vscode", true),
                 Boolean(sources, "defaultCli", true),
                 Boolean(sources, "deepSeekCli", true)),
             MultiTask = new MultiTaskSettings(
@@ -237,6 +239,7 @@ public sealed record HudSettings
         ActiveWindowMinutes = ActiveWindowMinutes,
         MaximumFiles = 64,
         DesktopSessionsEnabled = SessionSources.Desktop,
+        VsCodeSessionsEnabled = SessionSources.VsCode,
         DefaultCliSessionsEnabled = SessionSources.DefaultCli,
         DeepSeekCliSessionsEnabled = SessionSources.DeepSeekCli,
         NumberCooldownSeconds = MultiTask.NumberCooldownSeconds,

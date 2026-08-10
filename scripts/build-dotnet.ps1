@@ -11,7 +11,7 @@ $dotnet = if (Test-Path -LiteralPath $privateDotnet) {
     $privateDotnet
 } else {
     $command = Get-Command dotnet -ErrorAction SilentlyContinue
-    if ($null -eq $command) { throw 'The .NET 10 SDK is required to build v3.0.0. The repository-private SDK was not found and dotnet is not on PATH.' }
+    if ($null -eq $command) { throw 'The .NET 10 SDK is required to build v3.1.0. The repository-private SDK was not found and dotnet is not on PATH.' }
     $command.Source
 }
 $dotnetRoot = Split-Path -Parent $dotnet
@@ -51,7 +51,7 @@ Copy-Item -LiteralPath $desktopRuntime.FullName -Destination (Join-Path $runtime
 
 $metadata = [ordered]@{
     product = 'Codex Monitor HUD'
-    version = '3.0.0'
+    version = '3.1.0'
     configuration = $Configuration
     framework = 'net10.0-windows'
     runtime = $coreRuntime.Name
@@ -62,7 +62,7 @@ $healthPath = Join-Path $stage 'health-check.json'
 & (Join-Path $runtimeStage 'dotnet.exe') (Join-Path $appStage 'CodexMonitorHud.dll') --plugin-root $root --health-check $healthPath
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $healthPath)) { throw 'Staged compiled runtime health check failed.' }
 $health = Get-Content -Raw -Encoding UTF8 -LiteralPath $healthPath | ConvertFrom-Json
-if ([string]$health.version -ne '3.0.0' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
+if ([string]$health.version -ne '3.1.0' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
     throw ('Staged compiled runtime health check returned an invalid result: ' + ($health | ConvertTo-Json -Compress))
 }
 if ($RunRuntimeTests) {
