@@ -16,6 +16,8 @@ Manual installation:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
+The Windows Release bundles a private .NET/WPF runtime so it can run without requiring a matching system-wide .NET installation; most of the download size comes from that runtime rather than the HUD itself.
+
 ## What you see
 
 - Active, listening, idle, paused, read-error, completed, and aborted task state.
