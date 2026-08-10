@@ -68,7 +68,7 @@ $hash  $archiveName
 
 Package files: $($packageFiles.Count)
 
-Upload the archive and SHA256SUMS.txt to the normal v${Version} GitHub Release after the main commit is pushed. Use GITHUB_RELEASE_DRAFT_${Version}.md for the title and body.
+Upload the archive and SHA256SUMS.txt to the normal v${Version} GitHub Release after the main commit is pushed. Write the user-facing body from the current CHANGELOG.md; do not add a root-level Release draft file.
 "@
 Set-Content -LiteralPath (Join-Path $outputRoot 'RELEASE_UPLOAD.md') -Value $upload -Encoding utf8
 

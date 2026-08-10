@@ -18,7 +18,7 @@ Read this file before changing or installing Codex Monitor HUD on a new computer
 4. `docs/ARCHITECTURE.md`
 5. `docs/MCP_INTEGRATION.md` when touching CLI control or notices
 6. `INSTALL_WITH_CODEX.md` when installing
-7. `GITHUB_RELEASE_DRAFT_3.0.0.md` when preparing a commit or Release
+7. `CHANGELOG.md` and `scripts/prepare-release.ps1` when preparing a Release
 
 Private handoffs may exist on an owner's original machine. They are not required for ordinary public maintenance and must not be copied into GitHub or release archives. For the same owner's second computer, `scripts/prepare-transfer-kit.ps1 -IncludeOwnerPrivate` intentionally includes them in a physical owner snapshot.
 

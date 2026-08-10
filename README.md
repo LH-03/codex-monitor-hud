@@ -94,7 +94,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-releas
 
 The installed build carries its own private .NET runtime. Source development requires Windows PowerShell 5.1+, Node.js for the plugin host, and the repository toolchain.
 
-Release operators can use [GITHUB_RELEASE_DRAFT_3.0.0.md](GITHUB_RELEASE_DRAFT_3.0.0.md) for the Release body, asset names, checksum handling, and final upload checklist. For a private physical transfer to another Windows PC, use `scripts/prepare-transfer-kit.ps1`; it packages public source, release artifacts, and continuation guidance without local settings or Codex session data.
+For a Release, run `scripts/prepare-release.ps1` after the final source checks. It creates the Windows ZIP, `SHA256SUMS.txt`, and upload fields under ignored `artifacts/`; publish the user-facing notes on GitHub from the current [CHANGELOG.md](CHANGELOG.md). For a private physical transfer to another Windows PC, use `scripts/prepare-transfer-kit.ps1`; it packages public source, release artifacts, and continuation guidance without local settings or Codex session data.
 
 ## Project status
 

@@ -22,7 +22,7 @@
 - `COLOR_ATTRIBUTION.md`: Codex Micro display-reference source, values, mapping, and non-affiliation/color-matching limitations.
 - `PRIVACY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `LICENSE`.
 - `TEST_RESULTS.md` and `SENSITIVE_SCAN.md`: current verification evidence and privacy-oriented package scan results.
-- `GITHUB_RELEASE_DRAFT_3.0.0.md`, `scripts/prepare-release.ps1`, and `scripts/prepare-transfer-kit.ps1`: copy-ready Release fields plus deterministic local release and second-PC transfer ZIP preparation. Generated output stays under ignored `artifacts/`.
+- `CHANGELOG.md`, `scripts/prepare-release.ps1`, and `scripts/prepare-transfer-kit.ps1`: public change history plus deterministic local Release and second-PC transfer ZIP preparation. Generated output stays under ignored `artifacts/`.
 - The installer creates on-demand desktop and Start menu settings shortcuts; no shortcut is placed in Windows Startup.
 
 The package intentionally excludes `private/`, local settings, Codex logs, databases, test output, Git history, and machine-specific paths.
