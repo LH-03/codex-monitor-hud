@@ -16,6 +16,8 @@ Codex Monitor HUD 是一个完全本地运行的 Windows 实时悬浮监控器�
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -DefaultLanguage zh-CN
 ```
 
+Windows Release 会随包携带一套私有 .NET/WPF 运行时，因此无需用户预先安装匹配的系统级 .NET；下载体积的大部分来自这套运行时，而不是 HUD 本体。
+
 ## 显示什么
 
 - 活跃、监听、空闲、暂停、读取错误、已完成和已中止状态。
