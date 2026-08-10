@@ -49,6 +49,8 @@ Desktop rows may use Codex's local task deep link. VS Code and CLI rows delibera
 
 Native Codex CLI monitoring works without any special setup. The second `~/.codex-deepseek` root is an optional, tested isolation convention for advanced users; arbitrary custom roots are not yet configurable. See [Codex CLI profiles and optional provider isolation](docs/CLI_PROFILE_ISOLATION.md) before creating one. The guide keeps credentials out of files and explains how to return to the untouched normal profile.
 
+**Possibly compatible, not tested:** because the HUD watches local Codex session records rather than a front-end-specific API, some other local Codex surfaces may already work accidentally — for example Cursor, Windsurf, VS Code Insiders, `codex exec`, official SDKs, or custom `codex app-server` clients — but they may appear under the wrong source badge. The maintainer is not going to chase every client one by one; if you enjoy trying your luck, see [Unverified Codex client compatibility](docs/UNVERIFIED_CODEX_CLIENTS.md) for the reasoning, current candidates, caveats, and a safe way to report results.
+
 ## Display modes
 
 | Mode | Use |
