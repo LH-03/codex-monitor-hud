@@ -89,10 +89,15 @@ public static partial class HudConfigStore
     public static void Normalize(JsonObject result, string localeRoot)
     {
         SetAllowed(result, "summary", new[] { "summary", "list", "split" }, "multiTask", "displayMode");
+        SetBool(result, GetBool(result, true, "sessionSources", "desktop"), "sessionSources", "desktop");
+        SetBool(result, GetBool(result, true, "sessionSources", "defaultCli"), "sessionSources", "defaultCli");
+        SetBool(result, GetBool(result, true, "sessionSources", "deepSeekCli"), "sessionSources", "deepSeekCli");
         SetAllowed(result, "rows", new[] { "rows", "cards", "rail" }, "multiTask", "listStyle");
         SetAllowed(result, "compact", new[] { "compact", "balanced", "relaxed" }, "multiTask", "listDensity");
         SetAllowed(result, "balanced", new[] { "compact", "balanced", "detailed" }, "multiTask", "listDetail");
-        SetAllowed(result, "hover", new[] { "hover", "always", "hidden" }, "multiTask", "nameMode");
+        // "hover" was the old default. Normalize it to "always" so existing
+        // installations gain an immediately readable conversation subtitle.
+        SetAllowed(result, "always", new[] { "always", "hidden" }, "multiTask", "nameMode");
         SetInt(result, Math.Clamp(GetInt(result, 6, "multiTask", "maxSplitBubbles"), 1, 12), "multiTask", "maxSplitBubbles");
         SetInt(result, Math.Clamp(GetInt(result, 120, "multiTask", "numberCooldownSeconds"), 0, 3600), "multiTask", "numberCooldownSeconds");
 

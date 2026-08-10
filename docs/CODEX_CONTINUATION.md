@@ -16,18 +16,23 @@ Read this file before changing or installing Codex Monitor HUD on a new computer
 2. `docs/PROJECT_STATUS.md`
 3. `docs/PROJECT_LEDGER.md`
 4. `docs/ARCHITECTURE.md`
-5. `INSTALL_WITH_CODEX.md` when installing
-6. `GITHUB_RELEASE_DRAFT_2.2.1.md` when preparing a commit or Release
+5. `docs/MCP_INTEGRATION.md` when touching CLI control or notices
+6. `INSTALL_WITH_CODEX.md` when installing
+7. `GITHUB_RELEASE_DRAFT_3.0.0.md` when preparing a commit or Release
 
 Private handoffs may exist on an owner's original machine. They are not required for ordinary public maintenance and must not be copied into GitHub or release archives. For the same owner's second computer, `scripts/prepare-transfer-kit.ps1 -IncludeOwnerPrivate` intentionally includes them in a physical owner snapshot.
 
-## Current 2.2.1 maintenance facts
+## Current 3.0.0 maintenance facts
 
 - Resident host: compiled .NET 10 WPF; Settings retains a compatibility process; `scripts/start.ps1 -Legacy` is recovery only.
 - Core project: `src-dotnet/CodexMonitorHud.Core`; WPF shell: `src-dotnet/CodexMonitorHud.App`; legacy compatibility host: `src/`.
 - Optional cost estimate is a local standard API list-price conversion, not Codex credits or a subscription bill.
-- Built-in pricing was checked 2026-08-03. GPT-5.6 Terra is `$2/$0.20/$12`; GPT-5.6 Luna is `$0.20/$0.02/$1.20`, each per million input/cached-input/output tokens.
+- Built-in pricing was rechecked 2026-08-10. GPT-5.6 Terra is `$2.50/$0.25/$15`; GPT-5.6 Luna is `$1/$0.10/$6`, each per million standard input/cached-input/output text tokens. Dated model snapshots reuse the matching catalog entry; entirely unknown prices remain unpriced.
 - 5-hour and weekly allowance fields are observed local account windows, never calculated by adding tasks and never fetched from a network API.
+- Session monitoring covers Desktop and normal CLI under the normal `CODEX_HOME`, plus the conventional isolated `~/.codex-deepseek` CLI profile. All profiles share one global 64-candidate cap and one stable-number pool.
+- Do not read or rewrite either profile's `config.toml`, auth files, provider choice, model choice, prompts, replies, or archives to support monitoring. Source identity comes from bounded session metadata.
+- The source badge is part of task identity: Desktop window, OpenAI CLI terminal, or DeepSeek CLI wave-terminal. Closing a detached bubble merges only that surface; list dismissal is a different action.
+- The optional MCP server currently prefers protocol `2025-11-25`, returns structured source-aware results, and is installed separately per `CODEX_HOME`. A newly installed plugin becomes available to new Codex tasks, not necessarily the task that performed installation.
 
 ## Safe operating sequence
 
@@ -50,5 +55,5 @@ Run behavior or isolated runtime tests when touching rendering, task lifecycle, 
 ## One-line starter prompt
 
 ```text
-Read README.md, docs/PROJECT_STATUS.md, docs/PROJECT_LEDGER.md, and docs/CODEX_CONTINUATION.md in this repository; preserve privacy and Git boundaries, verify the current 2.2.1 Windows HUD state with synthetic tests, then install or modify only what I explicitly request.
+Read README.md, docs/PROJECT_STATUS.md, docs/PROJECT_LEDGER.md, and docs/CODEX_CONTINUATION.md in this repository; preserve privacy and Git boundaries, verify the current 3.0.0 Windows HUD state with synthetic tests, then install or modify only what I explicitly request.
 ```

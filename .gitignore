@@ -3,7 +3,8 @@ Thumbs.db
 *.log
 *.zip
 artifacts/
-.test-output/
+.test-output*/
+.test-output*.json
 settings.json
 *.user.json
 .env
@@ -20,6 +21,7 @@ node_modules/
 bin/
 obj/
 runtime/
+Microsoft/
 
 !src-dotnet/CodexMonitorHud.Core/Sessions/
 !src-dotnet/CodexMonitorHud.Core/Sessions/**

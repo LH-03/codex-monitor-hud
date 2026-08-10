@@ -194,10 +194,24 @@ function Get-HudPricingCatalog {
 function Get-HudCostEstimate {
     param([Parameter(Mandatory = $true)]$Snapshot, [Parameter(Mandatory = $true)]$Catalog)
     if (-not [bool]$Catalog.Loaded) { return $null }
-    $model=[string]$Snapshot.Model
-    $pricedAs=$model
-    if (-not $Catalog.Models.ContainsKey($pricedAs) -and $Catalog.Aliases.ContainsKey($model)) { $pricedAs=[string]$Catalog.Aliases[$model] }
-    if (-not $Catalog.Models.ContainsKey($pricedAs)) { return $null }
+    $model=([string]$Snapshot.Model).Trim()
+    $candidates=New-Object System.Collections.ArrayList
+    if (-not [string]::IsNullOrWhiteSpace($model)) { [void]$candidates.Add($model) }
+    $snapshotMatch=[regex]::Match($model,'^(?<base>.+)-\d{4}-\d{2}-\d{2}$',[Text.RegularExpressions.RegexOptions]::CultureInvariant,[TimeSpan]::FromMilliseconds(50))
+    if ($snapshotMatch.Success) { [void]$candidates.Add([string]$snapshotMatch.Groups['base'].Value) }
+    $pricedAs=$null
+    foreach($candidate in $candidates){
+        $current=[string]$candidate
+        $visited=@{}
+        for($depth=0;$depth -lt 5 -and -not $visited.ContainsKey($current);$depth++){
+            $visited[$current]=$true
+            if($Catalog.Models.ContainsKey($current)){$pricedAs=$current;break}
+            if(-not $Catalog.Aliases.ContainsKey($current)){break}
+            $current=([string]$Catalog.Aliases[$current]).Trim()
+        }
+        if($null -ne $pricedAs){break}
+    }
+    if ($null -eq $pricedAs) { return $null }
     $rates=$Catalog.Models[$pricedAs]
     $input=if($null -ne $Snapshot.PSObject.Properties['TaskInput']){[double]$Snapshot.TaskInput}else{[double]$Snapshot.Input}
     $cached=if($null -ne $Snapshot.PSObject.Properties['TaskCached']){[double]$Snapshot.TaskCached}else{[double]$Snapshot.Cached}
@@ -237,7 +251,7 @@ function Get-HudConfig {
     if (@('rows','cards','rail') -notcontains [string]$result.multiTask.listStyle) { $result.multiTask.listStyle = 'rows' }
     if (@('compact','balanced','relaxed') -notcontains [string]$result.multiTask.listDensity) { $result.multiTask.listDensity = 'compact' }
     if (@('compact','balanced','detailed') -notcontains [string]$result.multiTask.listDetail) { $result.multiTask.listDetail = 'balanced' }
-    if (@('hover','always','hidden') -notcontains [string]$result.multiTask.nameMode) { $result.multiTask.nameMode = 'hover' }
+    if (@('always','hidden') -notcontains [string]$result.multiTask.nameMode) { $result.multiTask.nameMode = 'always' }
     $result.multiTask.maxSplitBubbles = [Math]::Max(1, [Math]::Min(12, [int]$result.multiTask.maxSplitBubbles))
     $result.multiTask.numberCooldownSeconds = [Math]::Max(0, [Math]::Min(3600, [int]$result.multiTask.numberCooldownSeconds))
     $languageAvailable = @('zh-CN','en','symbols') -contains [string]$result.language
@@ -373,6 +387,123 @@ function Get-LatestHudSessionFile {
     $files | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
 }
 
+function Test-HudSessionFileReadBlocked {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    try {
+        $share = [IO.FileShare]([int][IO.FileShare]::ReadWrite -bor [int][IO.FileShare]::Delete)
+        $stream = New-Object IO.FileStream($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,$share)
+        try { return $false } finally { $stream.Dispose() }
+    } catch {
+        $exception = $_.Exception
+        while ($null -ne $exception.InnerException) { $exception = $exception.InnerException }
+        if ($exception -isnot [IO.IOException]) { return $false }
+        $nativeCode = $exception.HResult -band 0xFFFF
+        return ($nativeCode -eq 32 -or $nativeCode -eq 33)
+    }
+}
+
+function Get-HudRecentRuntimeSessions {
+    param(
+        [Parameter(Mandatory = $true)][string]$DatabasePath,
+        [Parameter(Mandatory = $true)][DateTimeOffset]$Cutoff,
+        [int]$MaximumRows = 64
+    )
+    if (-not (Test-Path -LiteralPath $DatabasePath -PathType Leaf)) { return @() }
+    if ($null -eq ('CodexMonitorHud.Legacy.WinSqliteActivityReader' -as [type])) {
+        try {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace CodexMonitorHud.Legacy
+{
+    public sealed class RuntimeSessionActivity
+    {
+        public string SessionId { get; set; }
+        public string RolloutPath { get; set; }
+        public long UpdatedAtMilliseconds { get; set; }
+    }
+
+    public static class WinSqliteActivityReader
+    {
+        const int Ok = 0, Row = 100, Done = 101, OpenReadOnly = 1;
+
+        public static RuntimeSessionActivity[] Read(string databasePath, long cutoffMilliseconds, int maximumRows)
+        {
+            if (!File.Exists(databasePath)) return new RuntimeSessionActivity[0];
+            IntPtr database = IntPtr.Zero, statement = IntPtr.Zero;
+            try
+            {
+                if (sqlite3_open_v2(Utf8(databasePath), out database, OpenReadOnly, IntPtr.Zero) != Ok || database == IntPtr.Zero)
+                    return new RuntimeSessionActivity[0];
+                sqlite3_busy_timeout(database, 75);
+                int limit = Math.Max(1, Math.Min(256, maximumRows));
+                string sql = "SELECT id, rollout_path, updated_at_ms FROM threads WHERE archived = 0 AND thread_source = 'user' AND updated_at_ms >= " + cutoffMilliseconds + " ORDER BY updated_at_ms DESC LIMIT " + limit;
+                if (sqlite3_prepare_v2(database, Utf8(sql), -1, out statement, IntPtr.Zero) != Ok || statement == IntPtr.Zero)
+                    return new RuntimeSessionActivity[0];
+                var results = new List<RuntimeSessionActivity>();
+                while (true)
+                {
+                    int step = sqlite3_step(statement);
+                    if (step == Done) break;
+                    if (step != Row) return new RuntimeSessionActivity[0];
+                    string id = Text(statement, 0), path = Text(statement, 1);
+                    long updated = sqlite3_column_int64(statement, 2);
+                    if (id.Length > 0 && path.Length > 0 && updated > 0)
+                        results.Add(new RuntimeSessionActivity { SessionId = id, RolloutPath = path, UpdatedAtMilliseconds = updated });
+                }
+                return results.ToArray();
+            }
+            catch { return new RuntimeSessionActivity[0]; }
+            finally
+            {
+                if (statement != IntPtr.Zero) sqlite3_finalize(statement);
+                if (database != IntPtr.Zero) sqlite3_close_v2(database);
+            }
+        }
+
+        static byte[] Utf8(string value) { return Encoding.UTF8.GetBytes(value + "\0"); }
+        static string Text(IntPtr statement, int column)
+        {
+            IntPtr pointer = sqlite3_column_text(statement, column);
+            int length = sqlite3_column_bytes(statement, column);
+            if (pointer == IntPtr.Zero || length <= 0) return String.Empty;
+            byte[] bytes = new byte[length];
+            Marshal.Copy(pointer, bytes, 0, length);
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_open_v2(byte[] filename, out IntPtr database, int flags, IntPtr vfs);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_busy_timeout(IntPtr database, int milliseconds);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_prepare_v2(IntPtr database, byte[] sql, int bytes, out IntPtr statement, IntPtr tail);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_step(IntPtr statement);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern IntPtr sqlite3_column_text(IntPtr statement, int column);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_column_bytes(IntPtr statement, int column);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern long sqlite3_column_int64(IntPtr statement, int column);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_finalize(IntPtr statement);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)] static extern int sqlite3_close_v2(IntPtr database);
+    }
+}
+'@
+        } catch { return @() }
+    }
+    try {
+        return @([CodexMonitorHud.Legacy.WinSqliteActivityReader]::Read(
+            $DatabasePath,
+            $Cutoff.ToUnixTimeMilliseconds(),
+            [Math]::Max(1,$MaximumRows)) | ForEach-Object {
+                [pscustomobject]@{
+                    SessionId = [string]$_.SessionId
+                    RolloutPath = [string]$_.RolloutPath
+                    UpdatedAt = [DateTimeOffset]::FromUnixTimeMilliseconds([Int64]$_.UpdatedAtMilliseconds)
+                }
+            })
+    } catch { return @() }
+}
+
 function Get-ActiveHudSessionFiles {
     param(
         [Parameter(Mandatory = $true)][string]$SessionsRoot,
@@ -381,16 +512,33 @@ function Get-ActiveHudSessionFiles {
     )
     if (-not (Test-Path -LiteralPath $SessionsRoot)) { return @() }
     $cutoff = [DateTime]::UtcNow.AddMinutes(-[Math]::Max(1, $ActiveWindowMinutes))
-    $files = New-Object System.Collections.ArrayList
-    foreach ($file in Get-ChildItem -LiteralPath $SessionsRoot -Recurse -File -Filter '*.jsonl' -ErrorAction SilentlyContinue) {
-        if ($file.LastWriteTimeUtc -ge $cutoff) { [void]$files.Add($file) }
+    $maximum = [Math]::Max(1, $MaximumFiles)
+    $allFiles = @(Get-ChildItem -LiteralPath $SessionsRoot -Recurse -File -Filter '*.jsonl' -ErrorAction SilentlyContinue)
+    $selected = @{}
+    foreach ($file in @($allFiles | Where-Object { $_.LastWriteTimeUtc -ge $cutoff } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First $maximum)) {
+        $file | Add-Member -NotePropertyName ReadBlocked -NotePropertyValue ([bool](Test-HudSessionFileReadBlocked $file.FullName)) -Force
+        $selected[$file.FullName] = $file
     }
-    if ($files.Count -eq 0) {
+
+    # Probe only a bounded newest subset of older rollouts. This recovers a
+    # long-running task whose Codex writer holds an exclusive handle without
+    # turning each HUD refresh into a scan-open of the full history.
+    $probeLimit = [Math]::Max(256, $maximum * 8)
+    foreach ($file in @($allFiles | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First $probeLimit)) {
+        if (-not (Test-HudSessionFileReadBlocked $file.FullName)) { continue }
+        $file | Add-Member -NotePropertyName ReadBlocked -NotePropertyValue $true -Force
+        $selected[$file.FullName] = $file
+    }
+
+    if ($selected.Count -eq 0) {
         $latest = Get-LatestHudSessionFile $SessionsRoot
-        if ($null -ne $latest) { return @($latest) }
+        if ($null -ne $latest) {
+            $latest | Add-Member -NotePropertyName ReadBlocked -NotePropertyValue ([bool](Test-HudSessionFileReadBlocked $latest.FullName)) -Force
+            return @($latest)
+        }
         return @()
     }
-    return @($files | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First ([Math]::Max(1, $MaximumFiles)))
+    return @($selected.Values | Sort-Object @{Expression={ [bool]$_.ReadBlocked };Descending=$true},@{Expression={ $_.LastWriteTimeUtc };Descending=$true} | Select-Object -First $maximum)
 }
 
 function Convert-HudRecord {
@@ -495,7 +643,7 @@ function Convert-HudRecord {
         }
     }
     $window = [Int64]$record.payload.info.model_context_window
-    $contextPercent = if ($window -gt 0) { [Math]::Min(100, [Math]::Round(($input * 100.0) / $window, 1)) } else { 0 }
+    $contextPercent = if ($window -gt 0) { [Math]::Min(100, ($input * 100.0) / $window) } else { 0 }
     [pscustomobject]@{
         Kind = 'usage'
         Timestamp = $timestamp
@@ -573,12 +721,12 @@ function Get-LatestHudSnapshot {
     for ($i = $lines.Count - 1; $i -ge 0; $i--) {
         $item = Convert-HudRecord $lines[$i]
         if ($null -eq $item) { continue }
-        if (-not $lifecycleSeen -and @('started','completed','completed_silent','aborted') -contains [string]$item.Kind) {
+        if (-not $lifecycleSeen -and @('started','completed','aborted') -contains [string]$item.Kind) {
             $lifecycleSeen = $true
-            if (@('completed','completed_silent','aborted') -contains [string]$item.Kind) {
-                $terminalStatus = if ($item.Kind -eq 'completed_silent') { 'completed' } else { [string]$item.Kind }
+            if (@('completed','aborted') -contains [string]$item.Kind) {
+                $terminalStatus = [string]$item.Kind
                 $terminalTimestamp = $item.Timestamp
-                $terminalSilent = ($item.Kind -eq 'completed_silent')
+                $terminalSilent = $false
             }
         }
         if (($item.Kind -eq 'usage' -or $item.Kind -eq 'allowance') -and $null -eq $allowance) {
@@ -632,27 +780,50 @@ function Format-HudNumber {
     return [string]$Value
 }
 
+function Format-HudCacheHitRate {
+    param([Int64]$InputTokens, [Int64]$CachedInputTokens)
+    if ($InputTokens -le 0) { return '--' }
+    $boundedCached = [Math]::Max([Int64]0, [Math]::Min($InputTokens, $CachedInputTokens))
+    return Format-HudPercent (($boundedCached * 100.0) / $InputTokens)
+}
+
+function Format-HudPercent {
+    param([double]$Value)
+    if ([double]::IsNaN($Value) -or [double]::IsInfinity($Value)) { return '--' }
+    $bounded = [Math]::Max(0.0,[Math]::Min(100.0,$Value))
+    $rounded = [Math]::Round($bounded,1,[MidpointRounding]::AwayFromZero)
+    $culture = [Globalization.CultureInfo]::GetCultureInfo('en-US')
+    if ($bounded -gt 0 -and $bounded -lt 100 -and $rounded -ge 100) {
+        $belowBoundary = [Math]::Floor($bounded * 100.0) / 100.0
+        return $belowBoundary.ToString('0.##',$culture) + '%'
+    }
+    if ($bounded -gt 0 -and $rounded -eq 0) { return '<0.1%' }
+    return $rounded.ToString('0.#',$culture) + '%'
+}
+
 function Get-HudMetrics {
     param([Parameter(Mandatory = $true)]$Snapshot, [Parameter(Mandatory = $true)]$Config, [Parameter(Mandatory = $true)]$Locale)
     $metrics = New-Object System.Collections.ArrayList
     $values = [ordered]@{
         input = Format-HudNumber $Snapshot.Input $Config.numberFormat
         cached = Format-HudNumber $Snapshot.Cached $Config.numberFormat
+        cacheHitRate = Format-HudCacheHitRate $Snapshot.Input $Snapshot.Cached
         uncached = Format-HudNumber $Snapshot.Uncached $Config.numberFormat
         output = Format-HudNumber $Snapshot.Output $Config.numberFormat
         reasoning = Format-HudNumber $Snapshot.Reasoning $Config.numberFormat
         callTotal = Format-HudNumber $Snapshot.CallTotal $Config.numberFormat
         taskTotal = Format-HudNumber $Snapshot.TaskTotal $Config.numberFormat
-        context = ('{0:0.#}%' -f $Snapshot.ContextPercent)
+        context = if ($null -ne $Snapshot.PSObject.Properties['ContextWindow'] -and [Int64]$Snapshot.ContextWindow -gt 0) { Format-HudPercent ([double]$Snapshot.ContextPercent) } else { '--' }
         model = if ([string]::IsNullOrWhiteSpace($Snapshot.Model)) { '-' } else { $Snapshot.Model }
         updated = $Snapshot.Timestamp.ToString('HH:mm:ss')
         activeTasks = if ($null -ne $Snapshot.PSObject.Properties['ActiveTasks']) { Format-HudNumber ([Int64]$Snapshot.ActiveTasks) $Config.numberFormat } else { '1' }
-        weeklyRemaining = if ($null -ne $Snapshot.PSObject.Properties['WeeklyRemainingPercent'] -and $null -ne $Snapshot.WeeklyRemainingPercent) { ('{0:0.#}%' -f [double]$Snapshot.WeeklyRemainingPercent) } else { '--' }
-        fiveHourRemaining = if ($null -ne $Snapshot.PSObject.Properties['FiveHourRemainingPercent'] -and $null -ne $Snapshot.FiveHourRemainingPercent) { ('{0:0.#}%' -f [double]$Snapshot.FiveHourRemainingPercent) } else { '--' }
+        weeklyRemaining = if ($null -ne $Snapshot.PSObject.Properties['WeeklyRemainingPercent'] -and $null -ne $Snapshot.WeeklyRemainingPercent) { Format-HudPercent ([double]$Snapshot.WeeklyRemainingPercent) } else { '--' }
+        fiveHourRemaining = if ($null -ne $Snapshot.PSObject.Properties['FiveHourRemainingPercent'] -and $null -ne $Snapshot.FiveHourRemainingPercent) { Format-HudPercent ([double]$Snapshot.FiveHourRemainingPercent) } else { '--' }
         estimatedCost = if ($null -ne $Snapshot.PSObject.Properties['EstimatedCostUsd']) { Format-HudCost $Snapshot.EstimatedCostUsd } else { '--' }
     }
+    $summaryKeys = @('input','cached','uncached','output','reasoning','callTotal','activeTasks','weeklyRemaining','fiveHourRemaining','estimatedCost')
     foreach ($key in $values.Keys) {
-        if ([bool]$Config.fields.$key) {
+        if ($summaryKeys -contains $key -and [bool]$Config.fields.$key) {
             [void]$metrics.Add([pscustomobject]@{ Key = $key; Label = [string]$Locale.$key; Value = [string]$values[$key] })
         }
     }
@@ -705,4 +876,4 @@ function Test-HudAccounting {
     (($Snapshot.Cached + $Snapshot.Uncached) -eq $Snapshot.Input) -and (($Snapshot.Input + $Snapshot.Output) -eq $Snapshot.CallTotal)
 }
 
-Export-ModuleMember -Function Get-HudPaths, Get-HudConfig, Save-HudConfig, New-HudTaskNumberPool, Get-HudTaskNumber, Add-HudReleasedTaskNumber, Get-HudLocale, Get-HudThemes, Get-HudPricingCatalog, Get-HudCostEstimate, Format-HudCost, Get-LatestHudSessionFile, Get-ActiveHudSessionFiles, Convert-HudRecord, Split-HudJsonLines, Get-LatestHudSnapshot, Get-LatestHudAllowanceSnapshot, Format-HudNumber, Get-HudMetrics, Merge-HudSnapshots, Test-HudAccounting, Get-HudSurfaceEffectProfile, Get-HudContextAlertLevel, Get-HudContextAlertThresholds, Get-HudTaskDeepLink
+Export-ModuleMember -Function Get-HudPaths, Get-HudConfig, Save-HudConfig, New-HudTaskNumberPool, Get-HudTaskNumber, Add-HudReleasedTaskNumber, Get-HudLocale, Get-HudThemes, Get-HudPricingCatalog, Get-HudCostEstimate, Format-HudCost, Get-LatestHudSessionFile, Get-ActiveHudSessionFiles, Get-HudRecentRuntimeSessions, Test-HudSessionFileReadBlocked, Convert-HudRecord, Split-HudJsonLines, Get-LatestHudSnapshot, Get-LatestHudAllowanceSnapshot, Format-HudNumber, Format-HudPercent, Format-HudCacheHitRate, Get-HudMetrics, Merge-HudSnapshots, Test-HudAccounting, Get-HudSurfaceEffectProfile, Get-HudContextAlertLevel, Get-HudContextAlertThresholds, Get-HudTaskDeepLink

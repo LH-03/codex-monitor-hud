@@ -6,6 +6,7 @@ namespace CodexMonitorHud.Core.Configuration;
 public sealed record MetricFieldSettings(
     bool Model,
     bool CallTotal,
+    bool CacheHitRate,
     bool TaskTotal,
     bool EstimatedCost,
     bool Updated);
@@ -21,6 +22,11 @@ public sealed record MultiTaskSettings(
     int NumberCooldownSeconds,
     MetricFieldSettings ListFields,
     MetricFieldSettings BubbleFields);
+
+public sealed record SessionSourceSettings(
+    bool Desktop,
+    bool DefaultCli,
+    bool DeepSeekCli);
 
 public sealed record IdleIndicatorSettings(
     bool Enabled,
@@ -88,6 +94,7 @@ public sealed record HudSettings
     public required string NumberFormat { get; init; }
     public required string MonitorScope { get; init; }
     public required int ActiveWindowMinutes { get; init; }
+    public required SessionSourceSettings SessionSources { get; init; }
     public required MultiTaskSettings MultiTask { get; init; }
     public required BehaviorSettings Behavior { get; init; }
     public required AttentionSettings Attention { get; init; }
@@ -119,6 +126,7 @@ public sealed record HudSettings
     public static HudSettings From(JsonObject document)
     {
         var multi = Object(document, "multiTask");
+        var sources = Object(document, "sessionSources");
         var behavior = Object(document, "behavior");
         var idle = Object(behavior, "idleIndicator");
         var context = Object(behavior, "contextAlerts");
@@ -135,12 +143,16 @@ public sealed record HudSettings
             NumberFormat = Text(document, "numberFormat", "exact"),
             MonitorScope = Text(document, "monitorScope", "aggregate"),
             ActiveWindowMinutes = Integer(document, "activeWindowMinutes", 30),
+            SessionSources = new SessionSourceSettings(
+                Boolean(sources, "desktop", true),
+                Boolean(sources, "defaultCli", true),
+                Boolean(sources, "deepSeekCli", true)),
             MultiTask = new MultiTaskSettings(
                 Text(multi, "displayMode", "summary"),
                 Text(multi, "listStyle", "rows"),
                 Text(multi, "listDensity", "compact"),
                 Text(multi, "listDetail", "balanced"),
-                Text(multi, "nameMode", "hover"),
+                Text(multi, "nameMode", "always"),
                 Integer(multi, "maxSplitBubbles", 6),
                 Boolean(multi, "autoSplitNewTasks", true),
                 Integer(multi, "numberCooldownSeconds", 120),
@@ -224,6 +236,9 @@ public sealed record HudSettings
     {
         ActiveWindowMinutes = ActiveWindowMinutes,
         MaximumFiles = 64,
+        DesktopSessionsEnabled = SessionSources.Desktop,
+        DefaultCliSessionsEnabled = SessionSources.DefaultCli,
+        DeepSeekCliSessionsEnabled = SessionSources.DeepSeekCli,
         NumberCooldownSeconds = MultiTask.NumberCooldownSeconds,
         CompletionGraceSeconds = Attention.CompletionGraceSeconds,
         AttentionDurationSeconds = Attention.DurationSeconds,
@@ -244,6 +259,7 @@ public sealed record HudSettings
     private static MetricFieldSettings MetricFields(JsonObject node) => new(
         Boolean(node, "model"),
         Boolean(node, "callTotal"),
+        Boolean(node, "cacheHitRate"),
         Boolean(node, "taskTotal"),
         Boolean(node, "estimatedCost"),
         Boolean(node, "updated"));

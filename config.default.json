@@ -5,18 +5,24 @@
   "numberFormat": "exact",
   "monitorScope": "aggregate",
   "activeWindowMinutes": 30,
+  "sessionSources": {
+    "desktop": true,
+    "defaultCli": true,
+    "deepSeekCli": true
+  },
   "multiTask": {
     "displayMode": "summary",
     "listStyle": "rows",
     "listDensity": "compact",
     "listDetail": "balanced",
-    "nameMode": "hover",
+    "nameMode": "always",
     "maxSplitBubbles": 6,
     "autoSplitNewTasks": true,
     "numberCooldownSeconds": 120,
     "listFields": {
       "model": true,
       "callTotal": true,
+      "cacheHitRate": false,
       "taskTotal": false,
       "estimatedCost": false,
       "updated": false
@@ -24,6 +30,7 @@
     "bubbleFields": {
       "model": true,
       "callTotal": true,
+      "cacheHitRate": false,
       "taskTotal": true,
       "estimatedCost": false,
       "updated": true
@@ -125,11 +132,12 @@
   "fields": {
     "input": false,
     "cached": true,
+    "cacheHitRate": false,
     "uncached": true,
     "output": true,
     "reasoning": false,
     "callTotal": true,
-    "taskTotal": true,
+    "taskTotal": false,
     "context": false,
     "model": false,
     "updated": false,

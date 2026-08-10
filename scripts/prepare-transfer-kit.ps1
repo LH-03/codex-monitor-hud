@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)]
     [string]$ReleasePackage,
     [switch]$IncludeOwnerPrivate,
-    [string]$Version = '2.2.1',
+    [string]$Version = '3.0.0',
     [string]$OutputRoot = ''
 )
 
@@ -30,7 +30,7 @@ $releaseDestination = Join-Path $stageRoot 'release'
 $archiveName = if ($IncludeOwnerPrivate) { "CodexMonitorHUD-v${Version}-owner-snapshot.zip" } else { "CodexMonitorHUD-v${Version}-portable-kit.zip" }
 $archivePath = Join-Path $outputRoot $archiveName
 
-$excludedRootNames = @('artifacts','.test-output')
+$excludedRootNames = @('artifacts','.test-output','Microsoft')
 if (-not $IncludeOwnerPrivate) {
     $excludedRootNames += @('.git','.agents','.codex','private','node_modules','sessions','logs','archive')
 }
@@ -48,6 +48,7 @@ $files = Get-ChildItem -LiteralPath $sourceRoot -File -Recurse -Force | Where-Ob
     $relative = $_.FullName.Substring($sourceRoot.Length).TrimStart([char[]]@([char]92,[char]47))
     $parts = $relative -split '[\\/]'
     $parts[0] -notin $excludedRootNames -and
+    $parts[0] -notlike '.test-output*' -and
     @($parts | Where-Object { $_ -in $excludedDirectoryNames }).Count -eq 0
 } | Sort-Object FullName
 

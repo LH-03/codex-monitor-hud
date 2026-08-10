@@ -2,6 +2,7 @@ using CodexMonitorHud.Core.Models;
 using CodexMonitorHud.Core.Parsing;
 using CodexMonitorHud.Core.Presentation;
 using CodexMonitorHud.Core.Sessions;
+using System.Text.RegularExpressions;
 
 namespace CodexMonitorHud.Core.State;
 
@@ -9,10 +10,16 @@ public sealed class SessionMonitorEngine
 {
     private const int PerSessionReadBudgetBytes = 256 * 1024;
     private const int GlobalReadBudgetBytes = 4 * 1024 * 1024;
-    private readonly string _sessionsRoot;
-    private readonly string _sessionIndexPath;
+    private static readonly TimeSpan LockRecoveryGrace = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan RuntimeHeartbeatFreshness = TimeSpan.FromMinutes(3);
+    private static readonly Regex RolloutSessionIdPattern = new(
+        "(?<id>[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})(?:\\.jsonl)?$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private readonly IReadOnlyList<SessionProfile> _profiles;
+    private readonly IReadOnlyDictionary<string, SessionProfile> _profileById;
     private readonly TaskNumberPool _numberPool;
-    private readonly SessionTitleIndex _titleIndex = new();
+    private readonly IReadOnlyDictionary<string, SessionTitleIndex> _titleIndexes;
+    private readonly ISessionActivitySource _activitySource;
     private readonly StringComparer _pathComparer;
     private readonly Dictionary<string, SessionState> _states;
     private readonly HashSet<string> _backlogPaths;
@@ -22,11 +29,51 @@ public sealed class SessionMonitorEngine
         string sessionsRoot,
         string sessionIndexPath,
         HudRuntimeOptions options,
-        StringComparer? pathComparer = null)
+        StringComparer? pathComparer = null,
+        ISessionActivitySource? activitySource = null)
+        : this(
+            new[]
+            {
+                new SessionProfile(
+                    SessionProfile.DefaultId,
+                    "Codex",
+                    sessionsRoot,
+                    sessionIndexPath,
+                    "unknown",
+                    string.Empty)
+            },
+            options,
+            pathComparer,
+            activitySource)
     {
-        _sessionsRoot = sessionsRoot;
-        _sessionIndexPath = sessionIndexPath;
+    }
+
+    public SessionMonitorEngine(
+        IEnumerable<SessionProfile> profiles,
+        HudRuntimeOptions options,
+        StringComparer? pathComparer = null,
+        ISessionActivitySource? activitySource = null)
+    {
         _pathComparer = pathComparer ?? SessionChangeTracker.GetPlatformPathComparer();
+        _profiles = profiles
+            .Select(profile => profile with
+            {
+                SessionsRoot = Path.GetFullPath(profile.SessionsRoot),
+                SessionIndexPath = Path.GetFullPath(profile.SessionIndexPath),
+                StateDatabasePath = string.IsNullOrWhiteSpace(profile.StateDatabasePath)
+                    ? string.Empty
+                    : Path.GetFullPath(profile.StateDatabasePath)
+            })
+            .GroupBy(static profile => profile.SessionsRoot, _pathComparer)
+            .Select(static group => group.First())
+            .ToArray();
+        if (_profiles.Count == 0)
+        {
+            throw new ArgumentException("At least one Codex session profile is required.", nameof(profiles));
+        }
+        _profileById = _profiles.ToDictionary(static profile => profile.Id, StringComparer.Ordinal);
+        _titleIndexes = _profiles.ToDictionary(static profile => profile.Id, static _ => new SessionTitleIndex(), StringComparer.Ordinal);
+        _activitySource = activitySource ?? EmptySessionActivitySource.Instance;
         _states = new Dictionary<string, SessionState>(_pathComparer);
         _backlogPaths = new HashSet<string>(_pathComparer);
         Options = options;
@@ -39,8 +86,10 @@ public sealed class SessionMonitorEngine
     public DateTimeOffset LastUsageAt { get; private set; } = DateTimeOffset.MinValue;
     public DateTimeOffset LastReadErrorAt { get; private set; } = DateTimeOffset.MinValue;
     public bool HasBacklog => _backlogPaths.Count > 0;
-    public bool HasTitleBacklog => _titleIndex.HasBacklog;
-    public bool HasPendingIdentity => _states.Values.Any(static state => !state.IdentityMetadataFound && !state.IsInternalSession);
+    public bool HasTitleBacklog => _titleIndexes.Values.Any(static index => index.HasBacklog);
+    public bool HasPendingIdentity => _states.Values.Any(static state =>
+        (!state.IdentityMetadataFound || state.IdentityProvisional || state.NeedsSnapshotHydration) &&
+        !state.IsInternalSession);
 
     public void UpdateOptions(HudRuntimeOptions options)
     {
@@ -64,27 +113,29 @@ public sealed class SessionMonitorEngine
         var current = now ?? DateTimeOffset.Now;
         var changed = RefreshTitlesCore();
 
-        var files = SessionDiscovery.GetActiveFiles(
-            _sessionsRoot,
-            Options.ActiveWindowMinutes,
-            Options.MaximumFiles,
-            current.UtcDateTime);
+        var files = DiscoverActiveFiles(current);
         var activePaths = new HashSet<string>(_pathComparer);
-        foreach (var file in files)
+        foreach (var candidate in files)
         {
+            var file = candidate.File;
             activePaths.Add(file.FullName);
             try
             {
                 if (!_states.TryGetValue(file.FullName, out var state))
                 {
-                    state = Initialize(file);
+                    state = Initialize(candidate.Profile, file, current);
                     _states.Add(file.FullName, state);
                     changed = true;
                 }
-                else if (RefreshIdentity(state))
+                else
                 {
-                    changed = true;
+                    changed |= UpdateReadBlockState(state, file.ReadBlocked, current);
+                    if (!state.IsReadBlocked && RefreshIdentity(state, current))
+                    {
+                        changed = true;
+                    }
                 }
+                changed |= UpdateRuntimeActivity(state, candidate.RuntimeActivityAt, current);
             }
             catch (IOException)
             {
@@ -96,12 +147,31 @@ public sealed class SessionMonitorEngine
             }
         }
 
-        foreach (var removed in _states.Keys.Where(path => !activePaths.Contains(path)).ToArray())
+        foreach (var path in _states.Keys.Where(path => !activePaths.Contains(path)).ToArray())
         {
-            var state = _states[removed];
+            var state = _states[path];
+            var readBlocked = SessionDiscovery.IsReadBlocked(path);
+            changed |= UpdateReadBlockState(state, readBlocked, current);
+            if (readBlocked)
+            {
+                activePaths.Add(path);
+                continue;
+            }
+
+            if (state.LastLockObservedAt != DateTimeOffset.MinValue &&
+                current - state.LastLockObservedAt <= LockRecoveryGrace)
+            {
+                activePaths.Add(path);
+                if (RefreshIdentity(state, current))
+                {
+                    changed = true;
+                }
+                continue;
+            }
+
             _numberPool.Release(state.Number, Options.NumberCooldownSeconds, current);
-            _states.Remove(removed);
-            _backlogPaths.Remove(removed);
+            _states.Remove(path);
+            _backlogPaths.Remove(path);
             changed = true;
         }
 
@@ -115,6 +185,57 @@ public sealed class SessionMonitorEngine
     public bool RefreshTitles()
     {
         var changed = RefreshTitlesCore();
+        if (changed)
+        {
+            MaterialRevision++;
+        }
+        return changed;
+    }
+
+    public bool RefreshRuntimeSessions(DateTimeOffset? now = null)
+    {
+        var current = now ?? DateTimeOffset.Now;
+        var cutoff = current.Subtract(GetRuntimeDiscoveryWindow());
+        var maximum = Math.Max(1, Options.MaximumFiles);
+        var changed = false;
+        foreach (var profile in _profiles.Where(IsProfileDiscoveryEnabled))
+        {
+            foreach (var activity in _activitySource.GetRecentUserSessions(profile, cutoff, maximum))
+            {
+                if (!TryCreateActivityCandidate(profile, activity, out var candidate))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (!_states.TryGetValue(candidate.File.FullName, out var state))
+                    {
+                        state = Initialize(profile, candidate.File, current);
+                        _states.Add(candidate.File.FullName, state);
+                        changed = true;
+                    }
+                    else
+                    {
+                        changed |= UpdateReadBlockState(state, candidate.File.ReadBlocked, current);
+                        if (!state.IsReadBlocked)
+                        {
+                            changed |= RefreshIdentity(state, current);
+                        }
+                    }
+                    changed |= UpdateRuntimeActivity(state, activity.UpdatedAt, current);
+                }
+                catch (IOException)
+                {
+                    LastReadErrorAt = current;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    LastReadErrorAt = current;
+                }
+            }
+        }
+
         if (changed)
         {
             MaterialRevision++;
@@ -148,7 +269,9 @@ public sealed class SessionMonitorEngine
 
     public bool PollPendingIdentity(DateTimeOffset? now = null)
     {
-        var selected = _states.Values.Where(static state => !state.IdentityMetadataFound && !state.IsInternalSession).ToArray();
+        var selected = _states.Values.Where(static state =>
+            (!state.IdentityMetadataFound || state.IdentityProvisional || state.NeedsSnapshotHydration) &&
+            !state.IsInternalSession).ToArray();
         return PollStates(selected, now ?? DateTimeOffset.Now);
     }
 
@@ -169,6 +292,11 @@ public sealed class SessionMonitorEngine
         foreach (var state in states)
         {
             if (state.IsInternalSession)
+            {
+                _backlogPaths.Remove(state.Path);
+                continue;
+            }
+            if (state.IsReadBlocked)
             {
                 _backlogPaths.Remove(state.Path);
                 continue;
@@ -195,7 +323,7 @@ public sealed class SessionMonitorEngine
             }
             catch (IOException)
             {
-                RecordReadError(state, current);
+                HandleReadFailure(state, current);
             }
             catch (UnauthorizedAccessException)
             {
@@ -213,14 +341,29 @@ public sealed class SessionMonitorEngine
 
     private bool RefreshTitlesCore()
     {
-        if (!_titleIndex.Refresh(_sessionIndexPath))
+        var refreshed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var profile in _profiles)
+        {
+            if (_titleIndexes[profile.Id].Refresh(profile.SessionIndexPath))
+            {
+                refreshed.Add(profile.Id);
+            }
+        }
+        if (refreshed.Count == 0)
         {
             return false;
         }
-
-        foreach (var state in _states.Values)
+        foreach (var state in _states.Values.Where(state => refreshed.Contains(state.ProfileId)))
         {
-            state.ConversationLabel = _titleIndex.GetTitle(state.SessionId);
+            var nextTitle = _titleIndexes[state.ProfileId].GetTitle(state.SessionId);
+            state.ConversationLabel = nextTitle;
+            if (state.IsReadBlocked && !state.IdentityMetadataFound &&
+                !string.IsNullOrWhiteSpace(state.SessionId) && !string.IsNullOrWhiteSpace(nextTitle))
+            {
+                state.IdentityMetadataFound = true;
+                state.IdentityProvisional = true;
+                state.NeedsSnapshotHydration = true;
+            }
         }
         return true;
     }
@@ -246,10 +389,20 @@ public sealed class SessionMonitorEngine
             return state.TerminalStatus;
         }
 
+        if (HasFreshRuntimeActivity(state, current))
+        {
+            return "active";
+        }
+
         if (state.LastReadErrorAt != DateTimeOffset.MinValue &&
             (current - state.LastReadErrorAt).TotalSeconds <= Options.ErrorHoldSeconds)
         {
             return "error";
+        }
+
+        if (state.IsReadBlocked || state.IdentityProvisional || state.NeedsSnapshotHydration)
+        {
+            return "listening";
         }
 
         if (state.Snapshot is null)
@@ -312,10 +465,39 @@ public sealed class SessionMonitorEngine
         return true;
     }
 
-    private SessionState Initialize(SessionFile file)
+    private SessionState Initialize(SessionProfile profile, SessionFile file, DateTimeOffset current)
     {
         var identity = SessionIdentityReader.Read(file.FullName);
-        var snapshot = identity.IsInternalSession ? null : BoundedTailReader.ReadLatestSnapshot(file.FullName);
+        var readBlocked = file.ReadBlocked;
+        HudSnapshot? snapshot = null;
+        var needsSnapshotHydration = false;
+        if (!identity.IsInternalSession)
+        {
+            try
+            {
+                snapshot = BoundedTailReader.ReadLatestSnapshot(file.FullName);
+            }
+            catch (IOException) when (readBlocked || SessionDiscovery.IsReadBlocked(file.FullName))
+            {
+                readBlocked = true;
+                needsSnapshotHydration = true;
+            }
+        }
+
+        var sessionId = identity.SessionId;
+        var conversationLabel = _titleIndexes[profile.Id].GetTitle(sessionId);
+        var identityProvisional = false;
+        var identityMetadataFound = identity.MetadataFound;
+        if (!identityMetadataFound && readBlocked)
+        {
+            sessionId = GetSessionIdFromPath(file.FullName);
+            conversationLabel = _titleIndexes[profile.Id].GetTitle(sessionId);
+            identityProvisional = !string.IsNullOrWhiteSpace(sessionId) &&
+                                  !string.IsNullOrWhiteSpace(conversationLabel);
+            identityMetadataFound = identityProvisional;
+            needsSnapshotHydration = true;
+        }
+
         return new SessionState
         {
             Path = file.FullName,
@@ -332,38 +514,68 @@ public sealed class SessionMonitorEngine
             FiveHourRemainingPercent = snapshot?.FiveHourRemainingPercent,
             LastWriteTimeUtc = file.LastWriteTimeUtc,
             LastUsageAt = snapshot?.Timestamp ?? DateTimeOffset.MinValue,
-            TerminalStatus = snapshot?.TerminalStatus ?? string.Empty,
-            TerminalAt = snapshot?.TerminalTimestamp ?? DateTimeOffset.MinValue,
-            TerminalSilent = snapshot?.TerminalSilent ?? false,
+            TerminalStatus = snapshot?.TerminalSilent == true ? string.Empty : snapshot?.TerminalStatus ?? string.Empty,
+            TerminalAt = snapshot?.TerminalSilent == true ? DateTimeOffset.MinValue : snapshot?.TerminalTimestamp ?? DateTimeOffset.MinValue,
+            TerminalSilent = false,
             IsInternalSession = identity.IsInternalSession,
-            IdentityMetadataFound = identity.MetadataFound,
-            SessionId = identity.SessionId,
-            ConversationLabel = _titleIndex.GetTitle(identity.SessionId)
+            IdentityMetadataFound = identityMetadataFound,
+            IdentityProvisional = identityProvisional,
+            NeedsSnapshotHydration = needsSnapshotHydration,
+            IsReadBlocked = readBlocked,
+            LastLockObservedAt = readBlocked ? current : DateTimeOffset.MinValue,
+            RuntimeActivityAt = DateTimeOffset.MinValue,
+            SessionId = sessionId,
+            ConversationLabel = conversationLabel,
+            ProfileId = profile.Id,
+            ProfileLabel = profile.Label,
+            ClientSurface = ResolveClientSurface(identity.ClientSurface, profile),
+            ModelProvider = ResolveProvider(identity.ModelProvider, profile)
         };
     }
 
-    private bool RefreshIdentity(SessionState state)
+    private bool RefreshIdentity(SessionState state, DateTimeOffset current)
     {
-        if (state.IdentityMetadataFound)
+        if (state.IsReadBlocked)
         {
             return false;
         }
 
-        var identity = SessionIdentityReader.Read(state.Path);
-        if (!identity.MetadataFound)
+        var changed = false;
+        if (!state.IdentityMetadataFound || state.IdentityProvisional)
         {
-            return false;
+            var identity = SessionIdentityReader.Read(state.Path);
+            if (identity.MetadataFound)
+            {
+                ApplyIdentity(state, identity);
+                changed = true;
+            }
         }
 
-        ApplyIdentity(state, identity);
-        return true;
+        if (!state.IsInternalSession && state.NeedsSnapshotHydration)
+        {
+            try
+            {
+                ApplyInitialSnapshot(state, BoundedTailReader.ReadLatestSnapshot(state.Path));
+                state.NeedsSnapshotHydration = false;
+                changed = true;
+            }
+            catch (IOException)
+            {
+                HandleReadFailure(state, current);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                RecordReadError(state, current);
+            }
+        }
+        return changed;
     }
 
     private bool ReadAppended(SessionState state, DateTimeOffset now, int maximumBytes)
     {
         try
         {
-            var identityChanged = RefreshIdentity(state);
+            var identityChanged = RefreshIdentity(state, now);
             if (state.IsInternalSession)
             {
                 _backlogPaths.Remove(state.Path);
@@ -410,7 +622,7 @@ public sealed class SessionMonitorEngine
         }
         catch (IOException)
         {
-            RecordReadError(state, now);
+            HandleReadFailure(state, now);
             return false;
         }
         catch (UnauthorizedAccessException)
@@ -448,6 +660,7 @@ public sealed class SessionMonitorEngine
                 if (string.IsNullOrWhiteSpace(state.ActiveTurnId) || item.TurnId == state.ActiveTurnId)
                 {
                     state.PendingCompletionTurnId = item.TurnId;
+                    state.PendingCompletionAt = item.Timestamp;
                     state.PendingCompletionDueAt = now.AddSeconds(Options.CompletionGraceSeconds);
                     if (Options.CompletionGraceSeconds == 0)
                     {
@@ -456,11 +669,17 @@ public sealed class SessionMonitorEngine
                 }
                 return true;
             case HudRecordKind.CompletedSilent:
+                // A silent task_complete is merely an internal/empty turn
+                // boundary. It must not hide a conversation or trigger a
+                // completion animation.
                 ClearPendingCompletion(state);
-                state.TerminalStatus = "completed";
-                state.TerminalAt = item.Timestamp;
-                state.TerminalSilent = true;
-                ResetTerminalExit(state);
+                state.TerminalStatus = string.Empty;
+                state.TerminalAt = DateTimeOffset.MinValue;
+                state.TerminalSilent = false;
+                if (state.TerminalExitStarted || state.TerminalExitCompleted)
+                {
+                    ResetTerminalExit(state);
+                }
                 return true;
             case HudRecordKind.Aborted:
                 ClearPendingCompletion(state);
@@ -564,8 +783,16 @@ public sealed class SessionMonitorEngine
             return false;
         }
 
+        var continuationThreshold = state.PendingCompletionAt.AddSeconds(Math.Max(2, Options.CompletionGraceSeconds));
+        if (state.PendingCompletionAt != DateTimeOffset.MinValue &&
+            state.RuntimeActivityAt > continuationThreshold)
+        {
+            ClearPendingCompletion(state);
+            return true;
+        }
+
         state.TerminalStatus = "completed";
-        state.TerminalAt = now;
+        state.TerminalAt = state.PendingCompletionAt == DateTimeOffset.MinValue ? now : state.PendingCompletionAt;
         state.TerminalSilent = false;
         ResetTerminalExit(state);
         ClearPendingCompletion(state);
@@ -650,14 +877,41 @@ public sealed class SessionMonitorEngine
 
     private void ApplyIdentity(SessionState state, SessionIdentity identity)
     {
+        var profile = _profileById[state.ProfileId];
         state.IdentityMetadataFound = true;
+        state.IdentityProvisional = false;
         state.IsInternalSession = identity.IsInternalSession;
         state.SessionId = identity.SessionId;
-        state.ConversationLabel = _titleIndex.GetTitle(identity.SessionId);
+        state.ConversationLabel = _titleIndexes[state.ProfileId].GetTitle(identity.SessionId);
+        state.ClientSurface = ResolveClientSurface(identity.ClientSurface, profile);
+        state.ModelProvider = ResolveProvider(identity.ModelProvider, profile);
         if (string.IsNullOrWhiteSpace(state.Workspace) && !string.IsNullOrWhiteSpace(identity.Workspace))
         {
             state.Workspace = identity.Workspace;
         }
+    }
+
+    private void ApplyInitialSnapshot(SessionState state, HudSnapshot? snapshot)
+    {
+        state.Snapshot = snapshot;
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        state.Model = snapshot.Model;
+        if (!string.IsNullOrWhiteSpace(snapshot.Workspace))
+        {
+            state.Workspace = snapshot.Workspace;
+        }
+        state.AllowanceTimestamp = snapshot.AllowanceTimestamp;
+        state.WeeklyRemainingPercent = snapshot.WeeklyRemainingPercent;
+        state.FiveHourRemainingPercent = snapshot.FiveHourRemainingPercent;
+        state.LastUsageAt = snapshot.Timestamp;
+        state.TerminalStatus = snapshot.TerminalSilent ? string.Empty : snapshot.TerminalStatus;
+        state.TerminalAt = snapshot.TerminalSilent ? DateTimeOffset.MinValue : snapshot.TerminalTimestamp ?? DateTimeOffset.MinValue;
+        state.TerminalSilent = false;
+        state.HasObservedActivity = true;
     }
 
     private void ApplyAllowance(SessionState state, HudRecord item)
@@ -681,7 +935,7 @@ public sealed class SessionMonitorEngine
         }
     }
 
-    private static bool IsVisible(SessionState state, DateTimeOffset now)
+    private bool IsVisible(SessionState state, DateTimeOffset now)
     {
         // Identity is the privacy boundary: do not flash unclassified files or
         // internal/subagent sessions.  A newly confirmed user session may not
@@ -693,11 +947,239 @@ public sealed class SessionMonitorEngine
             return false;
         }
 
+        if (!IsSourceEnabled(state))
+        {
+            return false;
+        }
+
         if (!string.IsNullOrWhiteSpace(state.TerminalStatus) && state.TerminalAt != DateTimeOffset.MinValue)
         {
             return state.AgentNoticeUntil > now || !state.TerminalExitCompleted;
         }
         return true;
+    }
+
+    private IReadOnlyList<ProfileSessionFile> DiscoverActiveFiles(DateTimeOffset current)
+    {
+        var cutoff = current.UtcDateTime.AddMinutes(-Math.Max(1, Options.ActiveWindowMinutes));
+        var runtimeCutoff = current.Subtract(GetRuntimeDiscoveryWindow());
+        var maximum = Math.Max(1, Options.MaximumFiles);
+        var candidates = new Dictionary<string, ProfileSessionFile>(_pathComparer);
+        foreach (var profile in _profiles.Where(IsProfileDiscoveryEnabled))
+        {
+            foreach (var file in SessionDiscovery.GetActiveFiles(
+                    profile.SessionsRoot,
+                    Options.ActiveWindowMinutes,
+                    maximum,
+                    current.UtcDateTime))
+            {
+                candidates[file.FullName] = new ProfileSessionFile(profile, file, null);
+            }
+
+            foreach (var activity in _activitySource.GetRecentUserSessions(
+                         profile,
+                         runtimeCutoff,
+                         maximum))
+            {
+                if (!TryCreateActivityCandidate(profile, activity, out var activityCandidate))
+                {
+                    continue;
+                }
+
+                if (candidates.TryGetValue(activityCandidate.File.FullName, out var existing))
+                {
+                    candidates[activityCandidate.File.FullName] = existing with
+                    {
+                        RuntimeActivityAt = activity.UpdatedAt
+                    };
+                }
+                else
+                {
+                    candidates[activityCandidate.File.FullName] = activityCandidate;
+                }
+            }
+        }
+
+        var active = candidates.Values
+            .Where(candidate => candidate.File.ReadBlocked ||
+                                candidate.File.LastWriteTimeUtc >= cutoff ||
+                                candidate.RuntimeActivityAt >= runtimeCutoff)
+            .OrderByDescending(static candidate => candidate.File.ReadBlocked)
+            .ThenByDescending(GetCandidateActivityTime)
+            .Take(maximum)
+            .ToArray();
+        return active;
+    }
+
+    private bool IsProfileDiscoveryEnabled(SessionProfile profile) =>
+        profile.Id == SessionProfile.DeepSeekId
+            ? Options.DeepSeekCliSessionsEnabled
+            : Options.DesktopSessionsEnabled || Options.DefaultCliSessionsEnabled;
+
+    private bool IsSourceEnabled(SessionState state)
+    {
+        if (state.ProfileId == SessionProfile.DeepSeekId)
+        {
+            return Options.DeepSeekCliSessionsEnabled;
+        }
+
+        return state.ClientSurface switch
+        {
+            "desktop" => Options.DesktopSessionsEnabled,
+            "cli" => Options.DefaultCliSessionsEnabled,
+            _ => Options.DesktopSessionsEnabled || Options.DefaultCliSessionsEnabled
+        };
+    }
+
+    private static string ResolveClientSurface(string value, SessionProfile profile) =>
+        value is "desktop" or "cli" ? value : profile.DefaultClientSurface;
+
+    private static string ResolveProvider(string value, SessionProfile profile) =>
+        string.IsNullOrWhiteSpace(value) ? profile.DefaultProvider : value;
+
+    private sealed record ProfileSessionFile(
+        SessionProfile Profile,
+        SessionFile File,
+        DateTimeOffset? RuntimeActivityAt);
+
+    private bool TryCreateActivityCandidate(
+        SessionProfile profile,
+        SessionActivity activity,
+        out ProfileSessionFile candidate)
+    {
+        candidate = null!;
+        try
+        {
+            var path = Path.GetFullPath(NormalizeWindowsExtendedPath(activity.RolloutPath));
+            var root = Path.GetFullPath(profile.SessionsRoot)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            if (!path.StartsWith(root, comparison) ||
+                !string.Equals(GetSessionIdFromPath(path), activity.SessionId, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var file = new FileInfo(path);
+            if (!file.Exists)
+            {
+                return false;
+            }
+
+            candidate = new ProfileSessionFile(
+                profile,
+                new SessionFile(file.FullName, file.LastWriteTimeUtc, file.Length, SessionDiscovery.IsReadBlocked(file.FullName)),
+                activity.UpdatedAt);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static DateTimeOffset GetCandidateActivityTime(ProfileSessionFile candidate)
+    {
+        var fileTime = new DateTimeOffset(candidate.File.LastWriteTimeUtc, TimeSpan.Zero);
+        return candidate.RuntimeActivityAt.HasValue && candidate.RuntimeActivityAt.Value > fileTime
+            ? candidate.RuntimeActivityAt.Value
+            : fileTime;
+    }
+
+    private static string NormalizeWindowsExtendedPath(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return path;
+        }
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+        {
+            return @"\\" + path[8..];
+        }
+        return path.StartsWith(@"\\?\", StringComparison.OrdinalIgnoreCase)
+            ? path[4..]
+            : path;
+    }
+
+    private bool UpdateRuntimeActivity(
+        SessionState state,
+        DateTimeOffset? activityAt,
+        DateTimeOffset now)
+    {
+        if (!activityAt.HasValue || activityAt.Value < now.Subtract(GetRuntimeDiscoveryWindow()))
+        {
+            return false;
+        }
+
+        var changed = false;
+        if (activityAt.Value > state.RuntimeActivityAt)
+        {
+            state.RuntimeActivityAt = activityAt.Value;
+            changed = true;
+        }
+
+        // A completed token snapshot can be the last thing in the parent JSONL
+        // while Codex continues the task through a guardian/background worker.
+        // A newer top-level runtime heartbeat is authoritative for liveness,
+        // but it never changes token totals or fabricates a completion event.
+        if (!string.IsNullOrWhiteSpace(state.TerminalStatus) &&
+            state.TerminalAt != DateTimeOffset.MinValue &&
+            state.RuntimeActivityAt > state.TerminalAt.AddSeconds(Math.Max(2, Options.CompletionGraceSeconds)))
+        {
+            state.TerminalStatus = string.Empty;
+            state.TerminalAt = DateTimeOffset.MinValue;
+            state.TerminalSilent = false;
+            ClearPendingCompletion(state);
+            ResetTerminalExit(state);
+            if (state.AttentionReason is "completed" or "failed")
+            {
+                state.AttentionReason = string.Empty;
+                state.AttentionUntil = DateTimeOffset.MinValue;
+            }
+            changed = true;
+        }
+        return changed;
+    }
+
+    private TimeSpan GetRuntimeDiscoveryWindow() =>
+        TimeSpan.FromMinutes(Math.Max(RuntimeHeartbeatFreshness.TotalMinutes, Options.ActiveWindowMinutes));
+
+    private static bool HasFreshRuntimeActivity(SessionState state, DateTimeOffset now) =>
+        state.RuntimeActivityAt != DateTimeOffset.MinValue &&
+        now - state.RuntimeActivityAt <= RuntimeHeartbeatFreshness;
+
+    private static string GetSessionIdFromPath(string path)
+    {
+        var match = RolloutSessionIdPattern.Match(Path.GetFileName(path));
+        return match.Success ? match.Groups["id"].Value : string.Empty;
+    }
+
+    private static bool UpdateReadBlockState(SessionState state, bool readBlocked, DateTimeOffset now)
+    {
+        var changed = state.IsReadBlocked != readBlocked;
+        state.IsReadBlocked = readBlocked;
+        if (readBlocked)
+        {
+            state.LastLockObservedAt = now;
+            state.LastReadErrorAt = DateTimeOffset.MinValue;
+        }
+        return changed;
+    }
+
+    private void HandleReadFailure(SessionState state, DateTimeOffset now)
+    {
+        if (SessionDiscovery.IsReadBlocked(state.Path))
+        {
+            _ = UpdateReadBlockState(state, true, now);
+            return;
+        }
+        RecordReadError(state, now);
     }
 
     private void RecordReadError(SessionState state, DateTimeOffset now)
@@ -709,6 +1191,7 @@ public sealed class SessionMonitorEngine
     private static void ClearPendingCompletion(SessionState state)
     {
         state.PendingCompletionTurnId = string.Empty;
+        state.PendingCompletionAt = DateTimeOffset.MinValue;
         state.PendingCompletionDueAt = DateTimeOffset.MinValue;
     }
 

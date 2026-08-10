@@ -98,30 +98,39 @@ internal static class Program
 
     private static int RunSelfTest(HudPaths paths)
     {
-        var file = SessionDiscovery.GetActiveFiles(paths.SessionsRoot, 24 * 60, 64, DateTime.UtcNow)
-            .FirstOrDefault(candidate => !SessionIdentityReader.Read(candidate.FullName).IsInternalSession)
-            ?? SessionDiscovery.GetLatestFile(paths.SessionsRoot);
-        var snapshot = file is null ? null : BoundedTailReader.ReadLatestSnapshot(file.FullName);
-        if (file is null)
-        {
-            return 1;
-        }
-
-        var identity = SessionIdentityReader.Read(file.FullName);
         var settings = HudSettings.From(HudConfigStore.Load(paths));
-        var indexPath = Path.Combine(Path.GetDirectoryName(paths.SessionsRoot)!, "session_index.jsonl");
-        var engine = new SessionMonitorEngine(paths.SessionsRoot, indexPath, settings.ToRuntimeOptions());
+        var engine = new SessionMonitorEngine(
+            SessionProfile.CreateDefaultSet(paths),
+            settings.ToRuntimeOptions(),
+            activitySource: new WindowsSessionActivitySource());
         _ = engine.RefreshActiveSessions();
         _ = engine.Poll();
+        var visible = engine.GetVisibleStates();
+        var state = visible
+            .OrderByDescending(static item => item.RuntimeActivityAt)
+            .ThenByDescending(static item => item.LastUsageAt)
+            .FirstOrDefault();
+        var snapshot = state?.Snapshot;
 
         Console.WriteLine(JsonSerializer.Serialize(new
         {
-            session = Path.GetFileName(file.FullName),
-            identity_found = identity.MetadataFound,
-            internal_session = identity.IsInternalSession,
+            session = state is null ? string.Empty : Path.GetFileName(state.Path),
+            identity_found = state?.IdentityMetadataFound ?? false,
+            internal_session = state?.IsInternalSession ?? false,
             snapshot_found = snapshot is not null,
             discovered_tasks = engine.States.Count,
-            visible_tasks = engine.GetVisibleStates().Count,
+            visible_tasks = visible.Count,
+            runtime_active_tasks = visible.Count(item => item.RuntimeActivityAt != DateTimeOffset.MinValue),
+            tasks = visible.Select(item => new
+            {
+                id = item.SessionId,
+                profile = item.ProfileId,
+                surface = item.ClientSurface,
+                status = engine.GetStatus(item, paused: false),
+                runtime_activity = item.RuntimeActivityAt == DateTimeOffset.MinValue
+                    ? string.Empty
+                    : item.RuntimeActivityAt.ToString("O")
+            }),
             input = snapshot?.Input ?? 0,
             cached = snapshot?.Cached ?? 0,
             uncached = snapshot?.Uncached ?? 0,
@@ -133,7 +142,7 @@ internal static class Program
             model = snapshot?.Model ?? string.Empty,
             accounting_ok = snapshot?.AccountingIsValid ?? false
         }, new JsonSerializerOptions { WriteIndented = true }));
-        return snapshot is null ? 1 : 0;
+        return state is null ? 1 : 0;
     }
 
     private static int RunHealthCheck(HudPaths paths, string outputPath)
@@ -153,7 +162,7 @@ internal static class Program
             var result = JsonSerializer.Serialize(new
             {
                 product = "Codex Monitor HUD",
-                version = "2.2.1",
+                version = "3.0.0",
                 framework = Environment.Version.ToString(),
                 config = "ok",
                 xaml = "ok",

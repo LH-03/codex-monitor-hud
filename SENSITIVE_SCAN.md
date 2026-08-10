@@ -1,5 +1,15 @@
 # Sensitive information scan
 
+## Windows 3.0.0 Desktop/CLI source - 2026-08-10
+
+- Scanned public text/source candidates after excluding `.git`, `private`, `.test-output`, `runtime`, `artifacts`, compiled `bin/obj`, and generated caches.
+- Machine-specific maintainer paths, temporary screenshot names, and local profile paths: 0 hits.
+- OpenAI/GitHub credential-shaped prefixes and private-key headers: 0 hits.
+- The automatically generated root-level `Microsoft/Windows/PowerShell/ModuleAnalysisCache` was removed from source, installed copies, and both local plugin caches. Git, installer, Release, and transfer-kit rules now exclude the entire generated root.
+- Multi-profile monitoring reads only bounded session metadata and does not package `~/.codex`, `~/.codex-deepseek`, settings, session JSONL, authentication, provider configuration, logs, databases, or archives.
+- English and Simplified Chinese README screenshots were regenerated from the built-in synthetic preview path. They contain only fictional workspaces, conversation titles, Token values, allowance values and source identities; no real task title, username, account value or local path is published.
+- The public CLI isolation guides use `%USERPROFILE%`, `$HOME`, placeholder provider language and official documentation links. They contain no machine-specific project, model, authentication or credential values from the maintainer's private profiles.
+
 ## Windows 2.2.1 maintenance source - 2026-08-03
 
 - The public Release package boundary remains unchanged: it excludes `private/`, local settings, session JSONL, logs, databases, Git/agent metadata, test output, and compiled `bin/obj` directories.

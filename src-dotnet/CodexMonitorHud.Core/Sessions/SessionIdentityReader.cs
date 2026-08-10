@@ -6,7 +6,9 @@ public sealed record SessionIdentity(
     bool MetadataFound,
     string SessionId,
     string Workspace,
-    bool IsInternalSession);
+    bool IsInternalSession,
+    string ClientSurface,
+    string ModelProvider);
 
 public static class SessionIdentityReader
 {
@@ -38,14 +40,14 @@ public static class SessionIdentityReader
         {
         }
 
-        return new SessionIdentity(false, string.Empty, string.Empty, false);
+        return Empty;
     }
 
     public static SessionIdentity ParseLine(string line)
     {
         if (!line.AsSpan(0, Math.Min(64 * 1024, line.Length)).Contains("\"session_meta\"", StringComparison.Ordinal))
         {
-            return new SessionIdentity(false, string.Empty, string.Empty, false);
+            return Empty;
         }
 
         try
@@ -55,7 +57,7 @@ public static class SessionIdentityReader
             if (!root.TryGetProperty("type", out var type) || type.GetString() != "session_meta" ||
                 !root.TryGetProperty("payload", out var payload))
             {
-                return new SessionIdentity(false, string.Empty, string.Empty, false);
+                return Empty;
             }
 
             var id = GetString(payload, "id");
@@ -68,16 +70,63 @@ public static class SessionIdentityReader
             var internalSession = payload.TryGetProperty("source", out var source) &&
                                   source.ValueKind == JsonValueKind.Object &&
                                   source.TryGetProperty("subagent", out _);
-            return new SessionIdentity(true, id, workspace, internalSession);
+            var originator = GetString(payload, "originator");
+            var sourceName = source.ValueKind == JsonValueKind.String
+                ? source.GetString() ?? string.Empty
+                : string.Empty;
+            var clientSurface = GetClientSurface(originator, sourceName);
+            return new SessionIdentity(
+                true,
+                id,
+                workspace,
+                internalSession,
+                clientSurface,
+                NormalizeProvider(GetString(payload, "model_provider")));
         }
         catch (JsonException)
         {
-            return new SessionIdentity(false, string.Empty, string.Empty, false);
+            return Empty;
         }
         catch (InvalidOperationException)
         {
-            return new SessionIdentity(false, string.Empty, string.Empty, false);
+            return Empty;
         }
+    }
+
+    private static readonly SessionIdentity Empty = new(
+        false,
+        string.Empty,
+        string.Empty,
+        false,
+        "unknown",
+        string.Empty);
+
+    private static string GetClientSurface(string originator, string source)
+    {
+        if (originator.Equals("Codex Desktop", StringComparison.OrdinalIgnoreCase) ||
+            source.Equals("vscode", StringComparison.OrdinalIgnoreCase))
+        {
+            return "desktop";
+        }
+
+        if (originator.Contains("codex-tui", StringComparison.OrdinalIgnoreCase) ||
+            source.Equals("cli", StringComparison.OrdinalIgnoreCase))
+        {
+            return "cli";
+        }
+
+        return "unknown";
+    }
+
+    private static string NormalizeProvider(string value)
+    {
+        var normalized = value.Trim();
+        if (normalized.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        return normalized.Length <= 40 ? normalized : normalized[..40];
     }
 
     private static string GetString(JsonElement element, string name) =>

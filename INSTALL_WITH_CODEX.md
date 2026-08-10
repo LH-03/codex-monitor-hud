@@ -14,6 +14,44 @@ This is the canonical agent procedure. A repository URL plus “帮我安装” 
 5. The entrypoint prefers the matching app asset from the manifest's exact version/tag and verifies it with `SHA256SUMS.txt`. Plugin files come from the same trusted exact-tag checkout. A missing matching Release/asset may use the pinned source-build fallback. A checksum mismatch, missing checksum entry, network error, wrong architecture, mismatched app/plugin version, or unavailable Node.js must stop; never switch silently to another artifact.
 6. Preserve the existing settings/state directory. The installer must stage and health-check the candidate before switching, retain the previous app and plugin as a paired rollback, update the personal marketplace atomically without changing unrelated entries, launch it, and check a fresh heartbeat.
 7. Report only the bounded summary emitted by the installer: version, platform, architecture, app/plugin roots, config status/path, heartbeat status, and paired rollback paths. Do not upload local evidence.
+8. First installation enables only basic local monitoring. After it succeeds, tell the user that source filters, themes, cost estimates, proactive CODEX notices, and the optional MCP/plugin control surface exist; let the user decide whether to enable or install those extras.
+
+## Desktop and CLI monitoring
+
+The installed HUD can monitor three independently selectable sources without reading provider configuration or authentication files:
+
+- Codex Desktop sessions under the normal `CODEX_HOME` (`~/.codex` by default);
+- Codex CLI sessions under that normal profile, usually OpenAI/GPT;
+- Codex CLI sessions under the optional isolated `~/.codex-deepseek` profile.
+
+The three sources are enabled by default after configuration merge and can be changed in **Settings > Sources**. Source detection comes from bounded session metadata; do not open `config.toml`, auth files, prompts, replies, or archives merely to identify a source. Future model IDs remain monitorable without adding them to an allowlist.
+
+## Optional plugin and MCP connection
+
+Do this only when the user explicitly asks Codex to operate the HUD, send opt-in notices, or install the plugin. A normal HUD installation does not require it.
+
+The installer registers the installed plugin in the personal `local` marketplace. Install it into the normal Codex profile with:
+
+```powershell
+codex plugin add codex-monitor-hud@local --json
+```
+
+If the user actually uses the isolated DeepSeek profile, install the same local plugin into that profile without changing its provider/model configuration:
+
+```powershell
+$previousCodexHome = $env:CODEX_HOME
+try {
+    $env:CODEX_HOME = Join-Path $HOME '.codex-deepseek'
+    codex plugin add codex-monitor-hud@local --json
+}
+finally {
+    $env:CODEX_HOME = $previousCodexHome
+}
+```
+
+Verify plugin presence separately in both profiles. Do not add a second direct MCP entry when the plugin already bundles `.mcp.json`. Newly installed or updated plugin tools are discovered by a new Codex task; an already-open task is not proof of failure if it cannot hot-load them.
+
+The bundled server negotiates MCP `2025-11-25` and compatible older revisions. Its tools expose only HUD operations and privacy-safe task number/source metadata. See [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md).
 
 ## Maintenance commands
 

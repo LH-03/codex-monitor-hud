@@ -20,7 +20,7 @@ The resident hot path is compiled C#. `CodexMonitorHud.Core` has no WPF, Windows
 
 ## Scope
 
-Codex Monitor HUD 2.2.1 is a local Windows projection over recent Codex Desktop session records. It does not maintain a historical database and does not modify Codex sessions.
+Codex Monitor HUD 3.0.0 is a local Windows projection over recent Codex Desktop and CLI session records. It combines the normal `CODEX_HOME` (`~/.codex` by default) with an optional isolated `~/.codex-deepseek` profile without reading either profile's provider configuration or authentication files. It does not maintain a historical database and does not modify Codex sessions.
 
 ```text
 Codex local session JSONL + session_index.jsonl
@@ -52,11 +52,11 @@ Codex local session JSONL + session_index.jsonl
 
 ## Data flow
 
-Discovery scans all Codex session date folders for files written inside the configured activity window. It keeps at most 64 candidates. Reopening an older conversation continues writing to its original date folder, so filtering only today's folder is incorrect. After discovery, ordinary watcher changes enqueue at most 256 affected paths. A full bounded scan occurs only for creation/deletion/rename, watcher overflow, startup, or the 30-second reconciliation boundary.
+Discovery scans every enabled profile's Codex session date folders for files written inside the configured activity window, then applies one global 64-candidate cap. This prevents each added profile from multiplying the resident bound. Reopening an older conversation continues writing to its original date folder, so filtering only today's folder is incorrect. After discovery, ordinary watcher changes enqueue at most 256 affected paths. A full bounded scan occurs only for creation/deletion/rename, watcher overflow, startup, or the 30-second reconciliation boundary.
 
 On discovery, the core reverse-reads 64 KiB chunks until it has the bounded 2,000-line tail instead of decoding the whole scan window. During monitoring, each state stores its file identity and byte offset and reads only appended data. The compiled reader rents a 64 KiB buffer; the monitor gives one session at most 256 KiB and all sessions together at most 4 MiB in one dispatcher pass. It carries only the incomplete record between reads and rejects a single pending record beyond 8 MiB. Unread session and official-title work remains in explicit backlogs for later responsive ticks. Records whose top-level type cannot affect identity, lifecycle, accounting, allowance, or model/workspace context are rejected before a full object graph is created.
 
-Session identity comes from `session_meta`; user-facing conversation titles come from the separate local `session_index.jsonl`. Prompt, assistant, and tool-output text are not used for naming or lifecycle inference.
+Session identity, client surface, originator, and bounded model-provider label come from `session_meta`; user-facing conversation titles come from the matching profile's separate local `session_index.jsonl`. Prompt, assistant, and tool-output text are not used for naming, source classification, or lifecycle inference. Internal/subagent source objects remain excluded. Model IDs are not allowlisted, so unknown future models keep all non-price monitoring behavior.
 
 ## State and projections
 
@@ -64,7 +64,7 @@ All surfaces read the same state objects. Split bubbles do not create new parser
 
 Task numbering is in-memory and stable for the visible lifetime of a task. Released numbers enter a bounded cooldown queue before reuse.
 
-The task registry is deliberately smaller than the UI state. It stores only task number, workspace leaf, coarse status, and update time so MCP controls can target a visible task without exposing titles or transcript content.
+The task registry is deliberately smaller than the UI state. Registry v2 stores only task number, workspace leaf, coarse status, update time, and bounded client/provider/profile labels so MCP controls can target the correct Desktop, OpenAI CLI, or DeepSeek CLI task without exposing titles or transcript content.
 
 ## Rendering
 
@@ -82,6 +82,8 @@ The runtime caches:
 Metric values update in place. List rows rebuild only when their structural projection changes; token, context, status, and notice text update retained controls. The header uses explicit grid columns so a fully populated metric row cannot overlap the right-side list toggle.
 
 Attention is surface-local: summary mode affects the summary, list mode the matching row, and split mode the matching independent bubble. Context alerts animate only the context metric.
+
+Each visible task has exactly one source badge after its status dot and before its stable number. Desktop uses a window outline, normal OpenAI CLI uses a terminal mark, and the isolated DeepSeek CLI profile uses a wave-terminal mark. Closing a detached bubble changes only its projection ownership and merges it back into the main HUD; list-row dismissal is the separate operation that temporarily removes a task from the visible set.
 
 ## Settings process
 
@@ -109,6 +111,8 @@ Performance numbers remain machine- and fixture-specific. The migration is an ar
 - no model-authored XAML, script, shader, CSS, shell command, or network theme asset;
 - bounded local notice messages and declarative animation recipes only;
 - settings and user themes live outside the installed plugin directory.
+
+The optional STDIO MCP server negotiates `2025-11-25` plus compatible older revisions and returns structured, schema-described tool results. It reads only HUD-local configuration, heartbeat, manual-exit state, and registry v2. Plugin installation is per `CODEX_HOME`; it never rewrites model/provider selections, and a new Codex task is required to discover a newly installed plugin. See `docs/MCP_INTEGRATION.md`.
 
 ## Testing strategy
 

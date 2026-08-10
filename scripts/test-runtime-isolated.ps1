@@ -343,7 +343,7 @@ try {
 
     $logText = Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog
     if ($HostMode -eq 'compiled') {
-        if ($logText -notmatch 'Compiled HUD v2\.2\.1 starting\.') { throw 'Compiled HUD startup marker is missing.' }
+        if ($logText -notmatch 'Compiled HUD v3\.0\.0 starting\.') { throw 'Compiled HUD startup marker is missing.' }
         if ($logText -match 'Unhandled dispatcher exception:|Unhandled domain exception:|Fatal startup error:') { throw 'Compiled runtime log contains an unhandled HUD error.' }
     } else {
         if ($logText -notmatch 'HUD Loaded event completed\.') { throw 'HUD Loaded completion marker is missing.' }
@@ -359,7 +359,7 @@ try {
         if ($logText -notmatch ('Attention surface: bubble ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent') -or $logText -match ('Attention surface: list ' + [regex]::Escape([string]$agentTarget.workspace) + ' .*reason=agent')) { throw 'Codex notice escaped its single matching bubble.' }
     }
     if ($terminalFiles.Count -ge 3 -and $HostMode -eq 'legacy') {
-        if ($logText -notmatch ('Silent completion retained: ' + [regex]::Escape($workspaces[0]))) { throw 'Silent completion was not retained.' }
+        if ($logText -notmatch ('Silent completion ignored: ' + [regex]::Escape($workspaces[0]))) { throw 'Silent completion was not ignored.' }
         if ($logText -match ('Attention triggered: ' + [regex]::Escape($workspaces[0]) + ' completed')) { throw 'Silent completion unexpectedly triggered attention.' }
         if ($logText -notmatch ('Pending completion canceled: ' + [regex]::Escape($workspaces[1]))) { throw 'Immediate continuation did not cancel its pending reminder.' }
         if ($logText -match ('Attention triggered: ' + [regex]::Escape($workspaces[1]) + ' completed')) { throw 'Cancelled completion still triggered attention.' }

@@ -4,6 +4,9 @@ public sealed record HudRuntimeOptions
 {
     public int ActiveWindowMinutes { get; init; } = 30;
     public int MaximumFiles { get; init; } = 64;
+    public bool DesktopSessionsEnabled { get; init; } = true;
+    public bool DefaultCliSessionsEnabled { get; init; } = true;
+    public bool DeepSeekCliSessionsEnabled { get; init; } = true;
     public int NumberCooldownSeconds { get; init; } = 120;
     public int CompletionGraceSeconds { get; init; } = 8;
     public int AttentionDurationSeconds { get; init; } = 6;

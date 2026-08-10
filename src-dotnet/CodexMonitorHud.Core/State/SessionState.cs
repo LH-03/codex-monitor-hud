@@ -38,11 +38,21 @@ public sealed class SessionState
     public DateTimeOffset ContextAlertUntil { get; set; } = DateTimeOffset.MinValue;
     public string ActiveTurnId { get; set; } = string.Empty;
     public string PendingCompletionTurnId { get; set; } = string.Empty;
+    public DateTimeOffset PendingCompletionAt { get; set; } = DateTimeOffset.MinValue;
     public DateTimeOffset PendingCompletionDueAt { get; set; } = DateTimeOffset.MinValue;
     public bool IsInternalSession { get; set; }
     public bool IdentityMetadataFound { get; set; }
+    public bool IdentityProvisional { get; set; }
+    public bool NeedsSnapshotHydration { get; set; }
+    public bool IsReadBlocked { get; set; }
+    public DateTimeOffset LastLockObservedAt { get; set; } = DateTimeOffset.MinValue;
+    public DateTimeOffset RuntimeActivityAt { get; set; } = DateTimeOffset.MinValue;
     public string SessionId { get; set; } = string.Empty;
     public string ConversationLabel { get; set; } = string.Empty;
+    public string ProfileId { get; init; } = SessionProfile.DefaultId;
+    public string ProfileLabel { get; init; } = "Codex";
+    public string ClientSurface { get; set; } = "unknown";
+    public string ModelProvider { get; set; } = string.Empty;
     public bool Dismissed { get; set; }
     public double BubbleWidth { get; set; }
     public double BubbleHeight { get; set; }

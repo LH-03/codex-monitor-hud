@@ -11,6 +11,7 @@ Use the plugin's MCP tools for normal operation:
 - `monitor_hud_show` shows or restarts the HUD.
 - `monitor_hud_hide` hides it without deleting settings.
 - `monitor_hud_pause` toggles live updates.
+- `monitor_hud_status` reports runtime health, configured source filters, and privacy-safe active task source metadata.
 - `monitor_hud_notification_capabilities` reports whether proactive notices are off, text-only, or allowed to use bounded live choreography. It also lists privacy-safe active HUD task numbers.
 - `monitor_hud_notify` sends one short, visibly CODEX-labeled notice to the matching task surface without ending or pausing the current Codex turn.
 
@@ -22,7 +23,7 @@ Before the first proactive notice in a task:
 
 1. Call `monitor_hud_notification_capabilities`.
 2. If notices are disabled, continue normally and do not repeatedly retry.
-3. Match the current workspace to an active task number and pass `task_number`. If two visible tasks are ambiguous, ask the user instead of guessing. Omitting the number is only a best-effort fallback to the most recently active task.
+3. Match the current workspace and source (`Desktop`, `CLI · OpenAI`, or `CLI · DeepSeek`) to an active task number and pass `task_number`. If two visible tasks are ambiguous, ask the user instead of guessing. Omitting the number is only a best-effort fallback to the most recently active task.
 4. Follow the user's or developer's notification policy. Useful mid-turn cases include a decision that needs human review, a blocked external step, a risky action awaiting approval, or a milestone the user explicitly asked to watch. Do not notify for routine progress unless instructed.
 5. Keep the message to one or two plain-text sentences, at most 160 characters. Never include secrets, full logs, private prompts, links, or rich text.
 
@@ -42,7 +43,9 @@ For creating a shareable skin, use `$create-monitor-hud-theme`. Finished `.json`
 
 ## Privacy and safety
 
-The HUD reads local top-level `token_count` and `turn_context` records from `~/.codex/sessions`. It does not upload logs, store prompts, modify sessions, or write token data to the repository. User settings, the privacy-safe task-number registry, and queued notice files live under `%LOCALAPPDATA%\CodexMonitorHUD`.
+The HUD reads local top-level identity, lifecycle, `token_count`, and `turn_context` records from enabled profile roots: the normal `CODEX_HOME` (`~/.codex` by default) and optionally `~/.codex-deepseek`. It does not read provider configuration or authentication files, upload logs, store prompts, modify sessions, or write token data to the repository. User settings, the privacy-safe task-number registry, and queued notice files live under `%LOCALAPPDATA%\CodexMonitorHUD`.
+
+Desktop, normal CLI, and DeepSeek CLI tasks share one globally bounded monitor and stable-number pool. Source badges and registry fields keep them explicit. Closing a detached bubble only merges that surface back into the main HUD; it must not dismiss the underlying task from aggregate monitoring.
 
 Treat `task_complete` as the end of one Codex turn, not proof that the entire conversation goal is complete. Silent turn endings are ignored and visible completions use a short continuation guard before alerting.
 

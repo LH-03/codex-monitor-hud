@@ -89,7 +89,7 @@ Colors accept WPF-compatible hex ARGB. Prefer `#AARRGGBB`. Layout: `chips`, `com
   "multiTask": {
     "listStyle": "rail",
     "listDensity": "compact",
-    "nameMode": "hover"
+    "nameMode": "always"
   }
 }
 ```
@@ -179,7 +179,7 @@ Only `theme.json` and `.png`, `.jpg`, or `.jpeg` files below `assets/` are accep
     "opacity":0.97,
     "transparencyMode":"layered",
     "themeStyle":{"surface":"gradient","gradientStart":"#F0061827","gradientEnd":"#E9084E68","gradientAngle":28,"shadow":"deep","borderWidth":1.2,"statusDotSize":8.5,"fontFamily":"Segoe UI Variable Text, Microsoft YaHei UI"},
-    "multiTask":{"listStyle":"rail","listDensity":"compact","nameMode":"hover"},
+    "multiTask":{"listStyle":"rail","listDensity":"compact","nameMode":"always"},
     "attention":{"summaryMode":"halo","listMode":"flow","taskBubbleMode":"flow","dotEnabled":true,"dotPattern":"heartbeat","dotBrightness":"balanced","dotSpeed":"normal","dotBreathing":true}
   }
 }

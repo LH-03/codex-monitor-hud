@@ -6,7 +6,10 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using CodexMonitorHud.Core.Configuration;
+using CodexMonitorHud.Core.Presentation;
+using CodexMonitorHud.Core.Sessions;
 using CodexMonitorHud.Core.State;
+using Path = System.Windows.Shapes.Path;
 
 namespace CodexMonitorHud.App;
 
@@ -19,6 +22,8 @@ internal sealed class TaskBubbleView : IDisposable
     private readonly Button _dismiss;
     private readonly Button _merge;
     private readonly TextBlock _number;
+    private readonly Border _sourceBadge;
+    private readonly Path _sourceIcon;
     private readonly TextBlock _name;
     private readonly Border _contextMetric;
     private readonly TextBlock _contextText;
@@ -48,6 +53,8 @@ internal sealed class TaskBubbleView : IDisposable
         _dismiss = XamlLoader.Require<Button>(Window, "TaskBubbleDismissButton");
         _merge = XamlLoader.Require<Button>(Window, "TaskBubbleMergeButton");
         _number = XamlLoader.Require<TextBlock>(Window, "TaskBubbleNumber");
+        _sourceBadge = XamlLoader.Require<Border>(Window, "TaskBubbleSourceBadge");
+        _sourceIcon = XamlLoader.Require<Path>(Window, "TaskBubbleSourceIcon");
         _name = XamlLoader.Require<TextBlock>(Window, "TaskBubbleName");
         _contextMetric = XamlLoader.Require<Border>(Window, "TaskBubbleContextMetric");
         _contextText = XamlLoader.Require<TextBlock>(Window, "TaskBubbleContextText");
@@ -99,13 +106,15 @@ internal sealed class TaskBubbleView : IDisposable
         IReadOnlyDictionary<string, string> locale,
         string status,
         string displayName,
+        string sourceLabel,
+        string sourceColor,
         string metricsText,
         bool hasAttention)
     {
         var contextVisible = settings.Fields.TryGetValue("context", out var showContext) && showContext;
         var contextText = state.Snapshot is null
             ? Get(locale, "waiting")
-            : $"{Get(locale, "context")} {state.Snapshot.ContextPercent:0.#}%";
+            : $"{Get(locale, "context")} {(state.Snapshot.ContextWindow > 0 ? HudFormatting.FormatPercent(state.Snapshot.ContextPercent) : "--")}";
         var appearanceSignature = string.Join('|',
             settings.Preset,
             settings.Background,
@@ -124,8 +133,10 @@ internal sealed class TaskBubbleView : IDisposable
             hasAttention,
             contextVisible,
             settings.Behavior.OpenTaskOnDoubleClick,
+            sourceLabel,
+            sourceColor,
             Get(locale, "mergeTask"),
-            Get(locale, "dismissTask"),
+            Get(locale, "closeTaskBubble"),
             Get(locale, "resizeTaskBubble"),
             Get(locale, "openTaskTooltip"));
         if (_appearanceSignature != appearanceSignature)
@@ -143,11 +154,17 @@ internal sealed class TaskBubbleView : IDisposable
             _dot.Height = settings.ThemeStyle.StatusDotSize;
             _dot.Fill = _brushes.Create(StatusColor(settings, status), "#FF8E8E93", BrushRole.Status, settings, status, hasAttention);
             _number.Foreground = _brushes.Create(settings.Accent, "#FF0A84FF", BrushRole.Primary, settings, status, hasAttention);
+            _sourceIcon.Data = Geometry.Parse(GetSourceGeometry(state));
+            _sourceIcon.Stroke = _brushes.Create(sourceColor, "#FF64748B", BrushRole.Primary, settings, status, hasAttention);
+            _sourceBadge.Background = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 24);
+            _sourceBadge.BorderBrush = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 72);
+            _sourceBadge.ToolTip = sourceLabel;
             _name.Foreground = _brushes.Create(settings.Foreground, "#FF111827", BrushRole.Primary, settings, status, hasAttention);
             _contextMetric.Visibility = contextVisible ? Visibility.Visible : Visibility.Collapsed;
             _contextText.Foreground = _brushes.Create(settings.Foreground, "#FF111827", BrushRole.Primary, settings, status, hasAttention);
             _contextMetric.BorderBrush = _brushes.Create("#330A84FF", "#330A84FF", BrushRole.Decoration, settings, status, hasAttention);
             _contextMetric.Background = _brushes.Create("#0D0A84FF", "#0D0A84FF", BrushRole.Decoration, settings, status, hasAttention);
+            _contextMetric.ToolTip = BuildContextTooltip(state, locale);
             _metrics.Foreground = _brushes.Create(settings.Muted, "#FF667085", BrushRole.Secondary, settings, status, hasAttention);
             try
             {
@@ -160,19 +177,23 @@ internal sealed class TaskBubbleView : IDisposable
             {
             }
             _merge.ToolTip = Get(locale, "mergeTask");
-            _dismiss.ToolTip = Get(locale, "dismissTask");
+            _dismiss.ToolTip = Get(locale, "closeTaskBubble");
             _resize.ToolTip = Get(locale, "resizeTaskBubble");
-            _shell.ToolTip = settings.Behavior.OpenTaskOnDoubleClick ? Get(locale, "openTaskTooltip") : null;
+            _shell.ToolTip = settings.Behavior.OpenTaskOnDoubleClick &&
+                             string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase)
+                ? Get(locale, "openTaskTooltip")
+                : null;
             SetMousePassthrough(settings.MousePassthrough);
         }
 
-        var contentSignature = string.Join('|', state.Number, displayName, contextText, metricsText);
+        var contentSignature = string.Join('|', state.Number, displayName, sourceLabel, contextText, metricsText);
         if (_contentSignature != contentSignature)
         {
             _contentSignature = contentSignature;
             _number.Text = $"#{state.Number}";
             _name.Text = displayName;
             _contextText.Text = contextText;
+            _contextMetric.ToolTip = BuildContextTooltip(state, locale);
             _metrics.Text = metricsText;
         }
 
@@ -231,6 +252,17 @@ internal sealed class TaskBubbleView : IDisposable
         _shell.BorderThickness = _baseBorderThickness;
         _surfaceVisualActive = false;
         _contextVisualActive = false;
+    }
+
+    private static string BuildContextTooltip(SessionState state, IReadOnlyDictionary<string, string> locale)
+    {
+        if (state.Snapshot is null || state.Snapshot.ContextWindow <= 0)
+        {
+            return Get(locale, "contextUnavailable");
+        }
+
+        var model = string.IsNullOrWhiteSpace(state.Snapshot.Model) ? Get(locale, "modelUnknown") : state.Snapshot.Model;
+        return $"{model} \u00B7 {Get(locale, "contextWindow")} {HudFormatting.FormatNumber(state.Snapshot.ContextWindow, "auto")}";
     }
 
     public void SetIndicatorCollapsed(bool collapsed)
@@ -304,7 +336,7 @@ internal sealed class TaskBubbleView : IDisposable
 
     private void OnShellMouseLeftButtonDown(object sender, MouseButtonEventArgs args)
     {
-        if (args.ClickCount >= 2)
+        if (args.ClickCount >= 2 && string.Equals(_state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
         {
             OpenRequested?.Invoke(StatePath);
             args.Handled = true;
@@ -340,4 +372,32 @@ internal sealed class TaskBubbleView : IDisposable
 
     private static string Get(IReadOnlyDictionary<string, string> locale, string key) =>
         locale.TryGetValue(key, out var value) ? value : key;
+
+    private static Color ParseColor(string value, string fallback)
+    {
+        try { return (Color)ColorConverter.ConvertFromString(value); }
+        catch (FormatException) { return (Color)ColorConverter.ConvertFromString(fallback); }
+    }
+
+    private static Brush ColorBrush(Color color, byte alpha)
+    {
+        color.A = alpha;
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static string GetSourceGeometry(SessionState state)
+    {
+        if (string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
+        {
+            return "M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M1.4,4.8 L12.6,4.8 M3,3.45 L3.08,3.45 M4.75,3.45 L4.83,3.45";
+        }
+        if (string.Equals(state.ModelProvider, "deepseek", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state.ProfileId, SessionProfile.DeepSeekId, StringComparison.OrdinalIgnoreCase))
+        {
+            return "M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M2.8,8.4 C4.1,5.7 5.55,10.4 7.05,7.65 C8.15,5.65 9.3,7.25 11.2,5.75";
+        }
+        return "M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M3,5.15 L5.85,7.15 L3,9.15 M7.15,9.15 L10.65,9.15";
+    }
 }

@@ -11,8 +11,9 @@
 - `themes/`: ten data-driven theme definitions that forks can extend without editing runtime code.
 - `docs/THEMING_AND_UI_EXTENSIONS.md`: public theme schema, status palette and XAML extension guide.
 - `docs/AI_PORTING_AND_CUSTOMIZATION_GUIDE.md`: deep project model for AI maintainers and community source adaptations to other agent runtimes.
+- `docs/MCP_INTEGRATION.md`: current MCP revision, tools, source-aware targeting, per-Profile installation, and privacy boundary.
 - `assets/`: icon and synthetic preview screenshots.
-- Historical material remains for traceability. The `2.2.1` package is Windows x64 only; macOS is not supported or packaged.
+- Historical material remains for traceability. The `3.0.0` package is Windows x64 only; macOS is not supported or packaged.
 - `docs/PROJECT_STATUS.md`: current contracts, implementation state, verified display matrix, known limits, and migration boundary.
 - `docs/PROJECT_LEDGER.md` and `docs/CODEX_CONTINUATION.md`: portable work ledger, release evidence format, safe handoff rules, and the next-Codex operating procedure.
 - `INSTALL_WITH_CODEX.md` and `install-manifest.json`: canonical low-reasoning repository installation protocol, platform/asset routing, checksum stop rules, settings preservation and rollback operations.
@@ -21,7 +22,7 @@
 - `COLOR_ATTRIBUTION.md`: Codex Micro display-reference source, values, mapping, and non-affiliation/color-matching limitations.
 - `PRIVACY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `LICENSE`.
 - `TEST_RESULTS.md` and `SENSITIVE_SCAN.md`: current verification evidence and privacy-oriented package scan results.
-- `GITHUB_RELEASE_DRAFT_2.2.1.md`, `scripts/prepare-release.ps1`, and `scripts/prepare-transfer-kit.ps1`: copy-ready GitHub Desktop/Release fields plus deterministic local release and second-PC transfer ZIP preparation. Generated output stays under ignored `artifacts/`.
+- `GITHUB_RELEASE_DRAFT_3.0.0.md`, `scripts/prepare-release.ps1`, and `scripts/prepare-transfer-kit.ps1`: copy-ready Release fields plus deterministic local release and second-PC transfer ZIP preparation. Generated output stays under ignored `artifacts/`.
 - The installer creates on-demand desktop and Start menu settings shortcuts; no shortcut is placed in Windows Startup.
 
 The package intentionally excludes `private/`, local settings, Codex logs, databases, test output, Git history, and machine-specific paths.

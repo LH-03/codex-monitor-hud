@@ -8,6 +8,7 @@ using System.Windows.Shapes;
 using CodexMonitorHud.Core.Configuration;
 using CodexMonitorHud.Core.Models;
 using CodexMonitorHud.Core.Presentation;
+using CodexMonitorHud.Core.Sessions;
 using CodexMonitorHud.Core.State;
 
 namespace CodexMonitorHud.App;
@@ -305,7 +306,8 @@ internal sealed class MainHudView : IDisposable
     {
         var metrics = paused || snapshot is null
             ? Array.Empty<HudMetric>()
-            : HudFormatting.GetMetrics(snapshot, settings.Fields, locale, settings.NumberFormat).ToArray();
+            : HudFormatting.GetSummaryMetrics(snapshot, settings.Fields, locale, settings.NumberFormat).ToArray();
+        metrics = AddSourceBreakdown(metrics, states, locale);
         if (metrics.Length == 0)
         {
             var text = paused
@@ -502,10 +504,13 @@ internal sealed class MainHudView : IDisposable
                 statusFor(state),
                 _detached.Contains(state.Path),
                 state.Workspace,
-                state.ConversationLabel)))
+                state.ConversationLabel,
+                state.ProfileId,
+                state.ClientSurface,
+                state.ModelProvider)))
             : string.Empty;
         var signature = string.Join('|', visible, settings.MultiTask.ListStyle, settings.MultiTask.ListDensity,
-            settings.MultiTask.ListDetail, settings.MultiTask.NameMode, settings.Fields.GetValueOrDefault("context"),
+            settings.MultiTask.ListDetail, settings.MultiTask.NameMode,
             _appearanceSignature, stateSignature);
         if (_listSignature == signature)
         {
@@ -535,7 +540,7 @@ internal sealed class MainHudView : IDisposable
                 Margin = density.RowMargin,
                 Background = _brushes.Create("#08000000", "#08000000", BrushRole.Decoration, settings, status, state.AttentionUntil > now)
             };
-            foreach (var width in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto, GridLength.Auto })
+            foreach (var width in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto, GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto, GridLength.Auto })
             {
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = width });
             }
@@ -549,6 +554,32 @@ internal sealed class MainHudView : IDisposable
             };
             Grid.SetColumn(dot, 0);
             row.Children.Add(dot);
+
+            var sourceLabel = GetSourceLabel(state, locale);
+            var sourceColor = GetSourceColor(state, settings);
+            var sourceIcon = new System.Windows.Shapes.Path
+            {
+                Data = Geometry.Parse(GetSourceGeometry(state)),
+                Stroke = _brushes.Create(sourceColor, "#FF64748B", BrushRole.Primary, settings, status, false),
+                StrokeThickness = 1.45,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round
+            };
+            var sourceViewbox = new Viewbox { Width = 14, Height = 14, Child = sourceIcon };
+            var sourceBadge = new Border
+            {
+                CornerRadius = new CornerRadius(density.BadgeRadius),
+                Padding = new Thickness(4, 3, 4, 3),
+                Margin = new Thickness(0, 1, 6, 1),
+                Background = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 24),
+                BorderBrush = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 72),
+                BorderThickness = new Thickness(1),
+                ToolTip = sourceLabel,
+                Child = sourceViewbox
+            };
+            Grid.SetColumn(sourceBadge, 1);
+            row.Children.Add(sourceBadge);
 
             var badgeText = new TextBlock
             {
@@ -565,7 +596,7 @@ internal sealed class MainHudView : IDisposable
                 ToolTip = GetDisplayName(state, settings, locale, includeNumber: true),
                 Child = badgeText
             };
-            Grid.SetColumn(badge, 1);
+            Grid.SetColumn(badge, 2);
             row.Children.Add(badge);
 
             var projectName = ProjectName(state, locale);
@@ -582,7 +613,7 @@ internal sealed class MainHudView : IDisposable
             };
             var subtitle = new TextBlock
             {
-                Text = settings.MultiTask.NameMode == "always" ? expandedSubtitle : collapsedSubtitle,
+                Text = settings.MultiTask.NameMode == "hidden" ? collapsedSubtitle : expandedSubtitle,
                 Margin = new Thickness(0, 1, 0, 0),
                 FontSize = Math.Max(9, settings.FontSize - 3),
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -598,14 +629,8 @@ internal sealed class MainHudView : IDisposable
             };
             identity.Children.Add(name);
             identity.Children.Add(subtitle);
-            Grid.SetColumn(identity, 2);
+            Grid.SetColumn(identity, 3);
             row.Children.Add(identity);
-            if (settings.MultiTask.NameMode == "hover" && expandedSubtitle != collapsedSubtitle)
-            {
-                row.MouseEnter += (_, _) => subtitle.Text = expandedSubtitle;
-                row.MouseLeave += (_, _) => subtitle.Text = collapsedSubtitle;
-            }
-
             var listMetrics = WithAgentNotice(
                 state,
                 GetTaskMetricsText(state, settings, metricLocale, status, listPreset: true),
@@ -620,14 +645,20 @@ internal sealed class MainHudView : IDisposable
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
             metricsText.ToolTip = metricsText.Text;
-            var metricsHost = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            var metricsHost = new Grid { VerticalAlignment = VerticalAlignment.Center };
+            metricsHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            metricsHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             Border? contextMetric = null;
             TextBlock? contextTextControl = null;
-            if (settings.Fields.TryGetValue("context", out var contextVisible) && contextVisible)
             {
+                var contextValue = state.Snapshot is null
+                    ? Get(locale, "waiting")
+                    : state.Snapshot.ContextWindow > 0
+                        ? HudFormatting.FormatPercent(state.Snapshot.ContextPercent)
+                        : "--";
                 var contextText = new TextBlock
                 {
-                    Text = state.Snapshot is null ? Get(locale, "waiting") : $"{Get(locale, "context")} {state.Snapshot.ContextPercent:0.#}%",
+                    Text = state.Snapshot is null ? contextValue : $"{Get(locale, "context")} {contextValue}",
                     FontWeight = FontWeights.SemiBold,
                     Foreground = _brushes.Create(settings.Foreground, "#FF111827", BrushRole.Primary, settings, status, false)
                 };
@@ -640,12 +671,15 @@ internal sealed class MainHudView : IDisposable
                     BorderThickness = new Thickness(1),
                     BorderBrush = _brushes.Create("#330A84FF", "#330A84FF", BrushRole.Decoration, settings, status, false),
                     Background = _brushes.Create("#0D0A84FF", "#0D0A84FF", BrushRole.Decoration, settings, status, false),
+                    ToolTip = BuildContextTooltip(state, locale),
                     Child = contextText
                 };
+                Grid.SetColumn(contextMetric, 0);
                 metricsHost.Children.Add(contextMetric);
             }
+            Grid.SetColumn(metricsText, 1);
             metricsHost.Children.Add(metricsText);
-            Grid.SetColumn(metricsHost, 3);
+            Grid.SetColumn(metricsHost, 4);
             row.Children.Add(metricsHost);
 
             var detached = _detached.Contains(state.Path);
@@ -656,7 +690,7 @@ internal sealed class MainHudView : IDisposable
                 density.ActionMargin,
                 detached ? Get(locale, "mergeTask") : Get(locale, "detachTask"));
             action.Click += (_, _) => SetDetached(state.Path, !detached, settings.MultiTask.MaxSplitBubbles);
-            Grid.SetColumn(action, 4);
+            Grid.SetColumn(action, 5);
             row.Children.Add(action);
             var dismiss = NewIconButton(
                 DismissGeometry,
@@ -665,21 +699,41 @@ internal sealed class MainHudView : IDisposable
                 new Thickness(1, 0, 2, 0),
                 Get(locale, "dismissTask"));
             dismiss.Click += (_, _) => DismissRequested?.Invoke(state.Path);
-            Grid.SetColumn(dismiss, 5);
+            Grid.SetColumn(dismiss, 6);
             row.Children.Add(dismiss);
+
+            var detailedLayout = settings.MultiTask.ListDetail == "detailed";
+            if (detailedLayout)
+            {
+                row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                foreach (var control in new FrameworkElement[] { dot, sourceBadge, badge, action, dismiss })
+                {
+                    Grid.SetRowSpan(control, 2);
+                }
+                Grid.SetRow(metricsHost, 1);
+                Grid.SetColumn(metricsHost, 3);
+                Grid.SetColumnSpan(metricsHost, 2);
+                metricsHost.Margin = density.MetricsMargin;
+                metricsText.TextWrapping = TextWrapping.Wrap;
+                metricsText.TextTrimming = TextTrimming.None;
+            }
 
             FrameworkElement listItem = row;
             if (settings.MultiTask.ListStyle == "cards")
             {
                 row.Background = Brushes.Transparent;
-                row.RowDefinitions.Add(new RowDefinition());
-                row.RowDefinitions.Add(new RowDefinition());
-                Grid.SetRowSpan(dot, 2);
-                Grid.SetRow(metricsHost, 1);
-                Grid.SetColumn(metricsHost, 1);
-                Grid.SetColumnSpan(metricsHost, 3);
-                metricsHost.Margin = density.MetricsMargin;
-                metricsText.TextWrapping = TextWrapping.Wrap;
+                if (!detailedLayout)
+                {
+                    row.RowDefinitions.Add(new RowDefinition());
+                    row.RowDefinitions.Add(new RowDefinition());
+                    Grid.SetRowSpan(dot, 2);
+                    Grid.SetRow(metricsHost, 1);
+                    Grid.SetColumn(metricsHost, 1);
+                    Grid.SetColumnSpan(metricsHost, 4);
+                    metricsHost.Margin = density.MetricsMargin;
+                    metricsText.TextWrapping = TextWrapping.Wrap;
+                }
                 listItem = new Border
                 {
                     CornerRadius = new CornerRadius(density.CardRadius),
@@ -720,11 +774,13 @@ internal sealed class MainHudView : IDisposable
                 CornerRadius = new CornerRadius(Math.Max(9, density.CardRadius)),
                 BorderThickness = new Thickness(0),
                 Child = listItem,
-                ToolTip = settings.Behavior.OpenTaskOnDoubleClick ? Get(locale, "openTaskTooltip") : null
+                ToolTip = settings.Behavior.OpenTaskOnDoubleClick && CanOpenTask(state)
+                    ? Get(locale, "openTaskTooltip")
+                    : null
             };
             attentionSurface.MouseLeftButtonDown += (_, args) =>
             {
-                if (args.ClickCount >= 2)
+                if (args.ClickCount >= 2 && CanOpenTask(state))
                 {
                     OpenRequested?.Invoke(state.Path);
                     args.Handled = true;
@@ -785,7 +841,7 @@ internal sealed class MainHudView : IDisposable
             if (!_bubbles.TryGetValue(state.Path, out var bubble))
             {
                 bubble = new TaskBubbleView(_taskBubbleXaml, state, _brushes);
-                bubble.DismissRequested += path => DismissRequested?.Invoke(path);
+                bubble.DismissRequested += path => SetDetached(path, false, settings.MultiTask.MaxSplitBubbles);
                 bubble.MergeRequested += path => SetDetached(path, false, settings.MultiTask.MaxSplitBubbles);
                 bubble.OpenRequested += path => OpenRequested?.Invoke(path);
                 bubble.AttentionPresented += (path, reason) => AttentionPresented?.Invoke("bubble", path, reason);
@@ -799,6 +855,8 @@ internal sealed class MainHudView : IDisposable
                 locale,
                 status,
                 GetDisplayName(state, settings, locale),
+                GetSourceLabel(state, locale),
+                GetSourceColor(state, settings),
                 WithAgentNotice(
                     state,
                     GetTaskMetricsText(state, settings, metricLocale, status, listPreset: false),
@@ -860,7 +918,11 @@ internal sealed class MainHudView : IDisposable
         {
             live.ContextText.Text = state.Snapshot is null
                 ? Get(locale, "waiting")
-                : $"{Get(locale, "context")} {state.Snapshot.ContextPercent:0.#}%";
+                : $"{Get(locale, "context")} {(state.Snapshot.ContextWindow > 0 ? HudFormatting.FormatPercent(state.Snapshot.ContextPercent) : "--")}";
+            if (live.ContextMetric is not null)
+            {
+                live.ContextMetric.ToolTip = BuildContextTooltip(state, locale);
+            }
             live.ContextText.Foreground = _brushes.Create(settings.Foreground, "#FF111827", BrushRole.Primary, settings, status, hasAttention);
         }
 
@@ -924,7 +986,11 @@ internal sealed class MainHudView : IDisposable
                        settings.Position == "custom" && Window.Top + Window.ActualHeight / 2 > work.Top + work.Height / 2;
         var isLeft = settings.Position.EndsWith("left", StringComparison.Ordinal) ||
                      settings.Position == "custom" && Window.Left + Window.ActualWidth / 2 < work.Left + work.Width / 2;
-        var cursorY = isBottom ? Window.Top - gap : Window.Top + Window.ActualHeight + gap;
+        var mainShellLeft = Window.Left + MainChromeInset;
+        var mainShellRight = Window.Left + Window.ActualWidth - MainChromeInset;
+        var mainShellTop = Window.Top + MainChromeInset;
+        var mainShellBottom = Window.Top + Window.ActualHeight - MainChromeInset;
+        var cursorY = isBottom ? mainShellTop - gap : mainShellBottom + gap;
         var columnOffset = 0d;
         var columnWidth = 0d;
         foreach (var entry in entries)
@@ -936,33 +1002,43 @@ internal sealed class MainHudView : IDisposable
             double top;
             if (isBottom)
             {
-                top = cursorY - height;
-                if (top < work.Top + 12)
+                top = cursorY - height + TaskBubbleChromeInset;
+                if (top < work.Top - TaskBubbleChromeInset)
                 {
                     columnOffset += columnWidth + gap;
                     columnWidth = width;
-                    cursorY = work.Bottom - 12;
-                    top = cursorY - height;
+                    cursorY = work.Bottom;
+                    top = cursorY - height + TaskBubbleChromeInset;
                 }
-                cursorY = top - gap;
+                cursorY = top + TaskBubbleChromeInset - gap;
             }
             else
             {
-                top = cursorY;
-                if (top + height > work.Bottom - 12)
+                top = cursorY - TaskBubbleChromeInset;
+                if (top + height > work.Bottom + TaskBubbleChromeInset)
                 {
                     columnOffset += columnWidth + gap;
                     columnWidth = width;
-                    cursorY = work.Top + 12;
-                    top = cursorY;
+                    cursorY = work.Top;
+                    top = cursorY - TaskBubbleChromeInset;
                 }
-                cursorY = top + height + gap;
+                cursorY = top + height - TaskBubbleChromeInset + gap;
             }
             var left = isLeft
-                ? Window.Left + columnOffset
-                : Window.Left + Window.ActualWidth - width - columnOffset;
-            entry.Window.Left = Math.Clamp(left, work.Left + 12, work.Right - width - 12);
-            entry.Window.Top = top;
+                ? mainShellLeft - TaskBubbleChromeInset + columnOffset
+                : mainShellRight - width + TaskBubbleChromeInset - columnOffset;
+            var clamped = HudPlacement.ClampCustom(
+                left,
+                top,
+                work.Left,
+                work.Top,
+                work.Width,
+                work.Height,
+                width,
+                height,
+                TaskBubbleChromeInset);
+            entry.Window.Left = clamped.Left;
+            entry.Window.Top = clamped.Top;
         }
     }
 
@@ -1119,33 +1195,43 @@ internal sealed class MainHudView : IDisposable
 
     private void UpdatePosition(HudSettings settings)
     {
-        Window.UpdateLayout();
         var screen = SystemParameters.WorkArea;
+        Window.MaxWidth = Math.Max(480, screen.Width + MainChromeInset * 2);
+        Window.UpdateLayout();
+        var width = Math.Max(1, Window.ActualWidth);
+        var height = Math.Max(1, Window.ActualHeight);
         if (settings.Position == "custom")
         {
-            if (settings.CustomLeft.HasValue)
-            {
-                Window.Left = Math.Clamp(settings.CustomLeft.Value, screen.Left, screen.Right - Math.Max(1, Window.ActualWidth));
-            }
-            if (settings.CustomTop.HasValue)
-            {
-                Window.Top = Math.Clamp(settings.CustomTop.Value, screen.Top, screen.Bottom - Math.Max(1, Window.ActualHeight));
-            }
+            // customLeft/customTop represent the visible shell, not the
+            // transparent shadow canvas around it.  Old top=0 values therefore
+            // migrate naturally to a shell that actually touches the edge.
+            var desiredShellLeft = settings.CustomLeft ?? Window.Left + MainChromeInset;
+            var desiredShellTop = settings.CustomTop ?? Window.Top + MainChromeInset;
+            var point = HudPlacement.ClampCustom(
+                desiredShellLeft - MainChromeInset,
+                desiredShellTop - MainChromeInset,
+                screen.Left,
+                screen.Top,
+                screen.Width,
+                screen.Height,
+                width,
+                height,
+                MainChromeInset);
+            Window.Left = point.Left;
+            Window.Top = point.Top;
             return;
         }
-        const double margin = 18;
-        var left = screen.Right - Window.ActualWidth - margin;
-        var top = screen.Top + margin;
-        switch (settings.Position)
-        {
-            case "top-left": left = screen.Left + margin; break;
-            case "top-center": left = screen.Left + (screen.Width - Window.ActualWidth) / 2; break;
-            case "bottom-left": left = screen.Left + margin; top = screen.Bottom - Window.ActualHeight - margin; break;
-            case "bottom-center": left = screen.Left + (screen.Width - Window.ActualWidth) / 2; top = screen.Bottom - Window.ActualHeight - margin; break;
-            case "bottom-right": top = screen.Bottom - Window.ActualHeight - margin; break;
-        }
-        Window.Left = Math.Clamp(left, screen.Left, screen.Right - Window.ActualWidth);
-        Window.Top = Math.Clamp(top, screen.Top, screen.Bottom - Window.ActualHeight);
+        var preset = HudPlacement.GetPreset(
+            settings.Position,
+            screen.Left,
+            screen.Top,
+            screen.Width,
+            screen.Height,
+            width,
+            height,
+            MainChromeInset);
+        Window.Left = preset.Left;
+        Window.Top = preset.Top;
     }
 
     private void StartSummaryAttention(HudSettings settings, IReadOnlyList<SessionState> states, DateTimeOffset now)
@@ -1259,7 +1345,7 @@ internal sealed class MainHudView : IDisposable
             try
             {
                 Window.DragMove();
-                PositionChanged?.Invoke(Window.Left, Window.Top);
+                PositionChanged?.Invoke(Window.Left + MainChromeInset, Window.Top + MainChromeInset);
             }
             catch (InvalidOperationException)
             {
@@ -1307,18 +1393,18 @@ internal sealed class MainHudView : IDisposable
         var parts = new List<string> { Get(locale, StatusKey(status)) };
         if (listPreset)
         {
-            if (settings.MultiTask.ListDetail is "balanced" or "detailed")
+            var metrics = HudFormatting.GetTaskListMetrics(
+                snapshot,
+                settings.MultiTask.ListDetail,
+                locale,
+                settings.NumberFormat);
+            parts.AddRange(metrics.Primary
+                .Where(static metric => metric.Key != "context")
+                .Select(FormatTaskMetric));
+            if (metrics.Diagnostics.Count > 0)
             {
-                parts.Add($"{Get(locale, "input")} {HudFormatting.FormatNumber(snapshot.Input, settings.NumberFormat)}");
-                parts.Add($"{Get(locale, "output")} {HudFormatting.FormatNumber(snapshot.Output, settings.NumberFormat)}");
-                parts.Add($"{Get(locale, "callTotal")} {HudFormatting.FormatNumber(snapshot.CallTotal, settings.NumberFormat)}");
-            }
-            if (settings.MultiTask.ListDetail == "detailed")
-            {
-                parts.Add($"{Get(locale, "cached")} {HudFormatting.FormatNumber(snapshot.Cached, settings.NumberFormat)}");
-                parts.Add($"{Get(locale, "taskTotal")} {HudFormatting.FormatNumber(snapshot.TaskTotal, settings.NumberFormat)}");
-                if (!string.IsNullOrWhiteSpace(snapshot.Model)) parts.Add(snapshot.Model);
-                parts.Add(snapshot.Timestamp.ToString("HH:mm:ss"));
+                var diagnosticText = string.Join(" \u00B7 ", metrics.Diagnostics.Select(FormatTaskMetric));
+                return string.Join(" \u00B7 ", parts) + Environment.NewLine + diagnosticText;
             }
         }
         else
@@ -1326,11 +1412,26 @@ internal sealed class MainHudView : IDisposable
             var fields = settings.MultiTask.BubbleFields;
             if (fields.Model && !string.IsNullOrWhiteSpace(snapshot.Model)) parts.Add(snapshot.Model);
             if (fields.CallTotal) parts.Add($"{Get(locale, "callTotal")} {HudFormatting.FormatNumber(snapshot.CallTotal, settings.NumberFormat)}");
+            if (fields.CacheHitRate) parts.Add($"{Get(locale, "cacheHitRate")} {HudFormatting.FormatCacheHitRate(snapshot.Input, snapshot.Cached)}");
             if (fields.TaskTotal) parts.Add($"{Get(locale, "taskTotal")} {HudFormatting.FormatNumber(snapshot.TaskTotal, settings.NumberFormat)}");
             if (fields.EstimatedCost) parts.Add($"{Get(locale, "estimatedCost")} {HudFormatting.FormatCost(snapshot.EstimatedCostUsd)}");
             if (fields.Updated) parts.Add(snapshot.Timestamp.ToString("HH:mm:ss"));
         }
         return string.Join(" \u00B7 ", parts);
+    }
+
+    private static string FormatTaskMetric(HudMetric metric) =>
+        metric.Key == "model" ? metric.Value : $"{metric.Label} {metric.Value}";
+
+    private static string BuildContextTooltip(SessionState state, IReadOnlyDictionary<string, string> locale)
+    {
+        if (state.Snapshot is null || state.Snapshot.ContextWindow <= 0)
+        {
+            return Get(locale, "contextUnavailable");
+        }
+
+        var model = string.IsNullOrWhiteSpace(state.Snapshot.Model) ? Get(locale, "modelUnknown") : state.Snapshot.Model;
+        return $"{model} \u00B7 {Get(locale, "contextWindow")} {HudFormatting.FormatNumber(state.Snapshot.ContextWindow, "auto")}";
     }
 
     private static string WithAgentNotice(
@@ -1355,6 +1456,102 @@ internal sealed class MainHudView : IDisposable
             : workspace;
         var name = identity + " \u00B7 " + state.StartedAt.ToLocalTime().ToString("HH:mm");
         return includeNumber ? $"#{state.Number} \u00B7 {name}" : name;
+    }
+
+    private static HudMetric[] AddSourceBreakdown(
+        HudMetric[] metrics,
+        IReadOnlyList<SessionState> states,
+        IReadOnlyDictionary<string, string> locale)
+    {
+        if (metrics.Length == 0 || states.Count == 0)
+        {
+            return metrics;
+        }
+        var groups = states
+            .GroupBy(state => GetSourceLabel(state, locale), StringComparer.OrdinalIgnoreCase)
+            .Select(group => new { Label = group.Key, Count = group.Count() })
+            .OrderByDescending(static group => group.Count)
+            .ThenBy(static group => group.Label, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        if (groups.Length == 1 && states.All(static state => !string.Equals(state.ClientSurface, "cli", StringComparison.OrdinalIgnoreCase)))
+        {
+            return metrics;
+        }
+        var suffix = string.Join(" \u00B7 ", groups.Select(static group => $"{group.Label} {group.Count}"));
+        for (var index = 0; index < metrics.Length; index++)
+        {
+            if (string.Equals(metrics[index].Key, "activeTasks", StringComparison.OrdinalIgnoreCase))
+            {
+                metrics[index] = metrics[index] with { Value = metrics[index].Value + " \u00B7 " + suffix };
+                break;
+            }
+        }
+        return metrics;
+    }
+
+    private static string GetSourceLabel(SessionState state, IReadOnlyDictionary<string, string> locale)
+    {
+        if (string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
+        {
+            return Get(locale, "sourceDesktop");
+        }
+        if (string.Equals(state.ClientSurface, "cli", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state.ProfileId, SessionProfile.DeepSeekId, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(state.ModelProvider, "deepseek", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(state.ProfileId, SessionProfile.DeepSeekId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Get(locale, "sourceCliDeepSeek");
+            }
+            if (string.IsNullOrWhiteSpace(state.ModelProvider) ||
+                string.Equals(state.ModelProvider, "openai", StringComparison.OrdinalIgnoreCase))
+            {
+                return Get(locale, "sourceCliOpenAI");
+            }
+            return $"{Get(locale, "sourceCli")} \u00B7 {ShortProvider(state.ModelProvider)}";
+        }
+        return Get(locale, "sourceUnknown");
+    }
+
+    private static string GetSourceColor(SessionState state, HudSettings settings)
+    {
+        if (string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
+        {
+            return settings.Accent;
+        }
+        if (string.Equals(state.ModelProvider, "deepseek", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state.ProfileId, SessionProfile.DeepSeekId, StringComparison.OrdinalIgnoreCase))
+        {
+            return "#FF00A7B5";
+        }
+        if (string.Equals(state.ClientSurface, "cli", StringComparison.OrdinalIgnoreCase))
+        {
+            return "#FF8B5CF6";
+        }
+        return settings.Muted;
+    }
+
+    private static string ShortProvider(string provider)
+    {
+        var value = provider.Trim();
+        return value.Length <= 18 ? value : value[..18];
+    }
+
+    private static bool CanOpenTask(SessionState state) =>
+        string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetSourceGeometry(SessionState state)
+    {
+        if (string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase))
+        {
+            return "M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M1.4,4.8 L12.6,4.8 M3,3.45 L3.08,3.45 M4.75,3.45 L4.83,3.45";
+        }
+        if (string.Equals(state.ModelProvider, "deepseek", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state.ProfileId, SessionProfile.DeepSeekId, StringComparison.OrdinalIgnoreCase))
+        {
+            return "M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M2.8,8.4 C4.1,5.7 5.55,10.4 7.05,7.65 C8.15,5.65 9.3,7.25 11.2,5.75";
+        }
+        return "M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M3,5.15 L5.85,7.15 L3,9.15 M7.15,9.15 L10.65,9.15";
     }
 
     private static string ProjectName(SessionState state, IReadOnlyDictionary<string, string> locale) =>
@@ -1424,6 +1621,9 @@ internal sealed class MainHudView : IDisposable
         TextBlock? ContextText,
         Border? ContextMetric,
         Border Surface);
+
+    private const double MainChromeInset = 18;
+    private const double TaskBubbleChromeInset = 16;
 
     private const string DetachGeometry = "M1.5,4.5 L1.5,10.5 L7.5,10.5 M5.2,1.5 L10.5,1.5 L10.5,6.8 M10.2,1.8 L4.5,7.5";
     private const string MergeGeometry = "M1.5,1.5 L10.5,1.5 L10.5,10.5 L1.5,10.5 Z M9.1,2.9 L4.1,7.9 M4.1,4.8 L4.1,7.9 L7.2,7.9";

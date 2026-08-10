@@ -4,6 +4,10 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
+const SERVER_VERSION = "3.0.0";
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
+const SERVER_INSTRUCTIONS = "Codex Monitor HUD is a local, closed-world HUD control server. Before a proactive notice, call monitor_hud_notification_capabilities and match task_number plus client/provider to the current task. Never include secrets, credentials, prompts, replies, or full logs. Notices require user opt-in and are limited to 160 plain-text characters. Control tools affect only the local HUD.";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = dirname(here);
 const stateRoot = process.env.CODEX_MONITOR_HUD_STATE_ROOT || (process.platform === "darwin"
@@ -19,33 +23,89 @@ const debugPath = join(stateRoot, "mcp-debug.log");
 mkdirSync(hostsRoot, { recursive: true });
 mkdirSync(notificationsRoot, { recursive: true });
 
-function notificationPermission() {
+function readSettings() {
   try {
-    const settings = JSON.parse(readFileSync(join(stateRoot, "settings.json"), "utf8").replace(/^\uFEFF/, ""));
-    if (!settings?.agentNotifications?.enabled) return "off";
-    return settings.agentNotifications.permission === "expressive" ? "expressive" : "text";
-  } catch { return "off"; }
+    return JSON.parse(readFileSync(join(stateRoot, "settings.json"), "utf8").replace(/^\uFEFF/, ""));
+  } catch {
+    return {};
+  }
+}
+
+function notificationPermission() {
+  const settings = readSettings();
+  if (!settings?.agentNotifications?.enabled) return "off";
+  return settings.agentNotifications.permission === "expressive" ? "expressive" : "text";
+}
+
+function cleanField(value, maximum = 80) {
+  return String(value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, maximum);
+}
+
+function readTaskRegistry() {
+  try {
+    const registry = JSON.parse(readFileSync(join(stateRoot, "task-registry.json"), "utf8").replace(/^\uFEFF/, ""));
+    const tasks = Array.isArray(registry?.tasks) ? registry.tasks.slice(0, 64).flatMap((task) => {
+      const taskNumber = Number(task?.task_number);
+      if (!Number.isInteger(taskNumber) || taskNumber < 1) return [];
+      return [{
+        task_number: taskNumber,
+        workspace: cleanField(task?.workspace),
+        status: cleanField(task?.status, 24),
+        client: cleanField(task?.client || "unknown", 24),
+        provider: cleanField(task?.provider, 40),
+        profile: cleanField(task?.profile || "codex", 24),
+        updated_at: cleanField(task?.updated_at, 48),
+      }];
+    }) : [];
+    return { version: Number(registry?.version) || 1, generated_at: cleanField(registry?.generated_at, 48), tasks };
+  } catch {
+    return { version: 0, generated_at: "", tasks: [] };
+  }
 }
 
 function notificationCapabilities() {
   const permission = notificationPermission();
-  let activeTasks = [];
-  try {
-    const registry = JSON.parse(readFileSync(join(stateRoot, "task-registry.json"), "utf8").replace(/^\uFEFF/, ""));
-    if (Array.isArray(registry?.tasks)) activeTasks = registry.tasks.slice(0, 64);
-  } catch {}
+  const registry = readTaskRegistry();
   return {
     enabled: permission !== "off",
     permission,
     identity: "Every notice is visibly labeled CODEX NOTICE / CODEX 通知.",
-    targeting: "Pass task_number whenever possible. Match the current workspace to active_tasks; if ambiguous, ask the user. Omitting it targets the most recently active task.",
-    limits: { plain_text_characters: 160, animation_layers: 4, no_links_or_rich_text: true, no_executable_code: true },
-    active_tasks: activeTasks,
+    targeting: "Match the current task to active_tasks by workspace, client, provider and profile, then pass task_number. If ambiguous, ask the user. Do not rely on another conversation's memory.",
+    limits: {
+      plain_text_characters: 160,
+      animation_layers: 4,
+      no_links_or_rich_text: true,
+      no_executable_code: true,
+    },
+    active_tasks: registry.tasks,
+  };
+}
+
+function hudStatus() {
+  const settings = readSettings();
+  const registry = readTaskRegistry();
+  let heartbeatAgeSeconds = null;
+  try { heartbeatAgeSeconds = Math.max(0, (Date.now() - statSync(hudHeartbeat).mtimeMs) / 1000); } catch {}
+  const heartbeatFresh = heartbeatAgeSeconds !== null && heartbeatAgeSeconds <= 8;
+  return {
+    ok: true,
+    hud_state: heartbeatFresh ? "running" : "not_detected",
+    heartbeat_fresh: heartbeatFresh,
+    heartbeat_age_seconds: heartbeatAgeSeconds === null ? null : Math.round(heartbeatAgeSeconds * 10) / 10,
+    monitoring_sources: {
+      desktop_openai: settings?.sessionSources?.desktop !== false,
+      default_cli: settings?.sessionSources?.defaultCli !== false,
+      deepseek_cli: settings?.sessionSources?.deepSeekCli !== false,
+    },
+    registry_version: registry.version,
+    registry_generated_at: registry.generated_at,
+    active_task_count: registry.tasks.length,
+    active_tasks: registry.tasks,
   };
 }
 
 function cleanNoticeText(value) {
-  return String(value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+  return cleanField(value, 160);
 }
 
 function boundedAnimation(value) {
@@ -53,7 +113,9 @@ function boundedAnimation(value) {
   const allowedLayers = new Set(["glow", "pulse", "breathe", "flow"]);
   const layers = Array.isArray(value.layers) ? [...new Set(value.layers.filter((x) => allowedLayers.has(x)))].slice(0, 4) : [];
   const color = /^#[0-9a-f]{8}$/i.test(String(value.color || "")) ? String(value.color) : undefined;
-  const number = (v, min, max, fallback) => Number.isFinite(Number(v)) ? Math.max(min, Math.min(max, Number(v))) : fallback;
+  const number = (candidate, minimum, maximum, fallback) => Number.isFinite(Number(candidate))
+    ? Math.max(minimum, Math.min(maximum, Number(candidate)))
+    : fallback;
   return {
     layers,
     color,
@@ -98,13 +160,7 @@ function startHud(openSettings = false) {
     : "powershell.exe";
   const args = isMac
     ? ["--plugin-root", pluginRoot, "--managed", "--parent-pid", String(process.pid)]
-    : [
-        "-NoProfile",
-        "-WindowStyle", "Hidden",
-        "-ExecutionPolicy", "Bypass",
-        "-File", join(pluginRoot, "scripts", "start.ps1"),
-        "-Managed",
-      ];
+    : ["-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", join(pluginRoot, "scripts", "start.ps1"), "-Managed"];
   if (openSettings) args.push(isMac ? "--open-settings" : "-Settings");
   if (!isMac && process.env.CODEX_MONITOR_HUD_DEBUG === "1") args.push("-DebugLog");
   const debugHud = process.env.CODEX_MONITOR_HUD_DEBUG === "1";
@@ -124,8 +180,7 @@ function hudHeartbeatIsFresh(now = Date.now()) {
 }
 
 function maintainHud() {
-  if (process.env.CODEX_MONITOR_HUD_DISABLE_AUTO_START === "1") return;
-  if (existsSync(manualExitMarker)) return;
+  if (process.env.CODEX_MONITOR_HUD_DISABLE_AUTO_START === "1" || existsSync(manualExitMarker)) return;
   const now = Date.now();
   if (hudHeartbeatIsFresh(now)) {
     hudRestartAttempts.length = 0;
@@ -146,54 +201,121 @@ function signal(name) {
   writeFileSync(join(stateRoot, `${name}.signal`), new Date().toISOString(), "utf8");
 }
 
-function textResult(text) {
-  return { content: [{ type: "text", text }] };
+function toolResult(structuredContent, text) {
+  return { content: [{ type: "text", text }], structuredContent };
 }
 
-const tools = [
-  {
-    name: "monitor_hud_open_settings",
-    description: "Open the local Codex Monitor HUD appearance and metric settings window.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+function toolError(structuredContent, text) {
+  return { ...toolResult(structuredContent, text), isError: true };
+}
+
+const taskSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["task_number", "workspace", "status", "client", "provider", "profile", "updated_at"],
+  properties: {
+    task_number: { type: "integer", minimum: 1 },
+    workspace: { type: "string" },
+    status: { type: "string" },
+    client: { type: "string" },
+    provider: { type: "string" },
+    profile: { type: "string" },
+    updated_at: { type: "string" },
   },
+};
+
+const emptyInputSchema = { type: "object", properties: {}, additionalProperties: false };
+const controlOutputSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ok", "action", "message"],
+  properties: { ok: { type: "boolean" }, action: { type: "string" }, message: { type: "string" } },
+};
+
+function controlTool(name, title, description, action, idempotent = true) {
+  return {
+    name,
+    title,
+    description,
+    inputSchema: emptyInputSchema,
+    outputSchema: controlOutputSchema,
+    annotations: { title, readOnlyHint: false, destructiveHint: false, idempotentHint: idempotent, openWorldHint: false },
+    execution: { taskSupport: "forbidden" },
+    _action: action,
+  };
+}
+
+const toolDefinitions = [
+  controlTool("monitor_hud_open_settings", "Open HUD settings", "Open the local Codex Monitor HUD settings window.", "open_settings"),
+  controlTool("monitor_hud_show", "Show Monitor HUD", "Show or restart the local Codex Monitor HUD.", "show"),
+  controlTool("monitor_hud_hide", "Hide Monitor HUD", "Hide the local Codex Monitor HUD without changing settings.", "hide"),
+  controlTool("monitor_hud_pause", "Toggle HUD pause", "Toggle live-update pause in the local Codex Monitor HUD.", "pause", false),
+  controlTool("monitor_hud_disable_click_through", "Disable HUD click-through", "Emergency recovery: disable mouse click-through so the HUD can be clicked again.", "disable_click_through"),
   {
-    name: "monitor_hud_show",
-    description: "Show or restart the local Codex Monitor HUD.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
-    name: "monitor_hud_hide",
-    description: "Hide the local Codex Monitor HUD without changing its settings.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
-    name: "monitor_hud_pause",
-    description: "Pause live updates in the local Codex Monitor HUD.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
-    name: "monitor_hud_disable_click_through",
-    description: "Emergency recovery: disable mouse click-through so the local Codex Monitor HUD can be clicked again.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    name: "monitor_hud_status",
+    title: "Read Monitor HUD status",
+    description: "Read privacy-safe HUD health, enabled monitoring sources, and active task routing metadata. No credentials, prompts, replies, logs, or profile paths are returned.",
+    inputSchema: emptyInputSchema,
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["ok", "hud_state", "heartbeat_fresh", "heartbeat_age_seconds", "monitoring_sources", "registry_version", "registry_generated_at", "active_task_count", "active_tasks"],
+      properties: {
+        ok: { type: "boolean" },
+        hud_state: { type: "string", enum: ["running", "not_detected"] },
+        heartbeat_fresh: { type: "boolean" },
+        heartbeat_age_seconds: { anyOf: [{ type: "number", minimum: 0 }, { type: "null" }] },
+        monitoring_sources: {
+          type: "object", additionalProperties: false,
+          required: ["desktop_openai", "default_cli", "deepseek_cli"],
+          properties: { desktop_openai: { type: "boolean" }, default_cli: { type: "boolean" }, deepseek_cli: { type: "boolean" } },
+        },
+        registry_version: { type: "integer", minimum: 0 },
+        registry_generated_at: { type: "string" },
+        active_task_count: { type: "integer", minimum: 0 },
+        active_tasks: { type: "array", maxItems: 64, items: taskSchema },
+      },
+    },
+    annotations: { title: "Read Monitor HUD status", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    execution: { taskSupport: "forbidden" },
   },
   {
     name: "monitor_hud_notification_capabilities",
-    description: "Read the current opt-in Codex notice permission and privacy-safe active HUD task numbers. Call this before the first proactive notice in a task; do not rely on another conversation's memory.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    title: "Read HUD notice permission",
+    description: "Read the current opt-in notice permission and privacy-safe task numbers. Call before the first proactive notice in every task; do not rely on another conversation's memory.",
+    inputSchema: emptyInputSchema,
+    outputSchema: {
+      type: "object", additionalProperties: false,
+      required: ["enabled", "permission", "identity", "targeting", "limits", "active_tasks"],
+      properties: {
+        enabled: { type: "boolean" },
+        permission: { type: "string", enum: ["off", "text", "expressive"] },
+        identity: { type: "string" }, targeting: { type: "string" },
+        limits: {
+          type: "object", additionalProperties: false,
+          required: ["plain_text_characters", "animation_layers", "no_links_or_rich_text", "no_executable_code"],
+          properties: {
+            plain_text_characters: { type: "integer" }, animation_layers: { type: "integer" },
+            no_links_or_rich_text: { type: "boolean" }, no_executable_code: { type: "boolean" },
+          },
+        },
+        active_tasks: { type: "array", maxItems: 64, items: taskSchema },
+      },
+    },
+    annotations: { title: "Read HUD notice permission", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    execution: { taskSupport: "forbidden" },
   },
   {
     name: "monitor_hud_notify",
-    description: "Opt-in: show a short CODEX-labeled notice on one relevant HUD task. Check monitor_hud_notification_capabilities first and pass its matching task_number whenever possible. With expressive permission, compose a bounded live animation recipe; never include secrets or full logs.",
+    title: "Send a targeted HUD notice",
+    description: "Opt-in: show a short CODEX-labeled notice on one matching HUD task. Check capabilities first and match task_number, client, provider and profile. Expressive permission allows a bounded animation recipe.",
     inputSchema: {
-      type: "object",
-      required: ["message"],
-      additionalProperties: false,
+      type: "object", required: ["message"], additionalProperties: false,
       properties: {
         message: { type: "string", minLength: 1, maxLength: 160, description: "One or two short plain-text sentences asking the user to return." },
-        task_number: { type: "integer", minimum: 1, description: "Optional visible HUD task number; otherwise the most recently active task is selected." },
+        task_number: { type: "integer", minimum: 1, description: "Visible HUD task number from monitor_hud_notification_capabilities." },
         animation: {
-          type: "object",
-          additionalProperties: false,
+          type: "object", additionalProperties: false,
           properties: {
             layers: { type: "array", maxItems: 4, items: { type: "string", enum: ["glow", "pulse", "breathe", "flow"] } },
             color: { type: "string", pattern: "^#[0-9A-Fa-f]{8}$" },
@@ -202,13 +324,111 @@ const tools = [
             cycles: { type: "integer", minimum: 1, maximum: 8 },
             glow_radius: { type: "number", minimum: 8, maximum: 60 },
             scale: { type: "number", minimum: 1, maximum: 1.08 },
-            direction: { type: "string", enum: ["left-to-right", "right-to-left"] }
-          }
-        }
-      }
+            direction: { type: "string", enum: ["left-to-right", "right-to-left"] },
+          },
+        },
+      },
     },
+    outputSchema: {
+      type: "object", additionalProperties: false,
+      required: ["ok", "queued", "permission", "target_task_number", "message"],
+      properties: {
+        ok: { type: "boolean" }, queued: { type: "boolean" }, permission: { type: "string", enum: ["off", "text", "expressive"] },
+        target_task_number: { anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }] }, message: { type: "string" },
+      },
+    },
+    annotations: { title: "Send a targeted HUD notice", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    execution: { taskSupport: "forbidden" },
   },
 ];
+
+const tools = toolDefinitions.map(({ _action, ...tool }) => tool);
+const controlActions = new Map(toolDefinitions.filter((tool) => tool._action).map((tool) => [tool.name, tool._action]));
+
+function controlResult(action, message) {
+  return toolResult({ ok: true, action, message }, message);
+}
+
+function negotiateProtocol(requested) {
+  return SUPPORTED_PROTOCOL_VERSIONS.includes(requested) ? requested : SUPPORTED_PROTOCOL_VERSIONS[0];
+}
+
+function handleToolCall(id, params) {
+  const name = params?.name;
+  const args = params?.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments) ? params.arguments : {};
+  if (controlActions.has(name)) {
+    const action = controlActions.get(name);
+    if (action === "open_settings") {
+      startHud(true); signal("open-settings");
+      return { jsonrpc: "2.0", id, result: controlResult(action, "Codex Monitor HUD settings opened locally.") };
+    }
+    if (action === "show") {
+      startHud(false); signal("show");
+      return { jsonrpc: "2.0", id, result: controlResult(action, "Codex Monitor HUD is visible.") };
+    }
+    if (action === "hide") {
+      signal("hide");
+      return { jsonrpc: "2.0", id, result: controlResult(action, "Codex Monitor HUD hidden.") };
+    }
+    if (action === "pause") {
+      signal("pause");
+      return { jsonrpc: "2.0", id, result: controlResult(action, "Codex Monitor HUD pause toggled.") };
+    }
+    startHud(false); signal("passthrough-off");
+    return { jsonrpc: "2.0", id, result: controlResult(action, "Codex Monitor HUD mouse click-through disabled.") };
+  }
+  if (name === "monitor_hud_status") {
+    const status = hudStatus();
+    return { jsonrpc: "2.0", id, result: toolResult(status, JSON.stringify(status, null, 2)) };
+  }
+  if (name === "monitor_hud_notification_capabilities") {
+    const capabilities = notificationCapabilities();
+    return { jsonrpc: "2.0", id, result: toolResult(capabilities, JSON.stringify(capabilities, null, 2)) };
+  }
+  if (name === "monitor_hud_notify") {
+    const permission = notificationPermission();
+    const taskNumber = Number.isInteger(args.task_number) ? args.task_number : null;
+    if (permission === "off") {
+      const result = { ok: false, queued: false, permission, target_task_number: taskNumber, message: "Codex proactive notices are disabled in HUD settings." };
+      return { jsonrpc: "2.0", id, result: toolError(result, result.message) };
+    }
+    const message = cleanNoticeText(args.message);
+    if (!message) {
+      const result = { ok: false, queued: false, permission, target_task_number: taskNumber, message: "A non-empty plain-text message is required." };
+      return { jsonrpc: "2.0", id, result: toolError(result, result.message) };
+    }
+    const registry = readTaskRegistry();
+    if (registry.tasks.length === 0) {
+      const result = { ok: false, queued: false, permission, target_task_number: taskNumber, message: "No visible HUD task is available for this notice." };
+      return { jsonrpc: "2.0", id, result: toolError(result, result.message) };
+    }
+    if (taskNumber !== null && !registry.tasks.some((task) => task.task_number === taskNumber)) {
+      const result = { ok: false, queued: false, permission, target_task_number: taskNumber, message: `HUD task #${taskNumber} is not currently visible; refresh capabilities before notifying.` };
+      return { jsonrpc: "2.0", id, result: toolError(result, result.message) };
+    }
+    const payload = {
+      version: 2,
+      created_at: new Date().toISOString(),
+      source: "codex-mcp",
+      message,
+      task_number: taskNumber,
+      animation: permission === "expressive" ? boundedAnimation(args.animation) : null,
+    };
+    const noticeName = `notice-${Date.now()}-${process.pid}-${++noticeSequence}.json`;
+    const noticePath = join(notificationsRoot, noticeName);
+    const temporaryNoticePath = `${noticePath}.tmp`;
+    try {
+      writeFileSync(temporaryNoticePath, JSON.stringify(payload), "utf8");
+      renameSync(temporaryNoticePath, noticePath);
+    } finally {
+      try { rmSync(temporaryNoticePath, { force: true }); } catch {}
+    }
+    if (process.env.CODEX_MONITOR_HUD_DISABLE_AUTO_START !== "1") startHud(false);
+    const result = { ok: true, queued: true, permission, target_task_number: taskNumber, message: "Codex Monitor HUD notice queued." };
+    return { jsonrpc: "2.0", id, result: toolResult(result, result.message) };
+  }
+  return { jsonrpc: "2.0", id, error: { code: -32602, message: `Unknown tool: ${name}` } };
+}
 
 function handle(request) {
   const { id, method, params = {} } = request;
@@ -217,72 +437,25 @@ function handle(request) {
       jsonrpc: "2.0",
       id,
       result: {
-        protocolVersion: params.protocolVersion || "2025-06-18",
-        capabilities: { tools: {} },
-        serverInfo: { name: "codex-monitor-hud", version: "2.2.1" },
+        protocolVersion: negotiateProtocol(params.protocolVersion),
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: {
+          name: "codex-monitor-hud",
+          title: "Codex Monitor HUD",
+          version: SERVER_VERSION,
+          description: "Local real-time monitoring and opt-in task notices for Codex Desktop and CLI.",
+          websiteUrl: "https://github.com/LH-03/codex-monitor-hud",
+        },
+        instructions: SERVER_INSTRUCTIONS,
       },
     };
   }
+  if (method === "notifications/initialized" || method === "notifications/cancelled") return null;
   if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
   if (method === "tools/list") return { jsonrpc: "2.0", id, result: { tools } };
   if (method === "prompts/list") return { jsonrpc: "2.0", id, result: { prompts: [] } };
   if (method === "resources/list") return { jsonrpc: "2.0", id, result: { resources: [] } };
-  if (method === "tools/call") {
-    const name = params.name;
-    if (name === "monitor_hud_open_settings") {
-      startHud(true);
-      signal("open-settings");
-      return { jsonrpc: "2.0", id, result: textResult("Codex Monitor HUD settings opened locally.") };
-    }
-    if (name === "monitor_hud_show") {
-      startHud(false);
-      signal("show");
-      return { jsonrpc: "2.0", id, result: textResult("Codex Monitor HUD is visible.") };
-    }
-    if (name === "monitor_hud_hide") {
-      signal("hide");
-      return { jsonrpc: "2.0", id, result: textResult("Codex Monitor HUD hidden.") };
-    }
-    if (name === "monitor_hud_pause") {
-      signal("pause");
-      return { jsonrpc: "2.0", id, result: textResult("Codex Monitor HUD pause toggled.") };
-    }
-    if (name === "monitor_hud_disable_click_through") {
-      startHud(false);
-      signal("passthrough-off");
-      return { jsonrpc: "2.0", id, result: textResult("Codex Monitor HUD mouse click-through disabled.") };
-    }
-    if (name === "monitor_hud_notification_capabilities") {
-      return { jsonrpc: "2.0", id, result: textResult(JSON.stringify(notificationCapabilities(), null, 2)) };
-    }
-    if (name === "monitor_hud_notify") {
-      const permission = notificationPermission();
-      if (permission === "off") return { jsonrpc: "2.0", id, result: textResult("Codex proactive notices are disabled in HUD settings.") };
-      const message = cleanNoticeText(params.arguments?.message);
-      if (!message) return { jsonrpc: "2.0", id, error: { code: -32602, message: "A non-empty plain-text message is required." } };
-      const requestedAnimation = boundedAnimation(params.arguments?.animation);
-      const payload = {
-        version: 1,
-        created_at: new Date().toISOString(),
-        source: "codex-mcp",
-        message,
-        task_number: Number.isInteger(params.arguments?.task_number) ? params.arguments.task_number : null,
-        animation: permission === "expressive" ? requestedAnimation : null,
-      };
-      const noticeName = `notice-${Date.now()}-${process.pid}-${++noticeSequence}.json`;
-      const noticePath = join(notificationsRoot, noticeName);
-      const temporaryNoticePath = noticePath + ".tmp";
-      try {
-        writeFileSync(temporaryNoticePath, JSON.stringify(payload), "utf8");
-        renameSync(temporaryNoticePath, noticePath);
-      } finally {
-        try { rmSync(temporaryNoticePath, { force: true }); } catch {}
-      }
-      if (process.env.CODEX_MONITOR_HUD_DISABLE_AUTO_START !== "1") startHud(false);
-      return { jsonrpc: "2.0", id, result: textResult(`Codex Monitor HUD notice queued (${permission} permission).`) };
-    }
-    return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown tool: ${name}` } };
-  }
+  if (method === "tools/call") return handleToolCall(id, params);
   if (id === undefined) return null;
   return { jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${method}` } };
 }
@@ -315,8 +488,6 @@ function shutdown() {
   clearInterval(heartbeatTimer);
   clearInterval(hudMonitorTimer);
   try { rmSync(hostHeartbeat, { force: true }); } catch {}
-  // The HUD owns shared lifecycle coordination. It exits only after every
-  // plugin-host heartbeat is gone, so one closing task cannot stop another.
   process.exit(0);
 }
 

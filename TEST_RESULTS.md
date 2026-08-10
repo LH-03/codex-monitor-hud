@@ -1,10 +1,20 @@
 # Test results
 
-Updated: 2026-08-03
+Updated: 2026-08-10
 
 ## Current result
 
-The repository source is the Windows `2.2.1` release candidate. It is prepared as a Windows x64-only package; macOS is not supported or packaged.
+The repository source is the Windows `3.0.0` Desktop/CLI release. It is prepared as a Windows x64-only package; macOS is not supported or packaged.
+
+The 2026-08-10 candidate passed the full source suite, a clean compiled build with zero warnings/errors, and Core `17/17`. New coverage proves that read-only runtime activity revives an old parent JSONL, clears a stale completed tail without inventing a new completion, remains discoverable for the configured 30-minute window after its three-minute active-color freshness expires, rejects paths outside the profile, keeps unclassified/internal files behind the privacy boundary, normalizes Windows `\\?\` paths, and removes the task after the discovery window expires.
+
+Formatting and presentation regressions prove that near-perfect cache/context values remain below `100%`, the aggregate summary excludes per-task cache/context/model/task-cumulative values, every task-list density keeps model/context/cache efficiency, Detailed wraps diagnostics onto a second line, and missing context-window metadata renders as `--`. The context denominator always comes from that task's own provider record, including the isolated DeepSeek profile.
+
+The compiled 5-task list/split gates passed. The 12-task, one-churn matrix passed for legacy list, compiled list, legacy split, and compiled split; the combined comparison command reached its outer time limit after the first three cells, so the missing compiled-split cell was rerun directly and passed. The isolated behavior runtime also passed numbered quiet-task bars, terminal retention, activity expansion, and all three context-alert stages.
+
+New coverage verifies Desktop, normal OpenAI CLI, and isolated DeepSeek CLI identity; globally unique numbering and a shared 64-file cap across profiles; independent source filters; future-model fallback; icon-only source marks and a localized Settings icon key; no repeated source prefix in task titles; and detached-bubble close returning only that projection to the main HUD. The installed MCP smoke test negotiated `2025-11-25`, returned all eight tools with modern metadata and structured status, and read registry v2 with source-aware task fields.
+
+The final visual pass inspected synthetic English and Simplified Chinese task lists plus matching Sources settings pages. List rows use compact blue-window, violet-terminal, and teal-wave-terminal marks without text inside the badge; project/conversation identity begins immediately after the stable number. The same three marks and their localized meanings appear in Settings. All values and task names are synthetic.
 
 The 2026-08-03 maintenance pass refreshed the local standard API list-price snapshot: GPT-5.6 Terra is `$2.00 / $0.20 / $12.00` and GPT-5.6 Luna is `$0.20 / $0.02 / $1.20` per million input / cached-input / output tokens. The cost regression correctly prices the synthetic Luna sample at `$0.230` after cached input is excluded from the uncached-input component.
 
@@ -32,7 +42,7 @@ These results use synthetic task names and isolated state/profile roots. They do
 
 ## Windows 2.2.1 candidate
 
-- `scripts/test-dotnet.ps1`: PASS, Core regression executable `13/13`.
+- `scripts/test-dotnet.ps1`: PASS, Core regression executable `14/14`.
 - `scripts/build-dotnet.ps1 -RunRuntimeTests`: PASS with `0` warnings and `0` errors; compiled 5-task list and split runtime gates passed.
 - `scripts/test.ps1 -TestOutputRoot .test-output-2.2.1`: PASS, including transactional installation, deterministic repository install, parser/accounting, allowance, price, locale, UI-contract, package-boundary, and 10,000-task-churn checks.
 - Price snapshot regression: PASS in both Core and PowerShell hosts. Unknown models remain unpriced and cost estimates remain opt-in.

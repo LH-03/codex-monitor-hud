@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '2.2.1',
+    [string]$Version = '3.0.0',
     [string]$OutputRoot = ''
 )
 
@@ -18,7 +18,7 @@ if (-not $outputRoot.StartsWith($artifactRoot, [StringComparison]::OrdinalIgnore
 $stageRoot = Join-Path $outputRoot 'stage'
 $archiveName = 'CodexMonitorHUD-windows-x64.zip'
 $archivePath = Join-Path $outputRoot $archiveName
-$excludedRootNames = @('.git','.agents','.codex','artifacts','.test-output','private','node_modules','sessions','logs','archive')
+$excludedRootNames = @('.git','.agents','.codex','artifacts','.test-output','private','node_modules','sessions','logs','archive','Microsoft')
 $excludedDirectoryNames = @('bin','obj')
 $excludedFileNames = @('.DS_Store','Thumbs.db','settings.json','AGENTS.md','WORKSPACE_STATE.md')
 $excludedExtensions = @('.log','.zip','.db','.sqlite','.sqlite3','.jsonl')
@@ -30,6 +30,7 @@ $files = Get-ChildItem -LiteralPath $sourceRoot -File -Recurse -Force | Where-Ob
     $parts = $relative -split '[\\/]'
     $rootName = $parts[0]
     $rootName -notin $excludedRootNames -and
+    $rootName -notlike '.test-output*' -and
     @($parts | Where-Object { $_ -in $excludedDirectoryNames }).Count -eq 0 -and
     ($relative -replace '\\','/') -notin $excludedRelativePaths -and
     $_.Name -notin $excludedFileNames -and

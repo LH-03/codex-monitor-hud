@@ -2,7 +2,7 @@
 
 > [简体中文](README.zh-CN.md) · Windows x64 only
 
-Codex Monitor HUD is a local, real-time Windows overlay for the Codex Desktop tasks that are active now. It is deliberately a monitor, not a chat archive, billing dashboard, or cloud service.
+Codex Monitor HUD is a local, real-time Windows overlay for the Codex work that is active now: Codex Desktop, the normal Codex CLI profile (usually OpenAI/GPT), and an optional isolated DeepSeek CLI profile. It is deliberately a monitor, not a chat archive, billing dashboard, or cloud service.
 
 ## Install with one short prompt
 
@@ -22,11 +22,29 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 - Cached / uncached input, output, reasoning output, per-call and per-task totals, context usage, model, and task count.
 - Latest observed account-wide weekly and 5-hour allowance windows when Codex writes them to the local `rate_limits` record.
 - Stable task numbers, workspace labels, and the official local conversation title from `session_index.jsonl`.
+- A source badge before every task number, so Desktop, OpenAI CLI, and DeepSeek CLI work cannot be mistaken for one another.
+- Cache hit rate and context usage are per-task signals, so they stay on list rows and detached bubbles instead of being meaninglessly added into the summary. Each row uses that task's provider-reported context window; GPT and DeepSeek values are never mixed.
 - Optional API-list-price equivalent cost estimate, clearly marked as an estimate rather than a subscription bill or credit balance.
 
 ![English task-list screenshot with weekly and 5-hour allowance](assets/hud-multitask-en.png)
 
 The weekly and 5-hour values are not guessed, summed across tasks, or fetched from an account API. They show the newest local observation only. If the installed Codex version does not emit a window, the enabled metric shows `--`.
+
+## Desktop and CLI sources
+
+The HUD uses one compact visual language across every surface, while giving each runtime a distinct mark:
+
+| Source | Badge | Local profile watched |
+| --- | --- | --- |
+| Codex Desktop | Window outline | the normal `CODEX_HOME` (`~/.codex` by default) |
+| Codex CLI · OpenAI | Terminal `>_` | the normal `CODEX_HOME` |
+| Codex CLI · DeepSeek | Terminal with a wave | `~/.codex-deepseek` |
+
+The badge appears after the status dot and before the stable task number in both list rows and detached bubbles. The summary can show a source-count breakdown, and **Settings > Sources** can independently include or exclude all three categories. The classifier uses bounded session metadata, not a hard-coded model-name allowlist, so future models continue to be monitored even when no price is known for them.
+
+Desktop rows may use Codex's local task deep link. CLI rows deliberately do not pretend to be Desktop tasks: resume them from the matching CLI profile instead.
+
+Native Codex CLI monitoring works without any special setup. The second `~/.codex-deepseek` root is an optional, tested isolation convention for advanced users; arbitrary custom roots are not yet configurable. See [Codex CLI profiles and optional provider isolation](docs/CLI_PROFILE_ISOLATION.md) before creating one. The guide keeps credentials out of files and explains how to return to the untouched normal profile.
 
 ## Display modes
 
@@ -38,22 +56,24 @@ The weekly and 5-hour values are not guessed, summed across tasks, or fetched fr
 
 The aggregate count button is only a list expand/collapse control. If task bubbles have been detached, collapsing the list leaves those independent bubbles open. Use **Merge all task bubbles** from the HUD or tray menu when you actually want to merge them.
 
-![English Metrics settings: both allowance windows are independently selectable](assets/settings-metrics-en.png)
+![English Sources settings for Desktop, native CLI, and isolated DeepSeek CLI](assets/settings-sources-en.png)
 
 ## Everyday controls
 
 - Click the task count to expand or retract the embedded list.
 - Detach one task, or choose **Split all** from the HUD or notification-area menu.
 - Drag the main HUD to a custom position; double-click it to open Settings.
-- Dismiss only removes a task from the current HUD view. It returns when that conversation starts another turn.
+- Closing a detached bubble merges only that bubble back into the main HUD; monitoring continues. The list-row dismiss action removes a task from the current HUD view, and it returns when that conversation starts another turn.
 - Set opacity anywhere from **0% to 100%**. At 0% the overlay is intentionally invisible; use the notification-area menu or settings shortcut to recover it.
 - If mouse click-through is enabled, use the notification-area menu or ask Codex to disable it.
 
 ## Privacy and limits
 
-All processing stays local. The HUD reads only the bounded data needed to project current state: usage counters, model, lifecycle events, workspace leaf, session ID, and official local title. It does not store prompts, replies, tool output, raw transcripts, or credentials; it does not modify Codex session files; it has no telemetry or network calls.
+All processing stays local. The HUD reads only the bounded data needed to project current state from the enabled local profile roots: usage counters, model/provider label, client surface, lifecycle events, workspace leaf, session ID, and official local title. It does not read provider configuration or authentication files; it does not store prompts, replies, tool output, raw transcripts, or credentials; it does not modify Codex session files; it has no telemetry or network calls.
 
-Task discovery is capped at 64 recent session files. Reopened conversations are selected by recent write time, and internal/subagent sessions plus expired terminal tasks are excluded from the user-visible projection.
+Task discovery is globally capped at 64 recent session files across the enabled profiles. Reopened conversations are selected by recent write time, and internal/subagent sessions plus expired terminal tasks are excluded from the user-visible projection.
+
+The optional local MCP control surface supports current MCP `2025-11-25` negotiation plus compatible older revisions, structured results, source-aware task targeting, bounded visual notices, and explicit tool errors. It can operate the HUD; it cannot read transcript text through the HUD. See [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md).
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for the data boundary.
 
@@ -74,10 +94,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-releas
 
 The installed build carries its own private .NET runtime. Source development requires Windows PowerShell 5.1+, Node.js for the plugin host, and the repository toolchain.
 
-Release operators can use [GITHUB_RELEASE_DRAFT_2.2.1.md](GITHUB_RELEASE_DRAFT_2.2.1.md) for copy-ready commit text, the Release body, asset names, checksum handling, and the final upload checklist. For a private physical transfer to another Windows PC, use `scripts/prepare-transfer-kit.ps1`; it packages public source, release artifacts, and continuation guidance without local settings or Codex session data.
+Release operators can use [GITHUB_RELEASE_DRAFT_3.0.0.md](GITHUB_RELEASE_DRAFT_3.0.0.md) for the Release body, asset names, checksum handling, and final upload checklist. For a private physical transfer to another Windows PC, use `scripts/prepare-transfer-kit.ps1`; it packages public source, release artifacts, and continuation guidance without local settings or Codex session data.
 
 ## Project status
 
-`2.2.1` is a Windows x64 release candidate. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. The resident host is compiled .NET/WPF, while the Settings process and `-Legacy` fallback remain available for recovery. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI.
+`3.0.0` is the Windows x64 release that adds first-class Codex CLI monitoring beside Codex Desktop, including optional identification of an isolated DeepSeek-backed Codex CLI profile. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. The resident host is compiled .NET/WPF, while the Settings process and `-Legacy` fallback remain available for recovery. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI or DeepSeek.
 
 MIT License.

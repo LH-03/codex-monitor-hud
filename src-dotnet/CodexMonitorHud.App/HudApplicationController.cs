@@ -22,14 +22,14 @@ internal sealed partial class HudApplicationController : IDisposable
     private readonly HudLog _log;
     private readonly LocaleCatalog _locales;
     private readonly SessionMonitorEngine _engine;
-    private readonly SessionChangeTracker _changeTracker;
-    private readonly SessionChangeTracker _titleTracker;
+    private readonly IReadOnlyList<SessionProfile> _profiles;
+    private readonly IReadOnlyList<SessionChangeTracker> _changeTrackers;
+    private readonly IReadOnlyList<SessionChangeTracker> _titleTrackers;
     private readonly SessionChangeTracker _notificationTracker;
     private readonly SessionChangeTracker _signalTracker;
     private readonly MainHudView _view;
     private readonly HudCommandSurfaces _commands;
     private readonly DispatcherTimer _timer;
-    private readonly string _sessionIndexPath;
     private readonly string _heartbeatPath;
     private readonly string _hostsRoot;
     private readonly string _notificationsRoot;
@@ -41,6 +41,7 @@ internal sealed partial class HudApplicationController : IDisposable
     private DateTimeOffset _lastTick = DateTimeOffset.Now;
     private DateTimeOffset _lastHeartbeat = DateTimeOffset.MinValue;
     private DateTimeOffset _lastReconciliation = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastRuntimeReconciliation = DateTimeOffset.MinValue;
     private DateTimeOffset _lastLifecyclePoll = DateTimeOffset.MinValue;
     private DateTimeOffset _lastQuietPoll = DateTimeOffset.MinValue;
     private DateTimeOffset _lastNotificationReconciliation = DateTimeOffset.MinValue;
@@ -72,12 +73,16 @@ internal sealed partial class HudApplicationController : IDisposable
         _locales = new LocaleCatalog(paths.LocaleRoot);
         _locale = _locales.Get(_settings.Language);
         _settingsLocale = _settings.Language == "symbols" ? _locales.Get("en") : _locale;
-        _sessionIndexPath = Path.Combine(
-            Path.GetDirectoryName(_paths.SessionsRoot)!,
-            "session_index.jsonl");
-        _engine = new SessionMonitorEngine(paths.SessionsRoot, _sessionIndexPath, _settings.ToRuntimeOptions());
-        _changeTracker = new SessionChangeTracker(paths.SessionsRoot);
-        _titleTracker = new SessionChangeTracker(Path.GetDirectoryName(_sessionIndexPath)!, Path.GetFileName(_sessionIndexPath), includeSubdirectories: false);
+        _profiles = SessionProfile.CreateDefaultSet(paths);
+        _engine = new SessionMonitorEngine(
+            _profiles,
+            _settings.ToRuntimeOptions(),
+            activitySource: new WindowsSessionActivitySource());
+        _changeTrackers = _profiles.Select(static profile => new SessionChangeTracker(profile.SessionsRoot)).ToArray();
+        _titleTrackers = _profiles.Select(static profile => new SessionChangeTracker(
+            Path.GetDirectoryName(profile.SessionIndexPath)!,
+            Path.GetFileName(profile.SessionIndexPath),
+            includeSubdirectories: false)).ToArray();
         _view = new MainHudView(
             Path.Combine(paths.PluginRoot, "src", "HudWindow.xaml"),
             Path.Combine(paths.PluginRoot, "src", "TaskBubbleWindow.xaml"));
@@ -93,8 +98,8 @@ internal sealed partial class HudApplicationController : IDisposable
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _timer.Tick += OnTick;
-        _changeTracker.ChangeAvailable += QueueWake;
-        _titleTracker.ChangeAvailable += QueueWake;
+        foreach (var tracker in _changeTrackers) tracker.ChangeAvailable += QueueWake;
+        foreach (var tracker in _titleTrackers) tracker.ChangeAvailable += QueueWake;
         _notificationTracker.ChangeAvailable += QueueWake;
         _signalTracker.ChangeAvailable += QueueWake;
         WireCommands();
@@ -102,11 +107,12 @@ internal sealed partial class HudApplicationController : IDisposable
 
     public void Start()
     {
-        _log.Write($"Compiled HUD v2.2.1 starting. config={_paths.ConfigPath}; sessions={_paths.SessionsRoot}; agentNotices={_settings.AgentNotifications.Enabled}/{_settings.AgentNotifications.Permission}");
+        _log.Write($"Compiled HUD v3.0.0 starting. config={_paths.ConfigPath}; profiles={string.Join(',', _profiles.Select(static profile => profile.Id))}; agentNotices={_settings.AgentNotifications.Enabled}/{_settings.AgentNotifications.Permission}");
         var now = DateTimeOffset.Now;
         _engine.RefreshActiveSessions(now);
         _engine.Poll(now);
         _lastReconciliation = now;
+        _lastRuntimeReconciliation = now;
         _lastLifecyclePoll = now;
         _initialScanComplete = true;
         ApplyPricing();
@@ -127,8 +133,8 @@ internal sealed partial class HudApplicationController : IDisposable
         }
         _disposed = true;
         _timer.Stop();
-        _changeTracker.Dispose();
-        _titleTracker.Dispose();
+        foreach (var tracker in _changeTrackers) tracker.Dispose();
+        foreach (var tracker in _titleTrackers) tracker.Dispose();
         _notificationTracker.Dispose();
         _signalTracker.Dispose();
         _commands.Dispose();
@@ -212,7 +218,7 @@ internal sealed partial class HudApplicationController : IDisposable
         if (tickGap > TimeSpan.FromSeconds(10))
         {
             _managedGraceUntil = now.AddSeconds(15);
-            _changeTracker.ForceReconciliation();
+            foreach (var tracker in _changeTrackers) tracker.ForceReconciliation();
             _log.Write($"Resume/tick gap detected: {tickGap.TotalSeconds:0.0}s; managed grace applied.");
         }
 
@@ -250,7 +256,13 @@ internal sealed partial class HudApplicationController : IDisposable
             ? ProcessNotifications(now)
             : false;
         _ = _notificationTracker.DrainChangedPaths();
-        if (_titleTracker.ConsumeDirty() || _engine.HasTitleBacklog)
+        var titleDirty = false;
+        foreach (var tracker in _titleTrackers)
+        {
+            titleDirty |= tracker.ConsumeDirty();
+            _ = tracker.DrainChangedPaths();
+        }
+        if (titleDirty || _engine.HasTitleBacklog)
         {
             changed |= _engine.RefreshTitles();
             if (_engine.HasTitleBacklog)
@@ -258,19 +270,30 @@ internal sealed partial class HudApplicationController : IDisposable
                 _responsiveUntil = now.AddSeconds(2);
             }
         }
-        _ = _titleTracker.DrainChangedPaths();
         if (notificationReconciliationDue)
         {
             _lastNotificationReconciliation = now;
         }
         if (!_paused)
         {
+            if (now - _lastRuntimeReconciliation >= TimeSpan.FromSeconds(2))
+            {
+                _lastRuntimeReconciliation = now;
+                changed |= _engine.RefreshRuntimeSessions(now);
+            }
             var filePollPerformed = false;
             var reconcileDue = now - _lastReconciliation >= TimeSpan.FromSeconds(30);
-            var dirty = _changeTracker.ConsumeDirty();
-            var overflowed = _changeTracker.ConsumeOverflowed();
-            var structural = _changeTracker.ConsumeStructural();
-            var changedPaths = _changeTracker.DrainChangedPaths();
+            var dirty = false;
+            var overflowed = false;
+            var structural = false;
+            var changedPaths = new List<string>();
+            foreach (var tracker in _changeTrackers)
+            {
+                dirty |= tracker.ConsumeDirty();
+                overflowed |= tracker.ConsumeOverflowed();
+                structural |= tracker.ConsumeStructural();
+                changedPaths.AddRange(tracker.DrainChangedPaths());
+            }
             if (dirty || reconcileDue || overflowed)
             {
                 filePollPerformed = true;
@@ -575,6 +598,11 @@ internal sealed partial class HudApplicationController : IDisposable
         {
             return;
         }
+        if (state.ClientSurface != "desktop")
+        {
+            _log.Write($"Desktop deep link skipped for {state.ClientSurface}/{state.ModelProvider} task #{state.Number}.");
+            return;
+        }
         var link = HudFormatting.GetTaskDeepLink(state.SessionId);
         if (link is null)
         {
@@ -664,6 +692,9 @@ internal sealed partial class HudApplicationController : IDisposable
             task_number = state.Number,
             workspace = state.Workspace,
             status = _engine.GetStatus(state, _paused, now),
+            client = state.ClientSurface,
+            provider = state.ModelProvider,
+            profile = state.ProfileId,
             updated_at = state.LastUsageAt.ToString("O")
         }).ToArray();
         var content = JsonSerializer.Serialize(tasks);
@@ -674,7 +705,7 @@ internal sealed partial class HudApplicationController : IDisposable
         _lastRegistryContent = content;
         var registry = JsonSerializer.Serialize(new
         {
-            version = 1,
+            version = 2,
             generated_at = now.ToString("O"),
             tasks
         });

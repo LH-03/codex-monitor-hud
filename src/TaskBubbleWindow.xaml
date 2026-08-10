@@ -79,6 +79,15 @@
         </Button>
         <StackPanel x:Name="TaskBubbleContent">
           <StackPanel Orientation="Horizontal">
+            <Border x:Name="TaskBubbleSourceBadge" CornerRadius="7" Padding="4,3" Margin="0,0,7,0" BorderThickness="1">
+              <Viewbox Width="14" Height="14">
+                <Path x:Name="TaskBubbleSourceIcon"
+                      StrokeThickness="1.45"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      StrokeLineJoin="Round" />
+              </Viewbox>
+            </Border>
             <Border x:Name="TaskBubbleNumberBadge" CornerRadius="8" Background="#120A84FF" Padding="7,3" Margin="0,0,7,0">
               <TextBlock x:Name="TaskBubbleNumber" FontFamily="Segoe UI Variable Text, Microsoft YaHei UI" FontSize="12" FontWeight="SemiBold" />
             </Border>

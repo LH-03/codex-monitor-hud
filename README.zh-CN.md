@@ -2,7 +2,7 @@
 
 > [English](README.md) · 仅支持 Windows x64
 
-Codex Monitor HUD 是一个完全本地运行的 Windows 实时悬浮监控器：只展示当前活跃的 Codex Desktop 任务。它不是聊天记录库、账单工具，也不是云端服务。
+Codex Monitor HUD 是一个完全本地运行的 Windows 实时悬浮监控器：展示当前活跃的 Codex Desktop、普通 Codex CLI（通常是 OpenAI/GPT），以及可选的独立 DeepSeek CLI Profile。它不是聊天记录库、账单工具，也不是云端服务。
 
 ## 一句话让 Codex 安装
 
@@ -22,11 +22,29 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -D
 - 缓存/未缓存输入、输出、推理输出、本次合计、任务累计、上下文占用、模型和活跃任务数。
 - Codex 本地 `rate_limits` 记录中最近一次出现的账号级周额度与 5 小时额度窗口。
 - 稳定任务编号、工作区标签，以及来自 `session_index.jsonl` 的本地官方对话标题。
+- 每个任务编号前都有来源徽标，让桌面端、OpenAI CLI 与 DeepSeek CLI 不会混在一起。
+- 缓存命中率和上下文占用属于单个任务，因此只放在列表行与独立小气泡中，不会被无意义地加总进汇总栏。每一行使用该任务由 Provider 实际报告的上下文窗口，GPT 与 DeepSeek 的窗口不会混用。
 - 可选的公开 API 标价等价成本估算；它会明确标为估算，不是订阅账单或 credits 余额。
 
 ![中文任务列表示例，包含周额度和 5 小时额度](assets/hud-multitask.png)
 
 周额度与 5 小时额度不会被猜测、不会按任务相加，也不会向账号 API 查询。HUD 只显示最新的本地观测值；当前 Codex 版本没有写出某个窗口时，已启用的指标会显示 `--`。
+
+## 桌面端与 CLI 来源
+
+三类任务沿用同一套简洁视觉语言，但各自有明确标记：
+
+| 来源 | 徽标 | 监听的本地 Profile |
+| --- | --- | --- |
+| Codex Desktop | 窗口轮廓 | 普通 `CODEX_HOME`（默认 `~/.codex`） |
+| Codex CLI · OpenAI | 终端 `>_` | 普通 `CODEX_HOME` |
+| Codex CLI · DeepSeek | 带波形的终端 | `~/.codex-deepseek` |
+
+徽标位于状态点之后、稳定任务编号之前，在主列表和独立小气泡中都会出现。汇总栏可显示各来源数量；**设置 > 监控来源** 可以分别开关三类来源。识别逻辑读取受限的会话元数据，不依赖写死的模型名称列表，因此以后出现新模型时仍能正常监控；只有价格未知时成本显示为 `--`。
+
+桌面端任务可以使用 Codex 本地任务链接。CLI 任务不会伪装成桌面任务，请从对应的 CLI Profile 恢复。
+
+原生 Codex CLI 不需要额外配置即可被监控。第二个 `~/.codex-deepseek` 根目录只是面向进阶用户的可选实测隔离约定；当前还不能任意添加其他自定义根目录。建立隔离配置前请先阅读 [Codex CLI 配置与可选 Provider 隔离](docs/CLI_PROFILE_ISOLATION.zh-CN.md)，其中说明了如何避免把凭据写进文件，以及如何随时回到完全不受影响的普通 Profile。
 
 ## 三种显示模式
 
@@ -38,22 +56,24 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -D
 
 总气泡上的任务数量按钮只负责展开/收起内嵌列表。已经拆出的独立小气泡不会因收起列表而被合并或关闭；只有在 HUD/托盘菜单中明确选择“合并全部任务气泡”才会合并。
 
-![中文指标设置：周额度和 5 小时额度可以分别开关](assets/settings-metrics.png)
+![中文监控来源设置：桌面端、原生 CLI 与隔离 DeepSeek CLI 可分别开启](assets/settings-sources.png)
 
 ## 日常操作
 
 - 点击任务数量，展开或收起主 HUD 内的列表。
 - 拆出单个任务，或从 HUD / 通知区域菜单选择“全部分裂”。
 - 拖动主 HUD 保存自定义位置；双击主 HUD 打开设置。
-- 移除某一行只影响当前 HUD 视图；对应对话开始下一轮时会自动回来。
+- 关闭独立小气泡只会把该气泡合回主 HUD，监控不会中断。主列表中的“移除任务”才会暂时移除当前 HUD 视图中的任务；对应对话开始下一轮时会自动回来。
 - 透明度支持 **0% 到 100%**。0% 会让 HUD 故意完全不可见，请用通知区域菜单或设置快捷方式恢复。
 - 开启鼠标穿透后，可从通知区域菜单关闭，或直接让 Codex 关闭。
 
 ## 隐私与边界
 
-所有处理都留在本机。HUD 只读取显示当前状态所需的受限信息：用量计数、模型、生命周期事件、工作区末级名、会话 ID 和本地官方标题；不会保存提示词、回复、工具输出、原始转录或凭据，不会修改 Codex 会话文件，也没有遥测或网络请求。
+所有处理都留在本机。HUD 只从已启用的本地 Profile 读取显示当前状态所需的受限信息：用量计数、模型/Provider 标签、客户端来源、生命周期事件、工作区末级名、会话 ID 和本地官方标题；不会读取 Provider 配置或认证文件，不会保存提示词、回复、工具输出、原始转录或凭据，不会修改 Codex 会话文件，也没有遥测或网络请求。
 
-任务发现最多扫描 64 个近期会话文件；重新打开的旧会话按最新写入时间识别。内部/子代理会话和超过保留时间的终态任务不会进入可见列表。
+所有已启用 Profile 合计最多扫描 64 个近期会话文件；重新打开的旧会话按最新写入时间识别。内部/子代理会话和超过保留时间的终态任务不会进入可见列表。
+
+可选的本地 MCP 控制面支持当前 MCP `2025-11-25` 协商及兼容的旧版协议、结构化结果、按来源定位任务、受限动态通知和明确的工具错误。它可以操控 HUD，但不能通过 HUD 读取对话正文。详见 [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md)。
 
 详见 [PRIVACY.md](PRIVACY.md) 与 [SECURITY.md](SECURITY.md)。
 
@@ -74,10 +94,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-releas
 
 安装包自带私有 .NET 运行时。源码开发需要 Windows PowerShell 5.1+、供插件宿主使用的 Node.js，以及仓库中的工具链。
 
-提交和发布时可直接使用 [GITHUB_RELEASE_DRAFT_2.2.1.md](GITHUB_RELEASE_DRAFT_2.2.1.md)：其中包括 GitHub Desktop 可复制的提交文案、Release 正文、资产名称、校验和流程和上传前检查表。若要通过 U 盘等私有渠道转交另一台 Windows 电脑，可运行 `scripts/prepare-transfer-kit.ps1`；它会打包公开源码、Release 产物和交接指南，不会带入本机设置或 Codex 会话数据。
+发布时可直接使用 [GITHUB_RELEASE_DRAFT_3.0.0.md](GITHUB_RELEASE_DRAFT_3.0.0.md)：其中包括 Release 正文、资产名称、校验和流程和上传前检查表。若要通过 U 盘等私有渠道转交另一台 Windows 电脑，可运行 `scripts/prepare-transfer-kit.ps1`；它会打包公开源码、Release 产物和交接指南，不会带入本机设置或 Codex 会话数据。
 
 ## 当前状态
 
-`2.2.1` 是 Windows x64 Release 候选版。可选成本显示仅使用离线的标准 API 标价快照，不是 Codex 积分或订阅账单计算。常驻监控已迁移为编译型 .NET/WPF 宿主；设置进程与 `-Legacy` 回退路径仍保留用于恢复。这是独立、非官方项目，与 OpenAI 没有隶属或背书关系。
+`3.0.0` 是 Windows x64 正式版本：在 Codex Desktop 之外加入了原生 Codex CLI 监控，并可选识别隔离的 DeepSeek 后端 Codex CLI Profile。可选成本显示仅使用离线的标准 API 标价快照，不是 Codex 积分或订阅账单计算。常驻监控使用编译型 .NET/WPF 宿主；设置进程与 `-Legacy` 回退路径仍保留用于恢复。这是独立、非官方项目，与 OpenAI 或 DeepSeek 均没有隶属或背书关系。
 
 MIT License.

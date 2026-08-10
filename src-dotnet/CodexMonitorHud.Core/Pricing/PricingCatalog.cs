@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CodexMonitorHud.Core.Models;
 
 namespace CodexMonitorHud.Core.Pricing;
@@ -8,8 +9,12 @@ public sealed record CostEstimate(double CostUsd, string PricedAs, bool Estimate
 
 public sealed class PricingCatalog
 {
-    private readonly Dictionary<string, PricingRate> _models = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _aliases = new(StringComparer.Ordinal);
+    private static readonly Regex DatedSnapshotSuffix = new(
+        @"^(?<base>.+)-\d{4}-\d{2}-\d{2}$",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        TimeSpan.FromMilliseconds(50));
+    private readonly Dictionary<string, PricingRate> _models = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase);
 
     public bool Loaded => _models.Count > 0;
     public required string Path { get; init; }
@@ -102,13 +107,7 @@ public sealed class PricingCatalog
             return null;
         }
 
-        var pricedAs = snapshot.Model;
-        if (!_models.ContainsKey(pricedAs) && _aliases.TryGetValue(snapshot.Model, out var alias))
-        {
-            pricedAs = alias;
-        }
-
-        if (!_models.TryGetValue(pricedAs, out var rates))
+        if (!TryResolveRates(snapshot.Model, out var pricedAs, out var rates))
         {
             return null;
         }
@@ -116,6 +115,50 @@ public sealed class PricingCatalog
         var uncached = Math.Max(0, snapshot.TaskInput - snapshot.TaskCached);
         var cost = (uncached * rates.Input + snapshot.TaskCached * rates.Cached + snapshot.TaskOutput * rates.Output) / 1_000_000.0;
         return new CostEstimate(cost, pricedAs, rates.Estimated);
+    }
+
+    private bool TryResolveRates(string? model, out string pricedAs, out PricingRate rates)
+    {
+        pricedAs = string.Empty;
+        rates = default!;
+        var normalized = (model ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        if (TryResolveDirect(normalized, out pricedAs, out rates))
+        {
+            return true;
+        }
+
+        var snapshot = DatedSnapshotSuffix.Match(normalized);
+        return snapshot.Success &&
+               TryResolveDirect(snapshot.Groups["base"].Value, out pricedAs, out rates);
+    }
+
+    private bool TryResolveDirect(string model, out string pricedAs, out PricingRate rates)
+    {
+        var current = model;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var depth = 0; depth < 5 && visited.Add(current); depth++)
+        {
+            if (_models.TryGetValue(current, out var resolvedRates))
+            {
+                rates = resolvedRates;
+                pricedAs = current;
+                return true;
+            }
+            if (!_aliases.TryGetValue(current, out var alias) || string.IsNullOrWhiteSpace(alias))
+            {
+                break;
+            }
+            current = alias.Trim();
+        }
+
+        pricedAs = string.Empty;
+        rates = default!;
+        return false;
     }
 
     private static bool TryRate(JsonElement element, string name, out double value)

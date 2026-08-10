@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.0.0 - Desktop and CLI monitoring
+
+- Keep task discovery responsive during long Desktop work by reconciling the privacy-safe runtime heartbeat every two seconds without increasing full JSONL directory scans. Silent `task_complete` records no longer terminate or hide a conversation; visible turn completions retain the continuation guard and are cancelled by newer runtime activity.
+- Rebuild task-list information density around operator priority. Every tier shows source, project/conversation identity, model, context usage, and cache hit rate; Balanced adds the current call total; Detailed wraps input composition, output, task cumulative total, provider-reported context-window capacity, cost, and update time onto a second line.
+- Use each task's own `model_context_window`, including the isolated DeepSeek CLI profile. Missing provider metadata renders as `--` with an explanatory tooltip instead of pretending the task uses a GPT window.
+- Prevent near-perfect cache hit or context values from rounding to a false `100%`. Exact 100% remains available only when the underlying value actually reaches the boundary.
+- Keep the summary bubble semantically aggregate-only: per-task cache hit rate, context, model, task cumulative total, and update time are excluded even when an older user configuration still enables those keys.
+- Let the visible HUD surface and detached bubbles truly touch the selected work-area edge by accounting for their transparent glow canvas. Custom coordinates now describe the visible shell, so an existing top value of zero migrates naturally to the real top edge.
+- Keep long-running Codex Desktop tasks visible even when their parent JSONL stops writing: the Windows host now reads only `id`, `rollout_path`, `updated_at_ms`, `thread_source`, and `archived` from each profile's `state_5.sqlite` in read-only mode. Fresh top-level `user` heartbeats supplement JSONL discovery; subagents, archived rows, prompt text, replies, titles, and previews are never queried.
+- Normalize Windows extended-length rollout paths such as `\\?\C:\...` and clear stale terminal tails when newer runtime activity proves that a resumed task is still alive. Runtime activity keeps its three-minute active-color freshness, while discovery retains the task for the configured recent-task window (30 minutes by default), preventing long silent inference from dropping the row without turning it into a permanent green ghost. Missing/locked/changed databases fall back to the existing bounded JSONL path.
+- Keep the state/activity contract injectable in the platform-neutral Core and place `winsqlite3.dll` access only in the Windows App and retained legacy host, preserving future host portability without adding a NuGet/runtime dependency.
+- Show official conversation subtitles without requiring hover by default; old `hover` settings normalize to the always-visible mode while `hidden` remains available.
+- Monitor Codex Desktop, the normal Codex CLI profile, and an isolated `~/.codex-deepseek` profile in one globally bounded task table, with independent source filters.
+- Add three polished source marks before every task number in list and detached-bubble surfaces: Desktop window, OpenAI CLI terminal, and DeepSeek CLI wave-terminal. Add a summary source breakdown without relying on hard-coded model names.
+- Make the close action on a detached task bubble merge only that bubble back into the main HUD; list-row dismissal remains a separate task-visibility action.
+- Clear both intentional-stop signals before starting a newly installed or rolled-back host, preventing an otherwise healthy replacement from immediately consuming a stale exit request.
+- Exclude PowerShell's root-level `Microsoft/Windows/PowerShell/ModuleAnalysisCache` artifact from Git, installed trees, Release staging, and transfer kits.
+- Upgrade the optional local MCP server to negotiate the current `2025-11-25` revision while retaining compatible older revisions, and add tool titles, annotations, structured results, output schemas, explicit tool errors, status inspection, and source-aware task targeting.
+- Add a cache-hit-rate metric calculated as cached input tokens divided by total input tokens in the latest displayed snapshot. It is a per-task signal shown in every task-list tier and remains independently optional on split bubbles; it is intentionally not summed or averaged in the main summary.
+- Keep monitoring model-agnostic: unfamiliar future model IDs continue to show status, tokens, cache ratio, context and lifecycle without code changes.
+- Resolve API-cost catalog aliases case-insensitively and reuse a known catalog entry for its dated model snapshots. Completely new or unknown prices remain `--` instead of inheriting a potentially wrong family price.
+- Refresh the bundled GPT-5.6 Terra and Luna standard text-token prices against the official model pages on 2026-08-10.
+
 ## 2.2.1 - Windows maintenance release
 
 - Refresh the bundled standard API list-price snapshot from OpenAI's official pricing page on 2026-08-03: GPT-5.6 Terra is now `$2.00 / $0.20 / $12.00`, and GPT-5.6 Luna is now `$0.20 / $0.02 / $1.20`, per million input / cached-input / output tokens.

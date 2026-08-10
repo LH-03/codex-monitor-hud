@@ -19,7 +19,11 @@ var tests = new (string Name, Action Run)[]
     ("snapshot aggregation", TestAggregation),
     ("task number cooldown", TestTaskNumbers),
     ("session state engine", TestSessionEngine),
+    ("locked long-running session recovery", TestLockedSessionRecovery),
+    ("state database long-running session heartbeat", TestStateDatabaseHeartbeat),
+    ("desktop and CLI source identity", TestSessionSources),
     ("formatting and deep links", TestFormatting),
+    ("edge-aware HUD placement", TestPlacement),
     ("surface effect adaptation", TestSurfaceEffects),
     ("structural config recovery", TestConfiguration),
     ("macOS path and watcher portability", TestMacPortability),
@@ -150,6 +154,13 @@ void TestBoundedTail()
         Equal("gpt-test", snapshot.Model, "tail model");
         Equal("completed", snapshot.TerminalStatus, "terminal status");
         Equal(2000L, snapshot.TaskTotal, "task total");
+
+        var silentPath = Path.Combine(root, "silent-tail.jsonl");
+        File.WriteAllText(silentPath, string.Join('\n', records[..^1]) + "\n" +
+            """{"timestamp":"2026-07-13T08:00:03Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1","last_agent_message":""}}""",
+            new UTF8Encoding(false));
+        var silentSnapshot = BoundedTailReader.ReadLatestSnapshot(silentPath);
+        Equal(string.Empty, silentSnapshot?.TerminalStatus, "silent completion is not a terminal snapshot");
 
         var unicodePath = Path.Combine(root, "unicode-tail.jsonl");
         var oldPadding = Enumerable.Range(0, 2500).Select(index => $"{{\"ignored\":{index}}}");
@@ -299,6 +310,10 @@ void TestSessionEngine()
         Equal(string.Empty, state.TerminalStatus, "new turn clears terminal state");
         Equal("active", engine.GetStatus(state, paused: false, now.AddSeconds(9)), "new turn is active");
 
+        File.AppendAllText(sessionPath, "\n" + """{"timestamp":"2026-07-17T08:00:09.5Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-2","last_agent_message":""}}""", new UTF8Encoding(false));
+        IsTrue(engine.Poll(now.AddSeconds(9.5)), "silent completion record consumed");
+        Equal(string.Empty, state.TerminalStatus, "silent completion keeps the task monitorable");
+
         var irrelevant = "{\"timestamp\":\"2026-07-17T08:00:10Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"internal_progress\"}}\n";
         var burst = "\n" + string.Concat(Enumerable.Repeat(irrelevant, 5_000)) +
             "{\"timestamp\":\"2026-07-17T08:00:11Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":700,\"cached_input_tokens\":500,\"output_tokens\":77,\"total_tokens\":777},\"total_token_usage\":{\"total_tokens\":7777},\"model_context_window\":1000}}}";
@@ -323,21 +338,295 @@ void TestSessionEngine()
     });
 }
 
+void TestSessionSources()
+{
+    var desktopIdentity = SessionIdentityReader.ParseLine("""{"type":"session_meta","payload":{"id":"desktop","cwd":"C:\\Synthetic\\desktop","originator":"Codex Desktop","source":"vscode","model_provider":"openai"}}""");
+    Equal("desktop", desktopIdentity.ClientSurface, "desktop source classification");
+    Equal("openai", desktopIdentity.ModelProvider, "desktop provider classification");
+    var cliIdentity = SessionIdentityReader.ParseLine("""{"type":"session_meta","payload":{"id":"cli","cwd":"C:\\Synthetic\\cli","originator":"codex-tui","source":"cli","model_provider":"openai"}}""");
+    Equal("cli", cliIdentity.ClientSurface, "CLI source classification");
+    Equal("openai", cliIdentity.ModelProvider, "CLI OpenAI provider classification");
+    var deepSeekIdentity = SessionIdentityReader.ParseLine("""{"type":"session_meta","payload":{"id":"deepseek","cwd":"C:\\Synthetic\\deepseek","originator":"codex-tui","source":"cli","model_provider":"deepseek"}}""");
+    Equal("cli", deepSeekIdentity.ClientSurface, "DeepSeek remains a CLI task");
+    Equal("deepseek", deepSeekIdentity.ModelProvider, "DeepSeek provider classification");
+    var internalIdentity = SessionIdentityReader.ParseLine("""{"type":"session_meta","payload":{"id":"internal","source":{"subagent":{"kind":"review"}},"originator":"codex-tui","model_provider":"deepseek"}}""");
+    IsTrue(internalIdentity.IsInternalSession, "CLI subagent remains excluded");
+
+    WithTemporaryDirectory(root =>
+    {
+        var defaultRoot = Path.Combine(root, ".codex");
+        var deepSeekRoot = Path.Combine(root, ".codex-deepseek");
+        var defaultSessions = Path.Combine(defaultRoot, "sessions", "2026", "08", "10");
+        var deepSeekSessions = Path.Combine(deepSeekRoot, "sessions", "2026", "08", "10");
+        Directory.CreateDirectory(defaultSessions);
+        Directory.CreateDirectory(deepSeekSessions);
+        var now = DateTimeOffset.Parse("2026-08-10T08:00:00Z");
+
+        static string Session(string id, string workspace, string originator, string source, string provider, string model) => string.Join('\n', new[]
+        {
+            $"{{\"timestamp\":\"2026-08-10T07:59:00Z\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"cwd\":\"C:\\\\Synthetic\\\\{workspace}\",\"originator\":\"{originator}\",\"source\":\"{source}\",\"model_provider\":\"{provider}\"}}}}",
+            $"{{\"timestamp\":\"2026-08-10T07:59:01Z\",\"type\":\"turn_context\",\"payload\":{{\"cwd\":\"C:\\\\Synthetic\\\\{workspace}\",\"model\":\"{model}\"}}}}",
+            "{\"timestamp\":\"2026-08-10T07:59:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":100,\"cached_input_tokens\":60,\"output_tokens\":20,\"total_tokens\":120},\"total_token_usage\":{\"total_tokens\":120},\"model_context_window\":1000}}}"
+        }) + '\n';
+
+        var desktopPath = Path.Combine(defaultSessions, "desktop.jsonl");
+        var cliPath = Path.Combine(defaultSessions, "cli.jsonl");
+        var deepSeekPath = Path.Combine(deepSeekSessions, "deepseek.jsonl");
+        File.WriteAllText(desktopPath, Session("desktop-1", "desktop-project", "Codex Desktop", "vscode", "openai", "gpt-future"), new UTF8Encoding(false));
+        File.WriteAllText(cliPath, Session("cli-1", "cli-project", "codex-tui", "cli", "openai", "gpt-next"), new UTF8Encoding(false));
+        File.WriteAllText(deepSeekPath, Session("deepseek-1", "deepseek-project", "codex-tui", "cli", "deepseek", "deepseek-next"), new UTF8Encoding(false));
+        foreach (var path in new[] { desktopPath, cliPath, deepSeekPath }) File.SetLastWriteTimeUtc(path, now.UtcDateTime);
+
+        var profiles = new[]
+        {
+            new SessionProfile("codex", "Codex", Path.Combine(defaultRoot, "sessions"), Path.Combine(defaultRoot, "session_index.jsonl"), "unknown", string.Empty),
+            new SessionProfile("deepseek", "DeepSeek", Path.Combine(deepSeekRoot, "sessions"), Path.Combine(deepSeekRoot, "session_index.jsonl"), "cli", "deepseek")
+        };
+        var options = new HudRuntimeOptions { ActiveWindowMinutes = 60, DesktopSessionsEnabled = true, DefaultCliSessionsEnabled = true, DeepSeekCliSessionsEnabled = true };
+        var engine = new SessionMonitorEngine(profiles, options);
+        IsTrue(engine.RefreshActiveSessions(now), "multi-profile discovery");
+        var states = engine.GetVisibleStates(now);
+        Equal(3, states.Count, "desktop, OpenAI CLI and DeepSeek CLI are all visible");
+        Equal(3, states.Select(static state => state.Number).Distinct().Count(), "task numbering is global across profiles");
+        Equal("desktop", states.Single(state => state.SessionId == "desktop-1").ClientSurface, "desktop state source");
+        Equal("openai", states.Single(state => state.SessionId == "cli-1").ModelProvider, "default CLI provider");
+        Equal("deepseek", states.Single(state => state.SessionId == "deepseek-1").ModelProvider, "DeepSeek profile provider");
+
+        engine.UpdateOptions(options with { DefaultCliSessionsEnabled = false });
+        Equal(2, engine.GetVisibleStates(now).Count, "default CLI filter does not hide desktop or DeepSeek");
+        engine.UpdateOptions(options with { DeepSeekCliSessionsEnabled = false });
+        Equal(2, engine.GetVisibleStates(now).Count, "DeepSeek filter does not hide default profile tasks");
+        engine.UpdateOptions(options with { DesktopSessionsEnabled = false, DefaultCliSessionsEnabled = true, DeepSeekCliSessionsEnabled = false });
+        var cliOnly = engine.GetVisibleStates(now);
+        Equal(1, cliOnly.Count, "source filters isolate default CLI");
+        Equal("cli-1", cliOnly.Single().SessionId, "correct default CLI task remains");
+    });
+}
+
+void TestLockedSessionRecovery()
+{
+    WithTemporaryDirectory(root =>
+    {
+        const string sessionId = "019f5f91-0027-7023-81cb-db9224ab26ed";
+        const string unknownId = "019f5f91-0027-7023-81cb-db9224ab26ee";
+        const string activeId = "019f5f91-0027-7023-81cb-db9224ab26ef";
+        var profile = Path.Combine(root, ".codex");
+        var sessionsRoot = Path.Combine(profile, "sessions");
+        var sessions = Path.Combine(sessionsRoot, "2026", "08", "10");
+        Directory.CreateDirectory(sessions);
+        var indexPath = Path.Combine(profile, "session_index.jsonl");
+        var sessionPath = Path.Combine(sessions, $"rollout-2026-08-10T08-00-00-{sessionId}.jsonl");
+        var unknownPath = Path.Combine(sessions, $"rollout-2026-08-10T07-59-00-{unknownId}.jsonl");
+        var activePath = Path.Combine(sessions, $"rollout-2026-08-10T09-29-00-{activeId}.jsonl");
+        var now = DateTimeOffset.Parse("2026-08-10T09:30:00Z");
+
+        static string Session(string id, string workspace) => string.Join('\n', new[]
+        {
+            $"{{\"timestamp\":\"2026-08-10T08:00:00Z\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"cwd\":\"C:\\\\Synthetic\\\\{workspace}\",\"originator\":\"Codex Desktop\",\"source\":\"vscode\",\"model_provider\":\"openai\"}}}}",
+            $"{{\"timestamp\":\"2026-08-10T08:00:01Z\",\"type\":\"turn_context\",\"payload\":{{\"cwd\":\"C:\\\\Synthetic\\\\{workspace}\",\"model\":\"gpt-future\"}}}}",
+            "{\"timestamp\":\"2026-08-10T08:00:02Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}",
+            "{\"timestamp\":\"2026-08-10T08:00:03Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":100,\"cached_input_tokens\":60,\"output_tokens\":20,\"total_tokens\":120},\"total_token_usage\":{\"total_tokens\":1000},\"model_context_window\":1000}}}"
+        }) + '\n';
+
+        File.WriteAllText(sessionPath, Session(sessionId, "locked-project"), new UTF8Encoding(false));
+        File.WriteAllText(unknownPath, Session(unknownId, "unindexed-project"), new UTF8Encoding(false));
+        File.WriteAllText(activePath, Session(activeId, "foreground-project"), new UTF8Encoding(false));
+        File.SetLastWriteTimeUtc(sessionPath, now.UtcDateTime.AddMinutes(-90));
+        File.SetLastWriteTimeUtc(unknownPath, now.UtcDateTime.AddMinutes(-91));
+        File.SetLastWriteTimeUtc(activePath, now.UtcDateTime);
+        File.WriteAllText(
+            indexPath,
+            $"{{\"id\":\"{sessionId}\",\"thread_name\":\"Long running indexed task\",\"updated_at\":\"2026-08-10T08:00:00Z\"}}\n" +
+            $"{{\"id\":\"{activeId}\",\"thread_name\":\"Foreground active task\",\"updated_at\":\"2026-08-10T09:29:00Z\"}}\n",
+            new UTF8Encoding(false));
+
+        var engine = new SessionMonitorEngine(
+            sessionsRoot,
+            indexPath,
+            new HudRuntimeOptions { ActiveWindowMinutes = 30, MaximumFiles = 64 });
+
+        using (var locked = new FileStream(sessionPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        using (var unknownLocked = new FileStream(unknownPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var discovery = SessionDiscovery.GetActiveFiles(sessionsRoot, 30, 64, now.UtcDateTime);
+            IsTrue(discovery.Any(file => file.FullName == sessionPath && file.ReadBlocked), "old sharing-blocked file bypasses write window");
+            IsTrue(engine.RefreshActiveSessions(now), "locked session engine discovery");
+            var visible = engine.GetVisibleStates(now);
+            Equal(2, visible.Count, "readable foreground and locked background tasks coexist");
+            IsTrue(visible.Any(state => state.SessionId == activeId && !state.IdentityProvisional), "normal active task remains visible");
+            IsTrue(visible.All(state => state.SessionId != unknownId), "unindexed locked file stays behind the privacy boundary");
+            var provisional = visible.Single(state => state.SessionId == sessionId);
+            Equal(sessionId, provisional.SessionId, "rollout filename supplies provisional session id");
+            Equal("Long running indexed task", provisional.ConversationLabel, "official index supplies provisional title");
+            IsTrue(provisional.IdentityProvisional, "locked identity remains explicitly provisional");
+            IsTrue(provisional.IsReadBlocked, "sharing lock is retained in state");
+            Equal<HudSnapshot?>(null, provisional.Snapshot, "locked task does not fabricate usage");
+            Equal("listening", engine.GetStatus(provisional, paused: false, now), "locked task renders as listening");
+        }
+
+        IsTrue(engine.RefreshActiveSessions(now.AddSeconds(1)), "unlock refresh resolves provisional task");
+        var resolved = engine.GetVisibleStates(now.AddSeconds(1)).Single(state => state.SessionId == sessionId);
+        IsTrue(!resolved.IdentityProvisional, "real session metadata replaces provisional identity");
+        IsTrue(!resolved.IsReadBlocked, "unlock clears sharing-block state");
+        Equal("desktop", resolved.ClientSurface, "resolved task restores desktop source");
+        Equal("locked-project", resolved.Workspace, "resolved task restores workspace");
+        Equal(1000L, resolved.Snapshot?.TaskTotal, "bounded tail hydration restores usage");
+    });
+}
+
+void TestStateDatabaseHeartbeat()
+{
+    WithTemporaryDirectory(root =>
+    {
+        var now = DateTimeOffset.UtcNow;
+        var codexRoot = Path.Combine(root, ".codex");
+        var sessionsRoot = Path.Combine(codexRoot, "sessions");
+        var dateRoot = Path.Combine(sessionsRoot, "2026", "08", "10");
+        Directory.CreateDirectory(dateRoot);
+        var indexPath = Path.Combine(codexRoot, "session_index.jsonl");
+        var activeId = "019fe824-013e-7222-939e-3c06be0ca511";
+        var internalId = "019fe836-6e7d-7d63-b7e0-86ee82704fa5";
+        var staleId = "019fe7f0-e8c6-7241-9404-d61924f04adf";
+        var activePath = Path.Combine(dateRoot, $"rollout-2026-08-10T04-08-21-{activeId}.jsonl");
+        var internalPath = Path.Combine(dateRoot, $"rollout-2026-08-10T04-28-29-{internalId}.jsonl");
+        var stalePath = Path.Combine(dateRoot, $"rollout-2026-08-10T03-12-33-{staleId}.jsonl");
+        var encoding = new UTF8Encoding(false);
+
+        File.WriteAllText(activePath,
+            $"{{\"timestamp\":\"{now.AddHours(-10):O}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"{activeId}\",\"cwd\":\"C:\\\\Synthetic\\\\heartbeat-project\",\"originator\":\"Codex Desktop\",\"source\":\"vscode\",\"model_provider\":\"openai\"}}}}\n" +
+            $"{{\"timestamp\":\"{now.AddHours(-10):O}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"token_count\",\"info\":{{\"last_token_usage\":{{\"input_tokens\":100,\"cached_input_tokens\":80,\"output_tokens\":5,\"total_tokens\":105}},\"total_token_usage\":{{\"input_tokens\":1000,\"cached_input_tokens\":800,\"output_tokens\":50,\"total_tokens\":1050}},\"model_context_window\":200000}}}}}}\n" +
+            $"{{\"timestamp\":\"{now.AddHours(-9):O}\",\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_complete\",\"turn_id\":\"old-turn\",\"last_agent_message\":\"done\"}}}}\n",
+            encoding);
+        File.WriteAllText(internalPath, "{}\n", encoding);
+        File.WriteAllText(stalePath, "{}\n", encoding);
+        File.SetLastWriteTimeUtc(activePath, now.AddHours(-9).UtcDateTime);
+        File.SetLastWriteTimeUtc(internalPath, now.AddMinutes(-1).UtcDateTime);
+        File.SetLastWriteTimeUtc(stalePath, now.AddHours(-8).UtcDateTime);
+        File.WriteAllText(indexPath,
+            $"{{\"id\":\"{activeId}\",\"thread_name\":\"Background parent task\"}}\n" +
+            $"{{\"id\":\"{staleId}\",\"thread_name\":\"Stale task\"}}\n",
+            encoding);
+
+        var activitySource = new SyntheticSessionActivitySource(new[]
+        {
+            new SessionActivity(activeId, @"\\?\" + activePath, now.AddSeconds(-20)),
+            new SessionActivity(internalId, internalPath, now.AddSeconds(-10)),
+            new SessionActivity(staleId, stalePath, now.AddHours(-8))
+        });
+
+        var profile = new SessionProfile(
+            SessionProfile.DefaultId,
+            "Codex",
+            sessionsRoot,
+            indexPath,
+            "unknown",
+            string.Empty);
+        var engine = new SessionMonitorEngine(
+            new[] { profile },
+            new HudRuntimeOptions { ActiveWindowMinutes = 30, MaximumFiles = 64 },
+            activitySource: activitySource);
+        IsTrue(engine.RefreshActiveSessions(now), "database heartbeat discovers old parent rollout");
+        var visible = engine.GetVisibleStates(now);
+        Equal(1, visible.Count, "guardian and stale rows stay hidden");
+        Equal(activeId, visible[0].SessionId, "old parent remains visible");
+        Equal("active", engine.GetStatus(visible[0], paused: false, now), "runtime heartbeat overrides stale completed tail");
+        Equal(string.Empty, visible[0].TerminalStatus, "stale terminal state is cleared without fabricating completion");
+
+        var fastEngine = new SessionMonitorEngine(
+            new[] { profile },
+            new HudRuntimeOptions { ActiveWindowMinutes = 30, MaximumFiles = 64 },
+            activitySource: activitySource);
+        IsTrue(fastEngine.RefreshRuntimeSessions(now), "fast runtime reconciliation discovers a missing active task");
+        Equal(activeId, fastEngine.GetVisibleStates(now).Single().SessionId, "fast runtime discovery preserves identity");
+
+        IsTrue(!engine.RefreshActiveSessions(now.AddMinutes(4)), "aged runtime activity remains discoverable inside the configured window");
+        Equal(1, engine.GetVisibleStates(now.AddMinutes(4)).Count, "long-running resumed task is not dropped after the three-minute active-color window");
+        Equal("idle", engine.GetStatus(engine.GetVisibleStates(now.AddMinutes(4)).Single(), paused: false, now.AddMinutes(4)), "aged runtime activity is retained without staying falsely active");
+
+        var agedFastEngine = new SessionMonitorEngine(
+            new[] { profile },
+            new HudRuntimeOptions { ActiveWindowMinutes = 30, MaximumFiles = 64 },
+            activitySource: activitySource);
+        IsTrue(agedFastEngine.RefreshRuntimeSessions(now.AddMinutes(4)), "fast runtime reconciliation discovers a resumed task older than three minutes");
+        Equal(activeId, agedFastEngine.GetVisibleStates(now.AddMinutes(4)).Single().SessionId, "aged fast discovery preserves the resumed task");
+
+        IsTrue(engine.RefreshActiveSessions(now.AddMinutes(31)), "expired discovery window removes old parent");
+        Equal(0, engine.GetVisibleStates(now.AddMinutes(31)).Count, "expired discovery activity does not leave a ghost task");
+    });
+}
+
 void TestFormatting()
 {
     Equal("999,999", HudFormatting.FormatNumber(999_999, "auto"), "auto exact threshold");
     Equal("1M", HudFormatting.FormatNumber(1_000_000, "auto"), "compact million");
     Equal("~$1.15", HudFormatting.FormatCost(1.15), "cost format");
+    Equal("60%", HudFormatting.FormatCacheHitRate(100, 60), "cache hit rate");
+    Equal("99.99%", HudFormatting.FormatCacheHitRate(1_000_000, 999_999), "near-perfect cache hit does not round to 100 percent");
+    Equal("99.99%", HudFormatting.FormatPercent(99.9999), "near-full context does not round to 100 percent");
+    Equal("--", HudFormatting.FormatCacheHitRate(0, 0), "cache hit rate without input");
+    Equal("100%", HudFormatting.FormatCacheHitRate(100, 120), "cache hit rate clamps malformed cached input");
+    var futureMetrics = HudFormatting.GetMetrics(
+        new HudSnapshot { Input = 200, Cached = 150, Model = "gpt-9.9-nebula" },
+        new Dictionary<string, bool> { ["model"] = true, ["cacheHitRate"] = true },
+        new Dictionary<string, string> { ["model"] = "Model", ["cacheHitRate"] = "Cache hit rate" },
+        "exact");
+    Equal("gpt-9.9-nebula", futureMetrics.Single(metric => metric.Key == "model").Value, "unknown future model remains monitorable");
+    Equal("75%", futureMetrics.Single(metric => metric.Key == "cacheHitRate").Value, "unknown future model keeps generic token metrics");
     var metrics = HudFormatting.GetMetrics(
         new HudSnapshot { FiveHourRemainingPercent = 86, WeeklyRemainingPercent = 82 },
         new Dictionary<string, bool> { ["fiveHourRemaining"] = true },
         new Dictionary<string, string> { ["fiveHourRemaining"] = "5-hour remaining" },
         "exact");
     Equal("86%", metrics.Single().Value, "five-hour allowance formatting");
+    var hierarchySnapshot = new HudSnapshot
+    {
+        Input = 10_000,
+        Cached = 9_500,
+        Uncached = 500,
+        Output = 250,
+        CallTotal = 10_250,
+        TaskTotal = 50_000,
+        ContextPercent = 25,
+        ContextWindow = 40_000,
+        Model = "deepseek-chat"
+    };
+    var labels = new Dictionary<string, string>();
+    var compact = HudFormatting.GetTaskListMetrics(hierarchySnapshot, "compact", labels, "exact");
+    Equal("context,model,cacheHitRate", string.Join(',', compact.Primary.Select(static metric => metric.Key)), "compact tier keeps context, model, and cache efficiency");
+    var balanced = HudFormatting.GetTaskListMetrics(hierarchySnapshot, "balanced", labels, "exact");
+    Equal("context,model,cacheHitRate,callTotal", string.Join(',', balanced.Primary.Select(static metric => metric.Key)), "balanced tier adds the current call total");
+    var detailed = HudFormatting.GetTaskListMetrics(hierarchySnapshot, "detailed", labels, "exact");
+    IsTrue(detailed.Diagnostics.Any(static metric => metric.Key == "contextWindow"), "detailed tier exposes provider-specific context capacity");
+    IsTrue(detailed.Diagnostics.Any(static metric => metric.Key == "taskTotal"), "detailed tier keeps cumulative task accounting off the primary row");
+    var allFields = new Dictionary<string, bool>
+    {
+        ["input"] = true,
+        ["callTotal"] = true,
+        ["activeTasks"] = true,
+        ["cacheHitRate"] = true,
+        ["taskTotal"] = true,
+        ["context"] = true,
+        ["model"] = true,
+        ["updated"] = true
+    };
+    var summary = HudFormatting.GetSummaryMetrics(hierarchySnapshot, allFields, labels, "exact");
+    IsTrue(summary.All(static metric => metric.Key is not ("cacheHitRate" or "taskTotal" or "context" or "model" or "updated")), "summary excludes per-task-only metrics");
     Equal(3, HudFormatting.GetContextAlertLevel(98, new[] { 75d, 90d, 98d }), "context level");
     Equal("75,90,98", string.Join(',', HudFormatting.ParseContextAlertThresholds(new[] { "98", "75", "90" })!), "threshold normalization");
     NotNull(HudFormatting.GetTaskDeepLink("019f69dc-91bf-7c33-b47b-604b9eaa04b6"), "safe deep link");
     Equal<string?>(null, HudFormatting.GetTaskDeepLink("../unsafe"), "unsafe deep link rejected");
+}
+
+void TestPlacement()
+{
+    var topRight = HudPlacement.GetPreset("top-right", 0, 0, 1920, 1040, 700, 80, 18);
+    Equal(1238d, topRight.Left, "top-right window offsets transparent chrome");
+    Equal(-18d, topRight.Top, "top edge offsets transparent chrome");
+    Equal(1920d, topRight.Left + 700 - 18, "visible shell touches right edge");
+    Equal(0d, topRight.Top + 18, "visible shell touches top edge");
+    var custom = HudPlacement.ClampCustom(-1000, 5000, 0, 0, 1920, 1040, 700, 80, 18);
+    Equal(-18d, custom.Left, "custom position clamps to visible left edge");
+    Equal(978d, custom.Top, "custom position clamps to visible bottom edge");
 }
 
 void TestSurfaceEffects()
@@ -369,6 +658,7 @@ void TestConfiguration()
         Equal(0d, config["opacity"]!.GetValue<double>(), "opacity clamp");
         var settings = HudSettings.From(config);
         Equal("summary", settings.MultiTask.DisplayMode, "typed settings projection");
+        Equal("always", settings.MultiTask.NameMode, "conversation subtitle is visible by default");
         Equal(0d, settings.Opacity, "typed numeric settings projection");
         Equal(true, settings.AlwaysOnTop, "wrong scalar type retains default boolean");
         Equal(14d, settings.FontSize, "wrong scalar type retains default number");
@@ -450,7 +740,11 @@ void TestPricing()
     };
     var estimate = catalog.Estimate(snapshot);
     NotNull(estimate, "known model estimate");
-    Equal(0.23d, Math.Round(estimate!.CostUsd, 6), "reduced cached-input pricing");
+    Equal(1.15d, Math.Round(estimate!.CostUsd, 6), "current cached-input pricing");
+    var datedEstimate = catalog.Estimate(snapshot with { Model = "gpt-5.6-luna-2026-08-10" });
+    NotNull(datedEstimate, "dated model snapshot estimate");
+    Equal("gpt-5.6-luna", datedEstimate!.PricedAs, "dated snapshot resolves to catalog model");
+    Equal(1.15d, Math.Round(datedEstimate.CostUsd, 6), "dated snapshot inherits matching catalog price");
     Equal<CostEstimate?>(null, catalog.Estimate(snapshot with { Model = "not-priced" }), "unknown model is not guessed");
 }
 
@@ -522,4 +816,17 @@ void Equal<T>(T expected, T actual, string message)
     {
         throw new InvalidOperationException($"Assertion failed: {message}. Expected '{expected}', actual '{actual}'.");
     }
+}
+
+sealed class SyntheticSessionActivitySource(IEnumerable<SessionActivity> activities) : ISessionActivitySource
+{
+    private readonly IReadOnlyList<SessionActivity> _activities = activities.ToArray();
+
+    public IReadOnlyList<SessionActivity> GetRecentUserSessions(
+        SessionProfile profile,
+        DateTimeOffset cutoff,
+        int maximumRows) => _activities
+            .Where(activity => activity.UpdatedAt >= cutoff)
+            .Take(Math.Max(1, maximumRows))
+            .ToArray();
 }

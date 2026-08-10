@@ -40,14 +40,14 @@ public static class BoundedTailReader
             }
 
             if (!lifecycleSeen && item.Kind is HudRecordKind.Started or HudRecordKind.Completed or
-                HudRecordKind.CompletedSilent or HudRecordKind.Aborted)
+                HudRecordKind.Aborted)
             {
                 lifecycleSeen = true;
-                if (item.Kind is HudRecordKind.Completed or HudRecordKind.CompletedSilent or HudRecordKind.Aborted)
+                if (item.Kind is HudRecordKind.Completed or HudRecordKind.Aborted)
                 {
                     terminalStatus = item.Kind == HudRecordKind.Aborted ? "aborted" : "completed";
                     terminalTimestamp = item.Timestamp;
-                    terminalSilent = item.Kind == HudRecordKind.CompletedSilent;
+                    terminalSilent = false;
                 }
             }
 

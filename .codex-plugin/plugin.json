@@ -1,7 +1,7 @@
 {
   "name": "codex-monitor-hud",
-  "version": "2.2.1",
-  "description": "A local real-time multi-task HUD for Codex Desktop on Windows.",
+  "version": "3.0.0",
+  "description": "A local real-time multi-task HUD for Codex Desktop and CLI on Windows.",
   "author": {
     "name": "Codex Monitor HUD Contributors"
   },
@@ -11,6 +11,9 @@
     "token-usage",
     "hud",
     "windows",
+    "cli",
+    "deepseek",
+    "mcp",
     "local-first",
     "multi-task",
     "pro-workflow"
@@ -20,7 +23,7 @@
   "interface": {
     "displayName": "Codex Monitor HUD",
     "shortDescription": "Local live monitoring for concurrent Codex tasks.",
-    "longDescription": "A local-first real-time HUD for high-concurrency Codex workflows. Keep one compact summary, expand a stable numbered task list, split selected tasks into independent bubbles, or opt in to targeted CODEX-labeled mid-task notices while Codex keeps working in the background.",
+    "longDescription": "A local-first real-time HUD for high-concurrency Codex Desktop and CLI workflows on Windows. Distinct source badges separate Desktop, OpenAI CLI, and an isolated DeepSeek CLI profile. Keep one compact summary, expand a stable numbered task list, split selected tasks into independent bubbles, or opt in to source-aware CODEX-labeled mid-task notices while Codex keeps working in the background.",
     "developerName": "Codex Monitor HUD Contributors",
     "category": "Productivity",
     "capabilities": [
@@ -50,6 +53,8 @@
       "./assets/settings-reminders-en.png",
       "./assets/settings-behavior.png",
       "./assets/settings-behavior-en.png",
+      "./assets/settings-sources.png",
+      "./assets/settings-sources-en.png",
       "./assets/settings-metrics.png",
       "./assets/settings-metrics-en.png"
     ]

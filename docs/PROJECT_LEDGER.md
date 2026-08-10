@@ -1,6 +1,6 @@
 # Project ledger
 
-Updated: 2026-08-03  
+Updated: 2026-08-10
 Scope: public, portable maintenance record for Codex Monitor HUD.
 
 ## How to use this ledger
@@ -12,7 +12,7 @@ This is the small durable record a new maintainer or Codex instance should read 
 | Item | Value |
 | --- | --- |
 | Target | Windows x64 only |
-| Candidate | 2.2.1 |
+| Release | 3.0.0 |
 | Packaging | `scripts/prepare-release.ps1` |
 | Install | `scripts/install.ps1 -DefaultLanguage zh-CN` or repository installer |
 | Recovery | transactional previous-version rollback and `scripts/start.ps1 -Legacy` |
@@ -27,6 +27,7 @@ This is the small durable record a new maintainer or Codex instance should read 
 | 2026-07-30 | Added observed 5-hour allowance, full 0–100% opacity, and independent list collapse. | Allowance is shown only when local Codex records provide it; detached bubbles must remain detached. |
 | 2026-08-03 | Updated the offline price snapshot for GPT-5.6 Terra and Luna. | OpenAI's standard API pricing was checked on the official page. Values remain estimates, not Codex credit billing. |
 | 2026-08-03 | Added a second-PC transfer kit. | It can create either a portable clean kit or an owner-only full snapshot containing private handoffs, toolchains, and Git history. The owner snapshot is never a GitHub Release asset. |
+| 2026-08-10 | Promoted Desktop plus CLI monitoring to 3.0.0. | The normal Codex CLI profile works by default; the conventional isolated `~/.codex-deepseek` profile is optional, bounded, independently filterable, and documented without publishing private credentials or machine-specific configuration. |
 
 ## Evidence ledger template
 

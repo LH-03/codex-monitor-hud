@@ -475,6 +475,61 @@
             </ScrollViewer>
           </TabItem>
 
+          <TabItem x:Name="SourcesTab" Header="Sources">
+            <ScrollViewer x:Name="SourcesScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Margin="8,14,8,22">
+                <TextBlock x:Name="SessionSourcesTitle" Text="监控来源" FontSize="15" FontWeight="SemiBold" />
+                <TextBlock x:Name="SessionSourcesHint"
+                           Text="任务行只显示简洁来源图标；把鼠标放到图标上可查看全称。下方图标说明也可以分别控制三类来源。"
+                           MaxWidth="620"
+                           HorizontalAlignment="Left"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource Muted}"
+                           Margin="0,4,0,14" />
+                <Border Width="620" HorizontalAlignment="Left" Background="#0E0A84FF" BorderBrush="#280A84FF" BorderThickness="1" CornerRadius="14" Padding="14,12" Margin="0,0,0,12">
+                  <StackPanel>
+                    <CheckBox x:Name="SourceDesktopCheck" Margin="0,0,0,10">
+                      <StackPanel Orientation="Horizontal">
+                        <Border Width="28" Height="28" CornerRadius="9" Background="#120A84FF" BorderBrush="#300A84FF" BorderThickness="1" Margin="2,0,10,0">
+                          <Viewbox Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path Data="M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M1.4,4.8 L12.6,4.8 M3,3.45 L3.08,3.45 M4.75,3.45 L4.83,3.45" Stroke="#FF0A84FF" StrokeThickness="1.45" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                          </Viewbox>
+                        </Border>
+                        <TextBlock x:Name="SourceDesktopOptionText" Text="Codex 桌面端（OpenAI）" VerticalAlignment="Center" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </CheckBox>
+                    <CheckBox x:Name="SourceDefaultCliCheck" Margin="0,0,0,10">
+                      <StackPanel Orientation="Horizontal">
+                        <Border Width="28" Height="28" CornerRadius="9" Background="#128B5CF6" BorderBrush="#308B5CF6" BorderThickness="1" Margin="2,0,10,0">
+                          <Viewbox Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path Data="M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M3,5.15 L5.85,7.15 L3,9.15 M7.15,9.15 L10.65,9.15" Stroke="#FF8B5CF6" StrokeThickness="1.45" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                          </Viewbox>
+                        </Border>
+                        <TextBlock x:Name="SourceDefaultCliOptionText" Text="Codex CLI——默认 Profile（通常为 OpenAI / GPT）" VerticalAlignment="Center" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </CheckBox>
+                    <CheckBox x:Name="SourceDeepSeekCliCheck">
+                      <StackPanel Orientation="Horizontal">
+                        <Border Width="28" Height="28" CornerRadius="9" Background="#1200A7B5" BorderBrush="#3000A7B5" BorderThickness="1" Margin="2,0,10,0">
+                          <Viewbox Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path Data="M1.4,2.1 L12.6,2.1 Q13,2.1 13,2.5 L13,11.5 Q13,11.9 12.6,11.9 L1.4,11.9 Q1,11.9 1,11.5 L1,2.5 Q1,2.1 1.4,2.1 Z M2.8,8.4 C4.1,5.7 5.55,10.4 7.05,7.65 C8.15,5.65 9.3,7.25 11.2,5.75" Stroke="#FF00A7B5" StrokeThickness="1.45" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                          </Viewbox>
+                        </Border>
+                        <TextBlock x:Name="SourceDeepSeekCliOptionText" Text="Codex CLI——DeepSeek Profile（.codex-deepseek）" VerticalAlignment="Center" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </CheckBox>
+                  </StackPanel>
+                </Border>
+                <Border Width="620" HorizontalAlignment="Left" Background="#0800A7B5" BorderBrush="#2400A7B5" BorderThickness="1" CornerRadius="12" Padding="12,10">
+                  <TextBlock x:Name="SessionSourcesPrivacy"
+                             Text="只读：HUD 只读取 sessions 与 session_index.jsonl，不读取或修改 Provider 配置、API Key、认证、提示词、回复或归档。"
+                             TextWrapping="Wrap"
+                             Foreground="{StaticResource Muted}" />
+                </Border>
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+
           <TabItem x:Name="MultiTaskTab" Header="Multi-task">
             <ScrollViewer x:Name="MultiTaskScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="8,14,8,22">
@@ -510,7 +565,6 @@
                   <StackPanel>
                     <TextBlock x:Name="TaskNameModeLabel" Text="列表任务标识" FontSize="12" Foreground="{StaticResource Muted}" />
                     <ComboBox x:Name="TaskNameModeCombo">
-                      <ComboBoxItem x:Name="NameHoverItem" Content="项目 + 对话；悬停时间" Tag="hover" />
                       <ComboBoxItem x:Name="NameAlwaysItem" Content="项目 + 对话 + 时间" Tag="always" />
                       <ComboBoxItem x:Name="NameHiddenItem" Content="仅项目" Tag="hidden" />
                     </ComboBox>
@@ -538,15 +592,16 @@
                 <TextBlock x:Name="ListFieldsTitle" Text="列表信息密度" FontSize="15" FontWeight="SemiBold" Margin="0,6,0,4" />
                 <TextBlock x:Name="ListDetailHint" Text="三档预设让每行保持可扫读；上下文占用始终显示。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8" />
                 <ComboBox x:Name="ListDetailCombo" Width="360" HorizontalAlignment="Left">
-                  <ComboBoxItem x:Name="ListDetailCompactItem" Content="简洁：状态 + 上下文占用" Tag="compact" />
-                  <ComboBoxItem x:Name="ListDetailBalancedItem" Content="标准：再加输入、输出和本次合计" Tag="balanced" />
-                  <ComboBoxItem x:Name="ListDetailDetailedItem" Content="详细：再加缓存、任务累计、模型和更新时间" Tag="detailed" />
+                  <ComboBoxItem x:Name="ListDetailCompactItem" Content="精简：状态、模型、上下文和缓存命中" Tag="compact" />
+                  <ComboBoxItem x:Name="ListDetailBalancedItem" Content="标准：再加本次合计" Tag="balanced" />
+                  <ComboBoxItem x:Name="ListDetailDetailedItem" Content="详细：第二行展开诊断数据" Tag="detailed" />
                 </ComboBox>
                 <TextBlock x:Name="TaskBubbleFieldsTitle" Text="独立小气泡信息" FontSize="15" FontWeight="SemiBold" Margin="0,10,0,4" />
                 <TextBlock x:Name="TaskBubbleResizeHint" Text="每个独立气泡都可拖动右下角调整大小；字段选择与列表互不影响。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8" />
                 <WrapPanel>
                   <CheckBox x:Name="BubbleFieldModel" Content="模型" />
                   <CheckBox x:Name="BubbleFieldCallTotal" Content="本次合计" />
+                  <CheckBox x:Name="BubbleFieldCacheHitRate" Content="缓存命中率" />
                   <CheckBox x:Name="BubbleFieldTaskTotal" Content="任务累计" />
                   <CheckBox x:Name="BubbleFieldEstimatedCost" Content="API 成本估算" />
                   <CheckBox x:Name="BubbleFieldUpdated" Content="更新时间" />
@@ -795,14 +850,15 @@
             <WrapPanel>
               <CheckBox x:Name="FieldInput" Content="输入总计" Tag="input" />
               <CheckBox x:Name="FieldCached" Content="缓存输入" Tag="cached" />
+              <CheckBox x:Name="FieldCacheHitRate" Content="缓存命中率" Tag="cacheHitRate" Visibility="Collapsed" />
               <CheckBox x:Name="FieldUncached" Content="未缓存输入" Tag="uncached" />
               <CheckBox x:Name="FieldOutput" Content="输出" Tag="output" />
               <CheckBox x:Name="FieldReasoning" Content="推理输出" Tag="reasoning" />
               <CheckBox x:Name="FieldCallTotal" Content="本次合计" Tag="callTotal" />
-              <CheckBox x:Name="FieldTaskTotal" Content="任务累计" Tag="taskTotal" />
-              <CheckBox x:Name="FieldContext" Content="上下文占用" Tag="context" />
-              <CheckBox x:Name="FieldModel" Content="模型" Tag="model" />
-              <CheckBox x:Name="FieldUpdated" Content="更新时间" Tag="updated" />
+              <CheckBox x:Name="FieldTaskTotal" Content="任务累计" Tag="taskTotal" Visibility="Collapsed" />
+              <CheckBox x:Name="FieldContext" Content="上下文占用" Tag="context" Visibility="Collapsed" />
+              <CheckBox x:Name="FieldModel" Content="模型" Tag="model" Visibility="Collapsed" />
+              <CheckBox x:Name="FieldUpdated" Content="更新时间" Tag="updated" Visibility="Collapsed" />
               <CheckBox x:Name="FieldActiveTasks" Content="活跃任务" Tag="activeTasks" />
               <CheckBox x:Name="FieldWeeklyRemaining" Content="周额度剩余" Tag="weeklyRemaining" />
               <CheckBox x:Name="FieldFiveHourRemaining" Content="5 小时额度剩余" Tag="fiveHourRemaining" />

@@ -114,7 +114,7 @@ public static class HudRecordParser
             var taskOutput = GetInt64(total, "output_tokens", output);
             var contextWindow = GetInt64(info, "model_context_window");
             var contextPercent = contextWindow > 0
-                ? Math.Min(100, Math.Round(input * 100.0 / contextWindow, 1))
+                ? Math.Min(100, input * 100.0 / contextWindow)
                 : 0;
 
             return new HudRecord
