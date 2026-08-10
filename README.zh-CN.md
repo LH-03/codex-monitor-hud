@@ -49,6 +49,8 @@ Windows Release 会随包携带一套私有 .NET/WPF 运行时，因此无需用
 
 原生 Codex CLI 不需要额外配置即可被监控。第二个 `~/.codex-deepseek` 根目录只是面向进阶用户的可选实测隔离约定；当前还不能任意添加其他自定义根目录。建立隔离配置前请先阅读 [Codex CLI 配置与可选 Provider 隔离](docs/CLI_PROFILE_ISOLATION.zh-CN.md)，其中说明了如何避免把凭据写进文件，以及如何随时回到完全不受影响的普通 Profile。
 
+**可能兼容，但没测：** HUD 监控的是本地 Codex session 记录，而不是某个前端专属 API，所以 Cursor、Windsurf、VS Code Insiders、`codex exec`、官方 SDK，甚至一些自定义 `codex app-server` 客户端都可能已经“碰巧能用”，只是来源徽标可能叫错。维护者懒得把每一种客户端都追着适配；愿意碰运气的话，可以看 [未验证的 Codex 客户端兼容性](docs/UNVERIFIED_CODEX_CLIENTS.zh-CN.md)，里面写了判断依据、目前最可疑的候选、已知误分类风险，以及怎么安全反馈测试结果。
+
 ## 三种显示模式
 
 | 模式 | 用途 |
