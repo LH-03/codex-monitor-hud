@@ -84,18 +84,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -D
 
 本项目已明确放弃 macOS 适配。欢迎 macOS 用户自行基于公开源码进行移植，但本仓库只发布和验证 Windows 版本。
 
-## 开发与发布准备
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-dotnet.ps1 -RunRuntimeTests
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-release.ps1
-```
-
-安装包自带私有 .NET 运行时。源码开发需要 Windows PowerShell 5.1+、供插件宿主使用的 Node.js，以及仓库中的工具链。
-
-发布前请在最终源码检查完成后运行 `scripts/prepare-release.ps1`。它会在已忽略的 `artifacts/` 下生成 Windows ZIP、`SHA256SUMS.txt` 和上传字段；面向用户的 Release 说明直接根据当前 [CHANGELOG.md](CHANGELOG.md) 写入 GitHub Release。若要通过 U 盘等私有渠道转交另一台 Windows 电脑，可运行 `scripts/prepare-transfer-kit.ps1`；它会打包公开源码、Release 产物和交接指南，不会带入本机设置或 Codex 会话数据。
-
 ## 当前状态
 
 `3.0.0` 是 Windows x64 正式版本：在 Codex Desktop 之外加入了原生 Codex CLI 监控，并可选识别隔离的 DeepSeek 后端 Codex CLI Profile。可选成本显示仅使用离线的标准 API 标价快照，不是 Codex 积分或订阅账单计算。常驻监控使用编译型 .NET/WPF 宿主；设置进程与 `-Legacy` 回退路径仍保留用于恢复。这是独立、非官方项目，与 OpenAI 或 DeepSeek 均没有隶属或背书关系。

@@ -84,18 +84,6 @@ See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for the data boundar
 
 macOS support has been intentionally dropped from this project. macOS users are welcome to adapt the public source on their own machines, but this repository ships and validates Windows only.
 
-## Development and release preparation
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-dotnet.ps1 -RunRuntimeTests
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\prepare-release.ps1
-```
-
-The installed build carries its own private .NET runtime. Source development requires Windows PowerShell 5.1+, Node.js for the plugin host, and the repository toolchain.
-
-For a Release, run `scripts/prepare-release.ps1` after the final source checks. It creates the Windows ZIP, `SHA256SUMS.txt`, and upload fields under ignored `artifacts/`; publish the user-facing notes on GitHub from the current [CHANGELOG.md](CHANGELOG.md). For a private physical transfer to another Windows PC, use `scripts/prepare-transfer-kit.ps1`; it packages public source, release artifacts, and continuation guidance without local settings or Codex session data.
-
 ## Project status
 
 `3.0.0` is the Windows x64 release that adds first-class Codex CLI monitoring beside Codex Desktop, including optional identification of an isolated DeepSeek-backed Codex CLI profile. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. The resident host is compiled .NET/WPF, while the Settings process and `-Legacy` fallback remain available for recovery. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI or DeepSeek.
