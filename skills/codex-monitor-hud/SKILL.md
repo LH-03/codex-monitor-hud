@@ -1,6 +1,6 @@
 ---
 name: codex-monitor-hud
-description: Operate, configure, explain, troubleshoot, or send opt-in task-targeted notices through the locally installed Codex Monitor HUD overlay.
+description: Operate, configure, explain, troubleshoot, or send opt-in task-targeted notices through the locally installed Codex Monitor HUD overlay. Use when the user mentions HUD, Codex Monitor, "收尾保护", "额度保护", "额度快没了", or asks to preserve a recoverable handoff.
 ---
 
 # Codex Monitor HUD
@@ -12,6 +12,7 @@ Use the plugin's MCP tools for normal operation:
 - `monitor_hud_hide` hides it without deleting settings.
 - `monitor_hud_pause` toggles live updates.
 - `monitor_hud_status` reports runtime health, configured source filters, and privacy-safe active task source metadata.
+- `monitor_hud_quota_guard` reports the latest locally observed 5-hour/weekly allowance and a conservative handoff advisory.
 - `monitor_hud_notification_capabilities` reports whether proactive notices are off, text-only, or allowed to use bounded live choreography. It also lists privacy-safe active HUD task numbers.
 - `monitor_hud_notify` sends one short, visibly CODEX-labeled notice to the matching task surface without ending or pausing the current Codex turn.
 
@@ -30,6 +31,22 @@ Before the first proactive notice in a task:
 A notification is a side-channel attention cue. After the tool returns, keep working unless the underlying task genuinely requires user input. It must not change task status, manufacture a completion event, or replace the normal final answer.
 
 With `text` permission, send only the message and task number; the user's configured style is used. With `expressive` permission, Codex may compose a bounded recipe from `glow`, `pulse`, `breathe`, and `flow`, plus color, intensity, tempo, cycles, glow radius, scale, and direction. This is declarative visual data, never executable code. Use motion semantically and avoid continuous distraction.
+
+## Opt-in allowance handoff guard
+
+When the user says **“HUD 收尾保护”**, **“额度收尾保护”**, or equivalent natural language, this skill is the entry point: immediately call `monitor_hud_quota_guard` once, then follow it at natural checkpoints and before a broad, expensive next step. It returns only the latest locally observed account-level 5-hour/weekly percentages; unavailable data must stay unavailable rather than being guessed.
+
+The user enables it and chooses the four editable thresholds in **Settings > Multi-task > Allowance handoff guard**. If the tool returns `disabled`, say that the protection is off and offer to open Settings; do not silently alter settings.
+
+- `clear`: continue normally.
+- `prepare_handoff`: at the next checkpoint, prepare a concise recoverable handoff before expanding scope.
+- `handoff_now`: before an expensive next step, write/update a concise handoff with current state, changed files, verification, and the exact next command; then stop expanding scope.
+
+For either low state, follow the tool's `instruction` field as the user's current template. First look for an existing project handoff document or prescribed project format and update that when present; create a concise new handoff only when the project has none.
+
+`should_alert` is one-shot: it becomes true when the observed allowance first enters a low band or escalates from preparation to critical. A skip from 11% to 9% still enters the relevant band and alerts. When it is false with `event: steady`, do not repeatedly rewrite or announce the same handoff merely because the allowance remains low; apply the template again only when the work genuinely reaches another checkpoint or is about to expand.
+
+This is an advisory read tool, not a remote interrupt. It cannot wake a model during a tool-free reasoning stretch, forcibly steer another client-owned Desktop/VS Code/CLI turn, or estimate the exact time left. Do not manufacture a completion or stop a task solely because the HUD reports a low allowance.
 
 For creating a shareable skin, use `$create-monitor-hud-theme`. Finished `.json`, `.cmhud-theme`, and safe `.cmhud-theme.zip` files install from **Settings > General > Theme workshop**.
 

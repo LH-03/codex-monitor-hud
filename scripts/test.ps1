@@ -201,6 +201,7 @@ if ([string]$defaultConfig.themeStyle.surface -ne 'solid' -or [string]$defaultCo
 if ([bool]$defaultConfig.fields.estimatedCost -or [bool]$defaultConfig.multiTask.listFields.estimatedCost -or [bool]$defaultConfig.multiTask.bubbleFields.estimatedCost) { throw 'API-equivalent cost must remain opt-in on every surface.' }
 if ([bool]$defaultConfig.agentNotifications.enabled -or [string]$defaultConfig.agentNotifications.permission -ne 'text') { throw 'Codex proactive notifications must remain opt-in with text-only permission by default.' }
 if (@('violet','aqua','amber','custom') -notcontains [string]$defaultConfig.agentNotifications.glowPreset -or [string]$defaultConfig.agentNotifications.color -notmatch '^#[0-9A-Fa-f]{8}$') { throw 'Codex notification glow preset or color default is invalid.' }
+if ([bool]$defaultConfig.quotaGuard.enabled -or [int]$defaultConfig.quotaGuard.prepareFiveHourPercent -ne 15 -or [int]$defaultConfig.quotaGuard.prepareWeeklyPercent -ne 10 -or [int]$defaultConfig.quotaGuard.handoffFiveHourPercent -ne 5 -or [int]$defaultConfig.quotaGuard.handoffWeeklyPercent -ne 3 -or -not [string]::IsNullOrEmpty([string]$defaultConfig.quotaGuard.prepareInstruction) -or -not [string]::IsNullOrEmpty([string]$defaultConfig.quotaGuard.handoffInstruction)) { throw 'Allowance handoff guard must default to opt-in with editable conservative thresholds and localized templates.' }
 if ([string]$defaultConfig.multiTask.listDetail -ne 'balanced' -or -not [bool]$defaultConfig.multiTask.bubbleFields.taskTotal) { throw 'List detail or task-bubble field defaults are invalid.' }
 if ([string]$defaultConfig.language -ne 'en' -or [bool]$defaultConfig.behavior.openTaskOnDoubleClick -or [bool]$defaultConfig.behavior.idleIndicator.enabled -or [bool]$defaultConfig.behavior.contextAlerts.enabled -or [bool]$defaultConfig.fields.context) { throw 'Prompt-language fallback or dependent lightweight behavior defaults are invalid.' }
 if ([string]$defaultConfig.behavior.idleIndicator.layout -ne 'overall' -or [string]$defaultConfig.behavior.idleIndicator.taskStyle -ne 'dot') { throw 'Backward-compatible quiet-indicator layout defaults are invalid.' }
@@ -210,9 +211,9 @@ $mcpText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\mc
 $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src\SettingsWindow.xaml')
 $installText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install.ps1')
 $manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.codex-plugin\plugin.json') | ConvertFrom-Json
-if ([string]$manifest.version -ne '3.1.0' -or $mcpText -notmatch 'SERVER_VERSION = "3\.1\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v3.1.0 manifest and MCP version are not aligned.' }
+if ([string]$manifest.version -ne '3.2.0' -or $mcpText -notmatch 'SERVER_VERSION = "3\.2\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v3.2.0 manifest and MCP version are not aligned.' }
 $installManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'install-manifest.json') | ConvertFrom-Json
-if ([string]$installManifest.version -ne '3.1.0' -or [string]$installManifest.releaseTag -ne 'v3.1.0' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v3.1.0 repository-install manifest is invalid.' }
+if ([string]$installManifest.version -ne '3.2.0' -or [string]$installManifest.releaseTag -ne 'v3.2.0' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v3.2.0 repository-install manifest is invalid.' }
 $dotnetRequired = @(
     'CodexMonitorHud.slnx',
     'src-dotnet/CodexMonitorHud.Core/CodexMonitorHud.Core.csproj',
@@ -226,7 +227,7 @@ $dotnetRequired = @(
     'scripts/compare-runtime-performance.ps1'
 )
 foreach ($relativePath in $dotnetRequired) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v3.1.0 compiled architecture file is missing: $relativePath" }
+    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v3.2.0 compiled architecture file is missing: $relativePath" }
 }
 $coreProjectText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core\CodexMonitorHud.Core.csproj')
 $coreSourceText = (Get-ChildItem -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core') -Recurse -Filter *.cs | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_.FullName }) -join "`n"
@@ -296,8 +297,8 @@ foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','docs/MACOS_PREVIEW_
 }
 if ($installText -notmatch '\$excludedRootNames' -or $installText -notmatch '\$excludedRelativePaths' -or $installText -notmatch "-notlike '\.test-output\*'") { throw 'Installer exclusion boundary is missing.' }
 $releaseText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\prepare-release.ps1')
-foreach ($required in @("[string]`$Version = '3.1.0'",'$excludedDirectoryNames',"'.agents'","'.codex'","'Microsoft'","'bin'","'obj'",'$excludedRelativePaths',"-notlike '.test-output*'")) {
-    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 3.1.0 default '$required' is missing." }
+foreach ($required in @("[string]`$Version = '3.2.0'",'$excludedDirectoryNames',"'.agents'","'.codex'","'Microsoft'","'bin'","'obj'",'$excludedRelativePaths',"-notlike '.test-output*'")) {
+    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 3.2.0 default '$required' is missing." }
 }
 if ([string]$installManifest.platforms.'windows-x64'.asset -ne 'CodexMonitorHUD-windows-x64.zip' -or $releaseText -notmatch [regex]::Escape("'CodexMonitorHUD-windows-x64.zip'")) { throw 'Release asset name and Windows install manifest are not aligned.' }
 if ($installText -notmatch 'DefaultLanguage' -or $installText -notmatch 'Test-Path -LiteralPath \$settingsPath') { throw 'First-install prompt-language selection or upgrade-preservation guard is missing.' }
@@ -320,6 +321,9 @@ if ($mainText -notmatch 'aggregate toggle only opens or retracts the embedded li
 foreach ($required in @('FieldEstimatedCost','BubbleFieldEstimatedCost','PricingPathText','PricingStatusText')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Cost-estimate setting '$required' is missing." } }
 foreach ($required in @('FieldCacheHitRate','BubbleFieldCacheHitRate','cacheHitRateTooltip','Format-HudCacheHitRate')) { if ($settingsXaml -notmatch [regex]::Escape($required) -and $mainText -notmatch [regex]::Escape($required) -and (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch [regex]::Escape($required)) { throw "Cache-hit-rate display path '$required' is missing." } }
 foreach ($required in @('AgentNotificationEnabledCheck','AgentNotificationPermissionCombo','AgentNotificationModeCombo','AgentNotificationGlowPresetCombo','AgentNotificationIntensityCombo','AgentNotificationDurationCombo','AgentNotificationColorText')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Codex notification setting '$required' is missing." } }
+foreach ($required in @('QuotaGuardEnabledCheck','QuotaGuardPrepareFiveHourText','QuotaGuardPrepareWeeklyText','QuotaGuardHandoffFiveHourText','QuotaGuardHandoffWeeklyText','QuotaGuardTemplatesExpander','QuotaGuardPrepareInstructionText','QuotaGuardHandoffInstructionText','QuotaGuardResetTemplatesButton')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Editable allowance handoff setting '$required' is missing." } }
+foreach ($required in @('OfficialAllowanceEnabledCheck','OfficialCodexAllowanceReader','account/rateLimits/read','officialAllowance')) { if ($settingsXaml -notmatch [regex]::Escape($required) -and $compiledSourceText -notmatch [regex]::Escape($required) -and $mainText -notmatch [regex]::Escape($required)) { throw "Official allowance source '$required' is missing." } }
+foreach ($required in @('monitor_hud_quota_guard','disabled','entered_prepare','should_alert','quota_guard: registry.quota_guard')) { if ($mcpText -notmatch [regex]::Escape($required)) { throw "Allowance handoff MCP contract '$required' is missing." } }
 foreach ($required in @('BehaviorTab','OpenTaskOnDoubleClickCheck','IdleIndicatorEnabledCheck','IdleIndicatorDelayCombo','IdleIndicatorLayoutCombo','IdleIndicatorTaskStyleCombo','IdleIndicatorBubblesCheck','ContextMetricVisibleCheck','ContextAlertsEnabledCheck','ContextThreshold1Text','ContextThreshold2Text','ContextThreshold3Text')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Behavior setting '$required' is missing." } }
 foreach ($required in @('Open-HudTaskInCodex','Get-HudTaskDeepLink','Get-HudContextAlertThresholds','Get-HudContextAlertVisualSpec','Start-HudContextAlertAnimation','Stop-HudContextAlertAnimation','Reset-HudContextAlertRuntime','Update-HudIdleIndicatorMode','Set-TaskBubbleIndicatorCollapsed','Update-HudContextAlertState','ContextAlertLevel')) { if ($mainText -notmatch [regex]::Escape($required) -and (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch [regex]::Escape($required)) { throw "Behavior runtime path '$required' is missing." } }
 foreach ($required in @('monitor_hud_notify','boundedAnimation','notificationPermission','notificationsRoot','maxLength: 160','permission === "expressive"')) { if ($mcpText -notmatch [regex]::Escape($required)) { throw "Bounded Codex notification MCP path '$required' is missing." } }
@@ -410,8 +414,9 @@ try {
     $mcpSettings = $defaultConfig.PSObject.Copy()
     $mcpSettings.agentNotifications.enabled = $true
     $mcpSettings.agentNotifications.permission = 'expressive'
+    $mcpSettings.quotaGuard.enabled = $true
     $mcpSettings | ConvertTo-Json -Depth 12 | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $mcpStateRoot 'settings.json')
-    [ordered]@{version=2;tasks=@([ordered]@{task_number=7;workspace='synthetic-workspace';status='active';client='cli';provider='deepseek';profile='deepseek';updated_at='2026-07-15T12:00:00Z'})} | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $mcpStateRoot 'task-registry.json')
+    [ordered]@{version=3;quota_guard=[ordered]@{state='prepare_handoff';event='entered_prepare';should_alert=$true;five_hour_remaining_percent=14;weekly_remaining_percent=9;observed_at='2026-08-26T12:00:00Z';instruction='Prepare a recoverable handoff.'};tasks=@([ordered]@{task_number=7;workspace='synthetic-workspace';status='active';client='cli';provider='deepseek';profile='deepseek';updated_at='2026-07-15T12:00:00Z'})} | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $mcpStateRoot 'task-registry.json')
     $env:LOCALAPPDATA = $mcpTestRoot
     $env:CODEX_MONITOR_HUD_DISABLE_AUTO_START = '1'
     $processInfo = New-Object Diagnostics.ProcessStartInfo
@@ -427,8 +432,10 @@ try {
     $process.StartInfo = $processInfo
     [void]$process.Start()
     $capabilityRequest = [ordered]@{jsonrpc='2.0';id=1;method='tools/call';params=[ordered]@{name='monitor_hud_notification_capabilities';arguments=[ordered]@{}}} | ConvertTo-Json -Compress -Depth 8
-    $noticeRequest = [ordered]@{jsonrpc='2.0';id=2;method='tools/call';params=[ordered]@{name='monitor_hud_notify';arguments=[ordered]@{message=('x'*180);task_number=7;animation=[ordered]@{layers=@('glow','pulse','breathe','flow','invalid');intensity=99;tempo_ms=1;cycles=99;glow_radius=99;scale=2;direction='right-to-left'}}}} | ConvertTo-Json -Compress -Depth 10
+    $quotaRequest = [ordered]@{jsonrpc='2.0';id=2;method='tools/call';params=[ordered]@{name='monitor_hud_quota_guard';arguments=[ordered]@{}}} | ConvertTo-Json -Compress -Depth 8
+    $noticeRequest = [ordered]@{jsonrpc='2.0';id=3;method='tools/call';params=[ordered]@{name='monitor_hud_notify';arguments=[ordered]@{message=('x'*180);task_number=7;animation=[ordered]@{layers=@('glow','pulse','breathe','flow','invalid');intensity=99;tempo_ms=1;cycles=99;glow_radius=99;scale=2;direction='right-to-left'}}}} | ConvertTo-Json -Compress -Depth 10
     $process.StandardInput.WriteLine($capabilityRequest)
+    $process.StandardInput.WriteLine($quotaRequest)
     $process.StandardInput.WriteLine($noticeRequest)
     $process.StandardInput.Close()
     $mcpOutput = $process.StandardOutput.ReadToEnd()
@@ -436,7 +443,8 @@ try {
     $process.WaitForExit(10000) | Out-Null
     if ($process.ExitCode -ne 0) { throw ('MCP notice process failed: ' + $mcpError) }
     $responses = @($mcpOutput -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
-    if ($responses.Count -ne 2 -or [string]$responses[0].result.content[0].text -notmatch '"permission": "expressive"' -or [string]$responses[0].result.content[0].text -notmatch 'synthetic-workspace' -or [string]$responses[0].result.content[0].text -notmatch 'deepseek' -or $null -eq $responses[0].result.structuredContent) { throw ('Per-task notification capability discovery self-test failed: ' + $mcpOutput) }
+    if ($responses.Count -ne 3 -or [string]$responses[0].result.content[0].text -notmatch '"permission": "expressive"' -or [string]$responses[0].result.content[0].text -notmatch 'synthetic-workspace' -or [string]$responses[0].result.content[0].text -notmatch 'deepseek' -or $null -eq $responses[0].result.structuredContent) { throw ('Per-task notification capability discovery self-test failed: ' + $mcpOutput) }
+    if ([string]$responses[1].result.structuredContent.state -ne 'prepare_handoff' -or [string]$responses[1].result.structuredContent.event -ne 'entered_prepare' -or -not [bool]$responses[1].result.structuredContent.should_alert -or [double]$responses[1].result.structuredContent.five_hour_remaining_percent -ne 14 -or [double]$responses[1].result.structuredContent.weekly_remaining_percent -ne 9 -or [string]$responses[1].result.content[0].text -notmatch 'Prepare a recoverable handoff') { throw ('Quota handoff guard MCP self-test failed: ' + $mcpOutput) }
     $noticeFile = Get-ChildItem -LiteralPath (Join-Path $mcpStateRoot 'notifications') -File -Filter '*.json' | Select-Object -First 1
     $queuedNotice = Get-Content -Raw -Encoding UTF8 -LiteralPath $noticeFile.FullName | ConvertFrom-Json
     if ([string]$queuedNotice.message.Length -ne '160' -or [int]$queuedNotice.task_number -ne 7 -or [double]$queuedNotice.animation.intensity -ne 1 -or [int]$queuedNotice.animation.cycles -ne 8 -or @($queuedNotice.animation.layers).Count -ne 4) { throw 'Bounded expressive notification payload self-test failed.' }

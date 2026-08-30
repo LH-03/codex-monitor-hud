@@ -66,6 +66,17 @@ public sealed record AgentNotificationSettings(
     string GlowPreset,
     string Intensity);
 
+public sealed record QuotaGuardSettings(
+    bool Enabled,
+    int PrepareFiveHourPercent,
+    int PrepareWeeklyPercent,
+    int HandoffFiveHourPercent,
+    int HandoffWeeklyPercent,
+    string PrepareInstruction,
+    string HandoffInstruction);
+
+public sealed record OfficialAllowanceSettings(bool Enabled);
+
 public sealed record ThemeStyleSettings(
     string Surface,
     string GradientStart,
@@ -100,6 +111,8 @@ public sealed record HudSettings
     public required BehaviorSettings Behavior { get; init; }
     public required AttentionSettings Attention { get; init; }
     public required AgentNotificationSettings AgentNotifications { get; init; }
+    public required QuotaGuardSettings QuotaGuard { get; init; }
+    public required OfficialAllowanceSettings OfficialAllowance { get; init; }
     public required string Separator { get; init; }
     public required string Position { get; init; }
     public double? CustomLeft { get; init; }
@@ -133,6 +146,8 @@ public sealed record HudSettings
         var context = Object(behavior, "contextAlerts");
         var attention = Object(document, "attention");
         var notices = Object(document, "agentNotifications");
+        var quotaGuard = Object(document, "quotaGuard");
+        var officialAllowance = Object(document, "officialAllowance");
         var theme = Object(document, "themeStyle");
         var timing = Object(document, "statusTiming");
         return new HudSettings
@@ -192,6 +207,15 @@ public sealed record HudSettings
                 Text(notices, "color", "#FF7C3AED"),
                 Text(notices, "glowPreset", "violet"),
                 Text(notices, "intensity", "balanced")),
+            QuotaGuard = new QuotaGuardSettings(
+                Boolean(quotaGuard, "enabled"),
+                Integer(quotaGuard, "prepareFiveHourPercent", 15),
+                Integer(quotaGuard, "prepareWeeklyPercent", 10),
+                Integer(quotaGuard, "handoffFiveHourPercent", 5),
+                Integer(quotaGuard, "handoffWeeklyPercent", 3),
+                Text(quotaGuard, "prepareInstruction"),
+                Text(quotaGuard, "handoffInstruction")),
+            OfficialAllowance = new OfficialAllowanceSettings(Boolean(officialAllowance, "enabled")),
             Separator = Text(document, "separator", "dot"),
             Position = Text(document, "position", "top-right"),
             CustomLeft = NullableNumber(document, "customLeft"),

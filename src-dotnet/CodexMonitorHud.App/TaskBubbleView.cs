@@ -115,6 +115,7 @@ internal sealed class TaskBubbleView : IDisposable
         var contextText = state.Snapshot is null
             ? Get(locale, "waiting")
             : $"{Get(locale, "context")} {(state.Snapshot.ContextWindow > 0 ? HudFormatting.FormatPercent(state.Snapshot.ContextPercent) : "--")}";
+        var hasAgentNotice = state.AgentNoticeUntil > DateTimeOffset.Now && !string.IsNullOrWhiteSpace(state.AgentNoticeText);
         var appearanceSignature = string.Join('|',
             settings.Preset,
             settings.Background,
@@ -131,6 +132,7 @@ internal sealed class TaskBubbleView : IDisposable
             StatusColor(settings, status),
             status,
             hasAttention,
+            hasAgentNotice,
             contextVisible,
             settings.Behavior.OpenTaskOnDoubleClick,
             sourceLabel,
@@ -169,7 +171,14 @@ internal sealed class TaskBubbleView : IDisposable
             _contextMetric.BorderBrush = _brushes.Create("#330A84FF", "#330A84FF", BrushRole.Decoration, settings, status, hasAttention);
             _contextMetric.Background = _brushes.Create("#0D0A84FF", "#0D0A84FF", BrushRole.Decoration, settings, status, hasAttention);
             _contextMetric.ToolTip = BuildContextTooltip(state, locale);
-            _metrics.Foreground = _brushes.Create(settings.Muted, "#FF667085", BrushRole.Secondary, settings, status, hasAttention);
+            _metrics.Foreground = _brushes.Create(
+                hasAgentNotice ? settings.Foreground : settings.Muted,
+                hasAgentNotice ? "#FFFFFFFF" : "#FF667085",
+                hasAgentNotice ? BrushRole.Primary : BrushRole.Secondary,
+                settings,
+                status,
+                hasAgentNotice);
+            _metrics.FontWeight = hasAgentNotice ? FontWeights.SemiBold : FontWeights.Normal;
             try
             {
                 var font = new FontFamily(settings.ThemeStyle.FontFamily);

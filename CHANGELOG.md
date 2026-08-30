@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.2.0 - reliable allowance guard
+
+- Add an opt-in official local Codex allowance source for the normal profile. It reads only the 5-hour and weekly values through the already signed-in local Codex client; it never reads conversation text, provider configuration, or credentials.
+- Keep the official source authoritative when selected: a failed refresh shows both windows as unavailable and retries quickly instead of mixing a prior account's session-log value into the display after an account switch.
+- Make the allowance handoff guard a one-shot threshold transition with editable early-warning and critical templates. Threshold crossings are detected even when a provider jumps past a configured percentage, without repeatedly notifying below that threshold.
+- Ignore non-account `gpt-reserve` records, merge separately observed 5-hour and weekly local windows safely, and collapse duplicate entries that point at the same active conversation.
+
 ## 3.1.0 - VS Code monitoring and polish
 
 - Monitor Codex in VS Code as its own source beside Codex Desktop and CLI. The new VS Code ribbon badge, source filter, and summary count make it clear where each active task came from.

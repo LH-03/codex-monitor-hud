@@ -12,6 +12,7 @@ var repositoryRoot = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositor
 var tests = new (string Name, Action Run)[]
 {
     ("record parsing", TestRecordParsing),
+    ("official allowance protocol", TestOfficialAllowanceProtocol),
     ("JSON line splitting", TestLineSplitting),
     ("incremental title index", TestTitleIndex),
     ("bounded tail snapshot", TestBoundedTail),
@@ -62,6 +63,10 @@ void TestRecordParsing()
     var usageWithoutLimits = HudRecordParser.Parse("""{"timestamp":"2026-07-13T08:00:00Z","type":"event_msg","payload":{"type":"token_count","rate_limits":null,"info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":60,"output_tokens":20},"total_token_usage":{"input_tokens":100,"cached_input_tokens":60,"output_tokens":20,"total_tokens":120},"model_context_window":1000}}}""");
     Equal(HudRecordKind.Usage, usageWithoutLimits?.Kind, "null rate limits do not hide usage");
     Equal(120L, usageWithoutLimits?.CallTotal, "null rate limits keep call totals");
+    var reserveOnly = HudRecordParser.Parse("""{"timestamp":"2026-08-29T08:00:00Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"output_tokens":2},"total_token_usage":{"total_tokens":12}},"rate_limits":{"limit_id":"base_model_inference","limit_name":"gpt-reserve","primary":{"used_percent":0,"window_minutes":10080},"secondary":null}}}""");
+    Equal<HudRecordKind?>(HudRecordKind.Usage, reserveOnly?.Kind, "reserve record keeps token usage");
+    Equal<double?>(null, reserveOnly?.WeeklyRemainingPercent, "reserve window is not weekly Codex allowance");
+    Equal<double?>(null, reserveOnly?.FiveHourRemainingPercent, "reserve window is not five-hour Codex allowance");
     Equal<HudRecord?>(null, HudRecordParser.Parse("""{"type":"response_item","payload":{"text":"private"}}"""), "irrelevant content is rejected");
     var padded = HudRecordParser.Parse("{" + new string(' ', 4096) + "\"timestamp\":\"2026-07-13T08:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"padded\"}}");
     Equal(HudRecordKind.Started, padded?.Kind, "relevant type beyond the old 1 KiB prefix is accepted");
@@ -155,6 +160,17 @@ void TestBoundedTail()
         Equal("completed", snapshot.TerminalStatus, "terminal status");
         Equal(2000L, snapshot.TaskTotal, "task total");
 
+        var splitAllowancePath = Path.Combine(root, "split-allowance-tail.jsonl");
+        var splitAllowanceRecords = new[]
+        {
+            """{"timestamp":"2026-07-13T08:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":20,"output_tokens":3},"total_token_usage":{"total_tokens":23},"model_context_window":200},"rate_limits":{"primary":{"used_percent":29,"window_minutes":300},"secondary":null}}}""",
+            """{"timestamp":"2026-07-13T08:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":20,"output_tokens":3},"total_token_usage":{"total_tokens":23},"model_context_window":200},"rate_limits":{"primary":{"used_percent":12,"window_minutes":10080},"secondary":null}}}"""
+        };
+        File.WriteAllText(splitAllowancePath, string.Join('\n', splitAllowanceRecords), new UTF8Encoding(false));
+        var splitAllowanceSnapshot = BoundedTailReader.ReadLatestSnapshot(splitAllowancePath);
+        Equal(71d, splitAllowanceSnapshot?.FiveHourRemainingPercent, "separate five-hour allowance is retained");
+        Equal(88d, splitAllowanceSnapshot?.WeeklyRemainingPercent, "separate weekly allowance is retained");
+
         var silentPath = Path.Combine(root, "silent-tail.jsonl");
         File.WriteAllText(silentPath, string.Join('\n', records[..^1]) + "\n" +
             """{"timestamp":"2026-07-13T08:00:03Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1","last_agent_message":""}}""",
@@ -221,6 +237,23 @@ void TestAggregation()
     Equal(3000L, aggregate.TaskTotal, "aggregate task total");
     Equal(2, aggregate.ActiveTasks, "aggregate active task count");
     Equal("2 tasks / 2 models", aggregate.Model, "aggregate label");
+
+    var fiveHourOnly = first with { AllowanceTimestamp = DateTimeOffset.Parse("2026-07-13T08:02:00Z"), FiveHourRemainingPercent = 71, WeeklyRemainingPercent = null };
+    var weeklyOnly = second with { AllowanceTimestamp = DateTimeOffset.Parse("2026-07-13T08:03:00Z"), FiveHourRemainingPercent = null, WeeklyRemainingPercent = 88 };
+    var splitAllowanceAggregate = SnapshotAggregator.GetLatestAllowance(new[] { fiveHourOnly, weeklyOnly });
+    Equal(71d, splitAllowanceAggregate?.FiveHourRemainingPercent, "aggregate retains latest five-hour allowance");
+    Equal(88d, splitAllowanceAggregate?.WeeklyRemainingPercent, "aggregate retains latest weekly allowance");
+}
+
+void TestOfficialAllowanceProtocol()
+{
+    var parsed = OfficialCodexAllowanceReader.TryParse(
+        """{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":2,"windowDurationMins":300},"secondary":{"usedPercent":0,"windowDurationMins":10080}}}}""",
+        out var allowance);
+    IsTrue(parsed, "official app-server rate-limit response is accepted");
+    Equal(98d, allowance?.FiveHourRemainingPercent, "official five-hour remaining");
+    Equal(100d, allowance?.WeeklyRemainingPercent, "official weekly remaining");
+    IsTrue(!OfficialCodexAllowanceReader.TryParse("""{"id":1,"result":{}}""", out _), "non-rate-limit response is rejected");
 }
 
 void TestTaskNumbers()

@@ -181,6 +181,17 @@ public static class HudRecordParser
             return (null, null);
         }
 
+        // Recent Codex builds can append a base-model "gpt-reserve" window to
+        // token records. It is not the account's Codex 5-hour/weekly allowance
+        // shown in the desktop Usage panel, so it must not overwrite that data.
+        // Older records omit limit_id and remain supported.
+        if (TryGetString(rateLimits, "limit_id", out var limitId) &&
+            !string.IsNullOrWhiteSpace(limitId) &&
+            !limitId.Equals("codex", StringComparison.OrdinalIgnoreCase))
+        {
+            return (null, null);
+        }
+
         double? weekly = null;
         double? fiveHour = null;
         foreach (var windowName in new[] { "primary", "secondary" })

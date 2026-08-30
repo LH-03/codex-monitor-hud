@@ -79,6 +79,18 @@
     "glowPreset": "violet",
     "intensity": "balanced"
   },
+  "quotaGuard": {
+    "enabled": false,
+    "prepareFiveHourPercent": 15,
+    "prepareWeeklyPercent": 10,
+    "handoffFiveHourPercent": 5,
+    "handoffWeeklyPercent": 3,
+    "prepareInstruction": "",
+    "handoffInstruction": ""
+  },
+  "officialAllowance": {
+    "enabled": false
+  },
   "separator": "dot",
   "position": "top-right",
   "customLeft": null,

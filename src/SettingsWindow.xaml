@@ -673,6 +673,76 @@
                 </WrapPanel>
                 <Border Height="1" Background="#10000000" Margin="0,16,0,18" />
                 <StackPanel Orientation="Horizontal">
+                  <TextBlock x:Name="QuotaGuardTitle" Text="额度收尾保护" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  <Border x:Name="QuotaGuardHelp"
+                          Width="20"
+                          Height="20"
+                          CornerRadius="10"
+                          Background="#100A84FF"
+                          BorderBrush="#280A84FF"
+                          BorderThickness="1"
+                          Margin="8,0,0,0"
+                          Cursor="Help"
+                          ToolTipService.InitialShowDelay="220"
+                          ToolTipService.ShowDuration="30000">
+                    <TextBlock Text="?" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Blue}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                </StackPanel>
+                <TextBlock x:Name="QuotaGuardHint" Text="让接入 HUD 的 Codex 在额度临界时自行留下一份可继续的交接；不会读取对话，也不会强行打断正在生成的任务。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,4,0,8" />
+                <CheckBox x:Name="OfficialAllowanceEnabledCheck" Content="从官方 Codex 本地接口读取 5 小时 / 周额度（只读额度）" Margin="0,0,0,8" />
+                <CheckBox x:Name="QuotaGuardEnabledCheck" Content="开启：额度不足时让 Codex 自己留下交接" Margin="0,0,0,10" />
+                <Border Background="#080A84FF" BorderBrush="#180A84FF" BorderThickness="1" CornerRadius="14" Padding="12,10" Margin="0,0,0,8">
+                  <StackPanel>
+                    <TextBlock x:Name="QuotaGuardThresholdHint" Text="什么时候提醒（直接填写剩余额度百分比）" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,0,8" />
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                      </Grid.ColumnDefinitions>
+                      <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                        <TextBlock x:Name="QuotaGuardPrepareLabel" Text="预警：先准备交接" FontWeight="SemiBold" />
+                        <TextBlock x:Name="QuotaGuardPrepareSubLabel" Text="适合在开始下一段大工作前留好退路" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,1,0,5" />
+                        <StackPanel Orientation="Horizontal">
+                          <TextBlock x:Name="QuotaGuardFiveHourLabel" Text="5 小时" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                          <TextBox x:Name="QuotaGuardPrepareFiveHourText" Width="52" Text="15" Margin="6,0,4,0" />
+                          <TextBlock Text="%" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                          <TextBlock x:Name="QuotaGuardWeeklyShortLabel" Text="周" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="12,0,0,0" />
+                          <TextBox x:Name="QuotaGuardPrepareWeeklyText" Width="52" Text="10" Margin="6,0,4,0" />
+                          <TextBlock Text="%" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                        </StackPanel>
+                      </StackPanel>
+                      <StackPanel Grid.Column="1">
+                        <TextBlock x:Name="QuotaGuardHandoffLabel" Text="临界：立即写交接" FontWeight="SemiBold" />
+                        <TextBlock x:Name="QuotaGuardHandoffSubLabel" Text="不再开新大任务，优先保留可恢复状态" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,1,0,5" />
+                        <StackPanel Orientation="Horizontal">
+                          <TextBlock x:Name="QuotaGuardFiveHourLabel2" Text="5 小时" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                          <TextBox x:Name="QuotaGuardHandoffFiveHourText" Width="52" Text="5" Margin="6,0,4,0" />
+                          <TextBlock Text="%" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                          <TextBlock x:Name="QuotaGuardWeeklyShortLabel2" Text="周" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="12,0,0,0" />
+                          <TextBox x:Name="QuotaGuardHandoffWeeklyText" Width="52" Text="3" Margin="6,0,4,0" />
+                          <TextBlock Text="%" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Grid>
+                  </StackPanel>
+                </Border>
+                <Expander x:Name="QuotaGuardTemplatesExpander" Width="620" HorizontalAlignment="Left" Margin="0,2,0,0">
+                  <Expander.Header>
+                    <TextBlock x:Name="QuotaGuardTemplatesTitle" Text="交接模板（需要时再改）" FontSize="13" FontWeight="SemiBold" />
+                  </Expander.Header>
+                  <Border Background="#080A84FF" BorderBrush="#180A84FF" BorderThickness="1" CornerRadius="14" Padding="12,10" Margin="0,8,0,0">
+                    <StackPanel>
+                      <TextBlock x:Name="QuotaGuardTemplatesHint" Text="默认模板会优先更新项目已有的交接文档；你也可以改成自己的工作流。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8" />
+                      <TextBlock x:Name="QuotaGuardPrepareInstructionLabel" Text="预警时给 Codex 的指令" FontSize="12" Foreground="{StaticResource Muted}" />
+                      <TextBox x:Name="QuotaGuardPrepareInstructionText" Height="82" MaxLength="1200" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0,3,0,10" />
+                      <TextBlock x:Name="QuotaGuardHandoffInstructionLabel" Text="临界时给 Codex 的指令" FontSize="12" Foreground="{StaticResource Muted}" />
+                      <TextBox x:Name="QuotaGuardHandoffInstructionText" Height="96" MaxLength="1200" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0,3,0,8" />
+                      <Button x:Name="QuotaGuardResetTemplatesButton" Content="恢复推荐模板" HorizontalAlignment="Left" />
+                    </StackPanel>
+                  </Border>
+                </Expander>
+                <Border Height="1" Background="#10000000" Margin="0,16,0,18" />
+                <StackPanel Orientation="Horizontal">
                   <TextBlock x:Name="AttentionTitle" Text="返回提醒" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                   <Border x:Name="AttentionHelp"
                           Width="20"

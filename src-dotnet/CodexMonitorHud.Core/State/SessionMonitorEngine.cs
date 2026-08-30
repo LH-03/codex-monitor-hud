@@ -371,7 +371,17 @@ public sealed class SessionMonitorEngine
     public IReadOnlyList<SessionState> GetVisibleStates(DateTimeOffset? now = null) =>
         _states.Values
             .Where(state => IsVisible(state, now ?? DateTimeOffset.Now))
-            .OrderBy(state => state.Number)
+            // A resend can create another rollout file for the same Desktop
+            // conversation. Render only the newest file for that conversation
+            // rather than turning one task into a growing list of duplicates.
+            .GroupBy(GetVisibleConversationKey, StringComparer.Ordinal)
+            .Select(static group => group
+                .OrderByDescending(static state => state.LastWriteTimeUtc)
+                .ThenByDescending(static state => state.RuntimeActivityAt)
+                .ThenByDescending(static state => state.LastUsageAt)
+                .ThenBy(static state => state.Number)
+                .First())
+            .OrderBy(static state => state.Number)
             .ToArray();
 
     public string GetStatus(SessionState state, bool paused, DateTimeOffset? now = null)
@@ -921,9 +931,16 @@ public sealed class SessionMonitorEngine
             return;
         }
 
-        state.AllowanceTimestamp = item.AllowanceTimestamp;
-        state.WeeklyRemainingPercent = item.WeeklyRemainingPercent;
-        state.FiveHourRemainingPercent = item.FiveHourRemainingPercent;
+        state.AllowanceTimestamp = item.AllowanceTimestamp ?? state.AllowanceTimestamp;
+        if (item.WeeklyRemainingPercent.HasValue)
+        {
+            state.WeeklyRemainingPercent = item.WeeklyRemainingPercent;
+        }
+
+        if (item.FiveHourRemainingPercent.HasValue)
+        {
+            state.FiveHourRemainingPercent = item.FiveHourRemainingPercent;
+        }
         if (state.Snapshot is not null)
         {
             state.Snapshot = state.Snapshot with
@@ -957,6 +974,16 @@ public sealed class SessionMonitorEngine
             return state.AgentNoticeUntil > now || !state.TerminalExitCompleted;
         }
         return true;
+    }
+
+    private static string GetVisibleConversationKey(SessionState state)
+    {
+        if (string.IsNullOrWhiteSpace(state.SessionId))
+        {
+            return "path\u001f" + state.Path;
+        }
+
+        return state.ProfileId + "\u001f" + state.ClientSurface + "\u001f" + state.SessionId;
     }
 
     private IReadOnlyList<ProfileSessionFile> DiscoverActiveFiles(DateTimeOffset current)

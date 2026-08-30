@@ -1,6 +1,6 @@
 {
   "name": "codex-monitor-hud",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "A local real-time multi-task HUD for Codex Desktop, VS Code, and CLI on Windows.",
   "author": {
     "name": "Codex Monitor HUD Contributors"

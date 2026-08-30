@@ -55,11 +55,26 @@ public static class SnapshotAggregator
         };
     }
 
-    public static HudSnapshot? GetLatestAllowance(IEnumerable<HudSnapshot?> snapshots) =>
-        snapshots
+    public static HudSnapshot? GetLatestAllowance(IEnumerable<HudSnapshot?> snapshots)
+    {
+        var observed = snapshots
             .OfType<HudSnapshot>()
             .Where(static snapshot =>
                 snapshot.WeeklyRemainingPercent.HasValue || snapshot.FiveHourRemainingPercent.HasValue)
             .OrderByDescending(static snapshot => snapshot.AllowanceTimestamp ?? snapshot.Timestamp)
-            .FirstOrDefault();
+            .ToArray();
+        if (observed.Length == 0)
+        {
+            return null;
+        }
+
+        var latest = observed[0];
+        var weekly = observed.FirstOrDefault(static snapshot => snapshot.WeeklyRemainingPercent.HasValue);
+        var fiveHour = observed.FirstOrDefault(static snapshot => snapshot.FiveHourRemainingPercent.HasValue);
+        return latest with
+        {
+            WeeklyRemainingPercent = weekly?.WeeklyRemainingPercent,
+            FiveHourRemainingPercent = fiveHour?.FiveHourRemainingPercent
+        };
+    }
 }

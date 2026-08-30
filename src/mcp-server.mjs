@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-const SERVER_VERSION = "3.1.0";
+const SERVER_VERSION = "3.2.0";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
-const SERVER_INSTRUCTIONS = "Codex Monitor HUD is a local, closed-world HUD control server. Before a proactive notice, call monitor_hud_notification_capabilities and match task_number plus client/provider to the current task. Never include secrets, credentials, prompts, replies, or full logs. Notices require user opt-in and are limited to 160 plain-text characters. Control tools affect only the local HUD.";
+const SERVER_INSTRUCTIONS = "Codex Monitor HUD is a local, closed-world HUD control server. Before a proactive notice, call monitor_hud_notification_capabilities and match task_number plus client/provider to the current task. When the user enables a capacity guard, call monitor_hud_quota_guard at natural checkpoints and before expensive work; a low result means write a recoverable handoff, not that the HUD can interrupt a running turn. Never include secrets, credentials, prompts, replies, or full logs. Notices require user opt-in and are limited to 160 plain-text characters. Control tools affect only the local HUD.";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = dirname(here);
@@ -57,9 +57,39 @@ function readTaskRegistry() {
         updated_at: cleanField(task?.updated_at, 48),
       }];
     }) : [];
-    return { version: Number(registry?.version) || 1, generated_at: cleanField(registry?.generated_at, 48), tasks };
+    const rawQuota = registry?.quota_guard && typeof registry.quota_guard === "object" ? registry.quota_guard : {};
+    const percent = (value) => Number.isFinite(Number(value)) ? Math.max(0, Math.min(100, Number(value))) : null;
+    const state = ["disabled", "unavailable", "clear", "prepare_handoff", "handoff_now"].includes(rawQuota?.state)
+      ? rawQuota.state
+      : "unavailable";
+    const event = ["disabled", "unavailable", "clear", "entered_prepare", "entered_handoff", "escalated_handoff", "deescalated", "recovered", "steady"].includes(rawQuota?.event)
+      ? rawQuota.event
+      : "unavailable";
+    const quota_guard = {
+      state,
+      event,
+      should_alert: rawQuota?.should_alert === true,
+      five_hour_remaining_percent: percent(rawQuota?.five_hour_remaining_percent),
+      weekly_remaining_percent: percent(rawQuota?.weekly_remaining_percent),
+      observed_at: cleanField(rawQuota?.observed_at, 48),
+      instruction: cleanField(rawQuota?.instruction, 1200),
+    };
+    return { version: Number(registry?.version) || 1, generated_at: cleanField(registry?.generated_at, 48), tasks, quota_guard };
   } catch {
-    return { version: 0, generated_at: "", tasks: [] };
+    return {
+      version: 0,
+      generated_at: "",
+      tasks: [],
+      quota_guard: {
+        state: "unavailable",
+        event: "unavailable",
+        should_alert: false,
+        five_hour_remaining_percent: null,
+        weekly_remaining_percent: null,
+        observed_at: "",
+        instruction: "No locally observed Codex allowance is available. Do not guess a limit or interrupt work.",
+      },
+    };
   }
 }
 
@@ -78,6 +108,7 @@ function notificationCapabilities() {
       no_executable_code: true,
     },
     active_tasks: registry.tasks,
+    quota_guard: registry.quota_guard,
   };
 }
 
@@ -102,7 +133,12 @@ function hudStatus() {
     registry_generated_at: registry.generated_at,
     active_task_count: registry.tasks.length,
     active_tasks: registry.tasks,
+    quota_guard: registry.quota_guard,
   };
+}
+
+function quotaGuard() {
+  return readTaskRegistry().quota_guard;
 }
 
 function cleanNoticeText(value) {
@@ -226,6 +262,20 @@ const taskSchema = {
 };
 
 const emptyInputSchema = { type: "object", properties: {}, additionalProperties: false };
+const quotaGuardOutputSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["state", "event", "should_alert", "five_hour_remaining_percent", "weekly_remaining_percent", "observed_at", "instruction"],
+  properties: {
+    state: { type: "string", enum: ["disabled", "unavailable", "clear", "prepare_handoff", "handoff_now"] },
+    event: { type: "string", enum: ["disabled", "unavailable", "clear", "entered_prepare", "entered_handoff", "escalated_handoff", "deescalated", "recovered", "steady"] },
+    should_alert: { type: "boolean" },
+    five_hour_remaining_percent: { anyOf: [{ type: "number", minimum: 0, maximum: 100 }, { type: "null" }] },
+    weekly_remaining_percent: { anyOf: [{ type: "number", minimum: 0, maximum: 100 }, { type: "null" }] },
+    observed_at: { type: "string" },
+    instruction: { type: "string" },
+  },
+};
 const controlOutputSchema = {
   type: "object",
   additionalProperties: false,
@@ -278,6 +328,15 @@ const toolDefinitions = [
       },
     },
     annotations: { title: "Read Monitor HUD status", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    execution: { taskSupport: "forbidden" },
+  },
+  {
+    name: "monitor_hud_quota_guard",
+    title: "Read Codex allowance handoff guard",
+    description: "Read privacy-safe locally observed 5-hour and weekly Codex allowance plus a conservative handoff advisory. Call at natural checkpoints and before expensive work when the user wants capacity protection. This tool cannot interrupt a running turn; if it returns prepare_handoff or handoff_now, create a recoverable handoff before expanding work.",
+    inputSchema: emptyInputSchema,
+    outputSchema: quotaGuardOutputSchema,
+    annotations: { title: "Read Codex allowance handoff guard", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     execution: { taskSupport: "forbidden" },
   },
   {
@@ -381,6 +440,10 @@ function handleToolCall(id, params) {
   if (name === "monitor_hud_status") {
     const status = hudStatus();
     return { jsonrpc: "2.0", id, result: toolResult(status, JSON.stringify(status, null, 2)) };
+  }
+  if (name === "monitor_hud_quota_guard") {
+    const guard = quotaGuard();
+    return { jsonrpc: "2.0", id, result: toolResult(guard, JSON.stringify(guard, null, 2)) };
   }
   if (name === "monitor_hud_notification_capabilities") {
     const capabilities = notificationCapabilities();

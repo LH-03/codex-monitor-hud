@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using CodexMonitorHud.Core.Configuration;
@@ -52,6 +53,12 @@ internal sealed partial class HudApplicationController : IDisposable
     private long _lastRenderedRevision = -1;
     private string _lastOverallStatus = string.Empty;
     private string _lastRegistryContent = string.Empty;
+    private string _previousQuotaGuardState = "unavailable";
+    private bool _quotaGuardObserved;
+    private Task<OfficialCodexAllowance?>? _officialAllowanceRead;
+    private OfficialCodexAllowance? _officialAllowance;
+    private DateTimeOffset _lastOfficialAllowanceAttempt = DateTimeOffset.MinValue;
+    private bool _officialAllowanceWasEnabled;
     private bool _paused;
     private bool _initialScanComplete;
     private bool _disposed;
@@ -107,10 +114,11 @@ internal sealed partial class HudApplicationController : IDisposable
 
     public void Start()
     {
-        _log.Write($"Compiled HUD v3.1.0 starting. config={_paths.ConfigPath}; profiles={string.Join(',', _profiles.Select(static profile => profile.Id))}; agentNotices={_settings.AgentNotifications.Enabled}/{_settings.AgentNotifications.Permission}");
+        _log.Write($"Compiled HUD v3.2.0 starting. config={_paths.ConfigPath}; profiles={string.Join(',', _profiles.Select(static profile => profile.Id))}; agentNotices={_settings.AgentNotifications.Enabled}/{_settings.AgentNotifications.Permission}");
         var now = DateTimeOffset.Now;
         _engine.RefreshActiveSessions(now);
         _engine.Poll(now);
+        StartOfficialAllowanceRead(now);
         _lastReconciliation = now;
         _lastRuntimeReconciliation = now;
         _lastLifecyclePoll = now;
@@ -335,6 +343,7 @@ internal sealed partial class HudApplicationController : IDisposable
             }
         }
 
+        changed |= CompleteOrStartOfficialAllowanceRead(now);
         var overallStatus = GetOverallStatus(now);
         if (now - _lastQuietPoll >= TimeSpan.FromMilliseconds(500))
         {
@@ -388,7 +397,7 @@ internal sealed partial class HudApplicationController : IDisposable
             _initialScanComplete);
         _engine.HoldTerminalExits = _view.HoldTerminalExits;
         _commands.Update(_locales.Get("zh-CN"), _locales.Get("en"), status, _settings.MultiTask.DisplayMode, _paused, _settings.MousePassthrough);
-        WriteTaskRegistry(states, now);
+        WriteTaskRegistry(states, snapshot, now);
     }
 
     private HudSnapshot? BuildDisplaySnapshot(IReadOnlyList<SessionState> states)
@@ -398,20 +407,76 @@ internal sealed partial class HudApplicationController : IDisposable
         {
             return null;
         }
+        HudSnapshot? display;
         if (_settings.MonitorScope == "aggregate")
         {
-            return SnapshotAggregator.Merge(snapshots, Get(_locale, "multiTaskSummary"));
+            display = SnapshotAggregator.Merge(snapshots, Get(_locale, "multiTaskSummary"));
         }
-        var latest = snapshots.OrderByDescending(static snapshot => snapshot.Timestamp).First() with { ActiveTasks = snapshots.Length };
-        var allowance = SnapshotAggregator.GetLatestAllowance(snapshots);
-        return allowance is null
-            ? latest
-            : latest with
+        else
+        {
+            var latest = snapshots.OrderByDescending(static snapshot => snapshot.Timestamp).First() with { ActiveTasks = snapshots.Length };
+            var allowance = SnapshotAggregator.GetLatestAllowance(snapshots);
+            display = allowance is null
+                ? latest
+                : latest with
+                {
+                    AllowanceTimestamp = allowance.AllowanceTimestamp,
+                    WeeklyRemainingPercent = allowance.WeeklyRemainingPercent,
+                    FiveHourRemainingPercent = allowance.FiveHourRemainingPercent
+                };
+        }
+        if (display is null) return null;
+        if (_settings.OfficialAllowance.Enabled)
+        {
+            // Never mix a selected official source with a local session-log
+            // value that may belong to the previously signed-in account.
+            var officialAllowance = _officialAllowance;
+            return display with
             {
-                AllowanceTimestamp = allowance.AllowanceTimestamp,
-                WeeklyRemainingPercent = allowance.WeeklyRemainingPercent,
-                FiveHourRemainingPercent = allowance.FiveHourRemainingPercent
+                AllowanceTimestamp = officialAllowance?.ObservedAt,
+                WeeklyRemainingPercent = officialAllowance?.WeeklyRemainingPercent,
+                FiveHourRemainingPercent = officialAllowance?.FiveHourRemainingPercent
             };
+        }
+        return display;
+    }
+
+    private bool CompleteOrStartOfficialAllowanceRead(DateTimeOffset now)
+    {
+        if (!_settings.OfficialAllowance.Enabled)
+        {
+            var changed = _officialAllowance is not null;
+            _officialAllowance = null;
+            _officialAllowanceRead = null;
+            return changed;
+        }
+        if (_officialAllowanceRead is { IsCompleted: true })
+        {
+            var result = _officialAllowanceRead.Status == TaskStatus.RanToCompletion ? _officialAllowanceRead.Result : null;
+            _officialAllowanceRead = null;
+            if (result is not null)
+            {
+                var changed = !Equals(_officialAllowance, result);
+                _officialAllowance = result;
+                return changed;
+            }
+
+            // Do not leave a previous account's number visible if the fresh
+            // official read failed after an account switch.
+            var unavailableChanged = _officialAllowance is not null;
+            _officialAllowance = null;
+            return unavailableChanged;
+        }
+        StartOfficialAllowanceRead(now);
+        return false;
+    }
+
+    private void StartOfficialAllowanceRead(DateTimeOffset now)
+    {
+        var interval = _officialAllowance is null ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(20);
+        if (!_settings.OfficialAllowance.Enabled || _officialAllowanceRead is not null || now - _lastOfficialAllowanceAttempt < interval) return;
+        _lastOfficialAllowanceAttempt = now;
+        _officialAllowanceRead = Task.Run(OfficialCodexAllowanceReader.TryReadAsync);
     }
 
     private string GetOverallStatus(DateTimeOffset now, IReadOnlyList<SessionState>? states = null, HudSnapshot? snapshot = null)
@@ -531,6 +596,7 @@ internal sealed partial class HudApplicationController : IDisposable
         _engine.UpdateOptions(_settings.ToRuntimeOptions());
         _locale = _locales.Get(_settings.Language);
         _settingsLocale = _settings.Language == "symbols" ? _locales.Get("en") : _locale;
+        ResetOfficialAllowanceWhenSourceChanges();
     }
 
     private void ReloadSettings()
@@ -549,6 +615,7 @@ internal sealed partial class HudApplicationController : IDisposable
         _engine.UpdateOptions(_settings.ToRuntimeOptions());
         _locale = _locales.Get(_settings.Language);
         _settingsLocale = _settings.Language == "symbols" ? _locales.Get("en") : _locale;
+        ResetOfficialAllowanceWhenSourceChanges();
         if (_settings.MultiTask.DisplayMode == "split" && previousMode != "split")
         {
             _view.SplitAll(_engine.GetVisibleStates(), _settings.MultiTask.MaxSplitBubbles);
@@ -558,6 +625,14 @@ internal sealed partial class HudApplicationController : IDisposable
             _view.MergeAll();
         }
         Render(force: true);
+    }
+
+    private void ResetOfficialAllowanceWhenSourceChanges()
+    {
+        if (_settings.OfficialAllowance.Enabled == _officialAllowanceWasEnabled) return;
+        _officialAllowanceWasEnabled = _settings.OfficialAllowance.Enabled;
+        _officialAllowance = null;
+        _lastOfficialAllowanceAttempt = DateTimeOffset.MinValue;
     }
 
     private void OpenSettings()
@@ -685,7 +760,7 @@ internal sealed partial class HudApplicationController : IDisposable
         return changed;
     }
 
-    private void WriteTaskRegistry(IReadOnlyList<SessionState> states, DateTimeOffset now)
+    private void WriteTaskRegistry(IReadOnlyList<SessionState> states, HudSnapshot? snapshot, DateTimeOffset now)
     {
         var tasks = states.OrderBy(static state => state.Number).Select(state => new
         {
@@ -697,7 +772,8 @@ internal sealed partial class HudApplicationController : IDisposable
             profile = state.ProfileId,
             updated_at = state.LastUsageAt.ToString("O")
         }).ToArray();
-        var content = JsonSerializer.Serialize(tasks);
+        var quotaGuard = BuildQuotaGuard(snapshot);
+        var content = JsonSerializer.Serialize(new { tasks, quotaGuard });
         if (content == _lastRegistryContent)
         {
             return;
@@ -705,12 +781,115 @@ internal sealed partial class HudApplicationController : IDisposable
         _lastRegistryContent = content;
         var registry = JsonSerializer.Serialize(new
         {
-            version = 2,
+            version = 3,
             generated_at = now.ToString("O"),
+            quota_guard = quotaGuard,
             tasks
         });
         TryWriteText(Path.Combine(_paths.StateRoot, "task-registry.json"), registry);
     }
+
+    private object BuildQuotaGuard(HudSnapshot? snapshot)
+    {
+        if (!_settings.QuotaGuard.Enabled)
+        {
+            _previousQuotaGuardState = "disabled";
+            _quotaGuardObserved = false;
+            return new
+            {
+                state = "disabled",
+                @event = "disabled",
+                should_alert = false,
+                five_hour_remaining_percent = snapshot?.FiveHourRemainingPercent,
+                weekly_remaining_percent = snapshot?.WeeklyRemainingPercent,
+                observed_at = snapshot?.AllowanceTimestamp?.ToString("O") ?? string.Empty,
+                instruction = "HUD allowance handoff protection is off in Settings. Do not activate a quota-based handoff."
+            };
+        }
+
+        var fiveHour = snapshot?.FiveHourRemainingPercent;
+        var weekly = snapshot?.WeeklyRemainingPercent;
+        if (!fiveHour.HasValue && !weekly.HasValue)
+        {
+            _previousQuotaGuardState = "unavailable";
+            _quotaGuardObserved = false;
+            return new
+            {
+                state = "unavailable",
+                @event = "unavailable",
+                should_alert = false,
+                five_hour_remaining_percent = (double?)null,
+                weekly_remaining_percent = (double?)null,
+                observed_at = string.Empty,
+                instruction = "No locally observed Codex allowance is available. Do not guess a limit or interrupt work."
+            };
+        }
+
+        var prepareFiveHour = _settings.QuotaGuard.PrepareFiveHourPercent;
+        var prepareWeekly = _settings.QuotaGuard.PrepareWeeklyPercent;
+        var handoffFiveHour = _settings.QuotaGuard.HandoffFiveHourPercent;
+        var handoffWeekly = _settings.QuotaGuard.HandoffWeeklyPercent;
+        var state = (fiveHour.HasValue && fiveHour.Value <= handoffFiveHour) || (weekly.HasValue && weekly.Value <= handoffWeekly)
+            ? "handoff_now"
+            : (fiveHour.HasValue && fiveHour.Value <= prepareFiveHour) || (weekly.HasValue && weekly.Value <= prepareWeekly)
+                ? "prepare_handoff"
+                : "clear";
+        var previous = _previousQuotaGuardState;
+        var eventName = "steady";
+        var shouldAlert = false;
+        if (!_quotaGuardObserved)
+        {
+            eventName = state switch
+            {
+                "prepare_handoff" => "entered_prepare",
+                "handoff_now" => "entered_handoff",
+                _ => "clear"
+            };
+            shouldAlert = state is "prepare_handoff" or "handoff_now";
+        }
+        else if (state != previous)
+        {
+            if (state == "handoff_now" && previous == "prepare_handoff")
+            {
+                eventName = "escalated_handoff";
+                shouldAlert = true;
+            }
+            else if (state is "prepare_handoff" or "handoff_now")
+            {
+                eventName = state == "handoff_now" ? "entered_handoff" : "entered_prepare";
+                shouldAlert = true;
+            }
+            else if (state == "clear")
+            {
+                eventName = "recovered";
+            }
+            else
+            {
+                eventName = "deescalated";
+            }
+        }
+        _previousQuotaGuardState = state;
+        _quotaGuardObserved = true;
+        var instruction = state switch
+        {
+            "handoff_now" => ResolveQuotaInstruction(_settings.QuotaGuard.HandoffInstruction, "quotaGuardHandoffDefault"),
+            "prepare_handoff" => ResolveQuotaInstruction(_settings.QuotaGuard.PrepareInstruction, "quotaGuardPrepareDefault"),
+            _ => "Observed allowance is above the conservative handoff threshold. Continue normally, but check again before an expensive or broad step."
+        };
+        return new
+        {
+            state,
+            @event = eventName,
+            should_alert = shouldAlert,
+            five_hour_remaining_percent = fiveHour,
+            weekly_remaining_percent = weekly,
+            observed_at = snapshot?.AllowanceTimestamp?.ToString("O") ?? string.Empty,
+            instruction
+        };
+    }
+
+    private string ResolveQuotaInstruction(string customInstruction, string localeKey) =>
+        string.IsNullOrWhiteSpace(customInstruction) ? Get(_settingsLocale, localeKey) : customInstruction;
 
     private bool HasActiveHost(DateTimeOffset now)
     {

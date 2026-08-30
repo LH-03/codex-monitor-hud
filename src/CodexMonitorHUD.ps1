@@ -481,6 +481,15 @@ $agentNotificationIntensityCombo = Find-Control $settings 'AgentNotificationInte
 $agentNotificationDurationCombo = Find-Control $settings 'AgentNotificationDurationCombo'
 $agentNotificationColorText = Find-Control $settings 'AgentNotificationColorText'
 $agentNotificationColorButton = Find-Control $settings 'AgentNotificationColorButton'
+$quotaGuardEnabledCheck = Find-Control $settings 'QuotaGuardEnabledCheck'
+$officialAllowanceEnabledCheck = Find-Control $settings 'OfficialAllowanceEnabledCheck'
+$quotaGuardPrepareFiveHourText = Find-Control $settings 'QuotaGuardPrepareFiveHourText'
+$quotaGuardPrepareWeeklyText = Find-Control $settings 'QuotaGuardPrepareWeeklyText'
+$quotaGuardHandoffFiveHourText = Find-Control $settings 'QuotaGuardHandoffFiveHourText'
+$quotaGuardHandoffWeeklyText = Find-Control $settings 'QuotaGuardHandoffWeeklyText'
+$quotaGuardPrepareInstructionText = Find-Control $settings 'QuotaGuardPrepareInstructionText'
+$quotaGuardHandoffInstructionText = Find-Control $settings 'QuotaGuardHandoffInstructionText'
+$quotaGuardResetTemplatesButton = Find-Control $settings 'QuotaGuardResetTemplatesButton'
 $openTaskOnDoubleClickCheck = Find-Control $settings 'OpenTaskOnDoubleClickCheck'
 $idleIndicatorEnabledCheck = Find-Control $settings 'IdleIndicatorEnabledCheck'
 $idleIndicatorDelayCombo = Find-Control $settings 'IdleIndicatorDelayCombo'
@@ -581,7 +590,7 @@ foreach ($name in @(
     'MousePassthroughHint','StatusPalettesTitle','StatusPalettesHint','StatusPaletteCodexMicroSource','MultiTaskTitle','MultiTaskExplanation',
     'DisplayModeLabel','TaskNameModeLabel','MaxSplitLabel','NumberCooldownLabel','ListFieldsTitle','ListDetailHint','TaskBubbleFieldsTitle','TaskBubbleResizeHint',
     'ListDensityLabel',
-    'ListStyleLabel','AgentNotificationTitle','AgentNotificationHint','AgentNotificationPermissionLabel','AgentNotificationModeLabel','AgentNotificationGlowPresetLabel','AgentNotificationIntensityLabel','AgentNotificationDurationLabel','AgentNotificationColorLabel',
+    'ListStyleLabel','AgentNotificationTitle','AgentNotificationHint','AgentNotificationPermissionLabel','AgentNotificationModeLabel','AgentNotificationGlowPresetLabel','AgentNotificationIntensityLabel','AgentNotificationDurationLabel','AgentNotificationColorLabel','QuotaGuardTitle','QuotaGuardHint','OfficialAllowanceEnabledCheck','QuotaGuardThresholdHint','QuotaGuardPrepareLabel','QuotaGuardPrepareSubLabel','QuotaGuardHandoffLabel','QuotaGuardHandoffSubLabel','QuotaGuardFiveHourLabel','QuotaGuardFiveHourLabel2','QuotaGuardWeeklyShortLabel','QuotaGuardWeeklyShortLabel2','QuotaGuardTemplatesTitle','QuotaGuardTemplatesHint','QuotaGuardPrepareInstructionLabel','QuotaGuardHandoffInstructionLabel',
     'AttentionTitle','AttentionHint','AttentionTriggersTitle','AttentionSurfacesTitle','SummaryAttentionModeLabel','ListAttentionModeLabel','TaskBubbleAttentionModeLabel','AttentionDurationLabel',
     'DotAttentionTitle','DotAttentionHint','DotPatternLabel','DotBrightnessLabel','DotSpeedLabel',
     'TransparencyModeLabel','TransparencyHint','BehaviorTitle','BehaviorHint','TaskNavigationTitle','TaskNavigationHint',
@@ -621,6 +630,7 @@ foreach ($name in @(
 $presetPanel = $settingsContentControls['PresetFrost'].Parent
 $themeButtons = @{}
 $attentionHelp = Find-Control $settings 'AttentionHelp'
+$quotaGuardHelp = Find-Control $settings 'QuotaGuardHelp'
 
 $colorPicker = Load-XamlWindow (Join-Path $PSScriptRoot 'ColorPickerWindow.xaml')
 Set-HudWindowIcon $colorPicker
@@ -705,6 +715,7 @@ function Apply-SettingsLanguage {
         AgentNotificationTitle='agentNotificationTitle'; AgentNotificationHint='agentNotificationHint'; AgentNotificationPermissionLabel='agentNotificationPermission';
         AgentNotificationModeLabel='agentNotificationMode'; AgentNotificationGlowPresetLabel='agentNotificationGlowPreset'; AgentNotificationIntensityLabel='agentNotificationIntensity';
         AgentNotificationDurationLabel='agentNotificationDuration'; AgentNotificationColorLabel='agentNotificationColor';
+        QuotaGuardTitle='quotaGuardTitle'; QuotaGuardHint='quotaGuardHint'; QuotaGuardThresholdHint='quotaGuardThresholdHint'; QuotaGuardPrepareLabel='quotaGuardPrepare'; QuotaGuardPrepareSubLabel='quotaGuardPrepareSub'; QuotaGuardHandoffLabel='quotaGuardHandoff'; QuotaGuardHandoffSubLabel='quotaGuardHandoffSub'; QuotaGuardFiveHourLabel='quotaGuardFiveHourShort'; QuotaGuardFiveHourLabel2='quotaGuardFiveHourShort'; QuotaGuardWeeklyShortLabel='quotaGuardWeeklyShort'; QuotaGuardWeeklyShortLabel2='quotaGuardWeeklyShort'; QuotaGuardTemplatesTitle='quotaGuardTemplatesTitle'; QuotaGuardTemplatesHint='quotaGuardTemplatesHint'; QuotaGuardPrepareInstructionLabel='quotaGuardPrepareInstruction'; QuotaGuardHandoffInstructionLabel='quotaGuardHandoffInstruction';
         AttentionTitle='attentionTitle'; AttentionHint='attentionHint'; AttentionTriggersTitle='attentionTriggersTitle'; AttentionSurfacesTitle='attentionSurfacesTitle';
         SummaryAttentionModeLabel='attentionSummaryMode'; ListAttentionModeLabel='attentionListMode'; TaskBubbleAttentionModeLabel='attentionTaskBubbleMode'; AttentionDurationLabel='attentionDuration';
         DotAttentionTitle='dotAttentionTitle'; DotAttentionHint='dotAttentionHint'; DotPatternLabel='dotPattern'; DotBrightnessLabel='dotBrightness'; DotSpeedLabel='dotSpeed';
@@ -781,6 +792,9 @@ function Apply-SettingsLanguage {
     $attentionErrorCheck.Content = [string]$settingsLocale.attentionAbortedOrError
     $attentionSettledCheck.Content = [string]$settingsLocale.attentionSettled
     $agentNotificationEnabledCheck.Content = [string]$settingsLocale.agentNotificationEnabled
+    $quotaGuardEnabledCheck.Content = [string]$settingsLocale.quotaGuardEnabled
+    $officialAllowanceEnabledCheck.Content = [string]$settingsLocale.officialAllowanceEnabled
+    $quotaGuardResetTemplatesButton.Content = [string]$settingsLocale.quotaGuardResetTemplates
     $dotAttentionEnabledCheck.Content = [string]$settingsLocale.dotAttentionEnabled
     $dotBreathingCheck.Content = [string]$settingsLocale.dotBreathing
     $openTaskOnDoubleClickCheck.Content = [string]$settingsLocale.openTaskOnDoubleClick
@@ -794,10 +808,14 @@ function Apply-SettingsLanguage {
     $settings.FindName('ListDetailDetailedItem').ToolTip = [string]$settingsLocale.cacheHitRateTooltip
     $themeImportButton.Content = [string]$settingsLocale.themeImportButton
     $attentionHelp.ToolTip = [string]$settingsLocale.attentionTooltip
+    $quotaGuardHelp.ToolTip = [string]$settingsLocale.quotaGuardTooltip
     $attentionCompletedCheck.ToolTip = [string]$settingsLocale.attentionCompletedTooltip
     $attentionErrorCheck.ToolTip = [string]$settingsLocale.attentionAbortedOrErrorTooltip
     $attentionSettledCheck.ToolTip = [string]$settingsLocale.attentionSettledTooltip
     $agentNotificationEnabledCheck.ToolTip = [string]$settingsLocale.agentNotificationTooltip
+    $quotaGuardEnabledCheck.ToolTip = [string]$settingsLocale.quotaGuardTooltip
+    $officialAllowanceEnabledCheck.ToolTip = [string]$settingsLocale.officialAllowanceTooltip
+    foreach ($control in @($quotaGuardPrepareFiveHourText,$quotaGuardPrepareWeeklyText,$quotaGuardHandoffFiveHourText,$quotaGuardHandoffWeeklyText)) { $control.ToolTip = [string]$settingsLocale.quotaGuardTooltip }
     foreach ($control in @($agentNotificationPermissionCombo,$agentNotificationModeCombo,$agentNotificationGlowPresetCombo,$agentNotificationIntensityCombo)) { $control.ToolTip = [string]$settingsLocale.agentNotificationTooltip }
     foreach ($control in @($summaryAttentionModeCombo,$listAttentionModeCombo,$taskBubbleAttentionModeCombo)) { $control.ToolTip = [string]$settingsLocale.attentionRoutingTooltip }
     $themeWorkshopDropZone.ToolTip = [string]$settingsLocale.themeWorkshopTooltip
@@ -3174,6 +3192,12 @@ function Sync-ControlsFromConfig {
         Select-ComboTag $agentNotificationGlowPresetCombo ([string]$config.agentNotifications.glowPreset)
         Select-ComboTag $agentNotificationIntensityCombo ([string]$config.agentNotifications.intensity)
         Select-ComboTag $agentNotificationDurationCombo ([string][int]$config.agentNotifications.durationSeconds)
+        $quotaGuardPrepareFiveHourText.Text = [string][int]$config.quotaGuard.prepareFiveHourPercent
+        $quotaGuardPrepareWeeklyText.Text = [string][int]$config.quotaGuard.prepareWeeklyPercent
+        $quotaGuardHandoffFiveHourText.Text = [string][int]$config.quotaGuard.handoffFiveHourPercent
+        $quotaGuardHandoffWeeklyText.Text = [string][int]$config.quotaGuard.handoffWeeklyPercent
+        $quotaGuardPrepareInstructionText.Text = if ([string]::IsNullOrWhiteSpace([string]$config.quotaGuard.prepareInstruction)) { [string]$settingsLocale.quotaGuardPrepareDefault } else { [string]$config.quotaGuard.prepareInstruction }
+        $quotaGuardHandoffInstructionText.Text = if ([string]::IsNullOrWhiteSpace([string]$config.quotaGuard.handoffInstruction)) { [string]$settingsLocale.quotaGuardHandoffDefault } else { [string]$config.quotaGuard.handoffInstruction }
         Select-ComboTag $transparencyModeCombo ([string]$config.transparencyMode)
         Select-ComboTag $idleIndicatorDelayCombo ([string][int]$config.behavior.idleIndicator.afterMinutes)
         Select-ComboTag $idleIndicatorLayoutCombo ([string]$config.behavior.idleIndicator.layout)
@@ -3201,6 +3225,8 @@ function Sync-ControlsFromConfig {
         $attentionErrorCheck.IsChecked = [bool]$config.attention.onAbortedOrError
         $attentionSettledCheck.IsChecked = [bool]$config.attention.onSettled
         $agentNotificationEnabledCheck.IsChecked = [bool]$config.agentNotifications.enabled
+        $quotaGuardEnabledCheck.IsChecked = [bool]$config.quotaGuard.enabled
+        $officialAllowanceEnabledCheck.IsChecked = [bool]$config.officialAllowance.enabled
         $dotAttentionEnabledCheck.IsChecked = [bool]$config.attention.dotEnabled
         $dotBreathingCheck.IsChecked = [bool]$config.attention.dotBreathing
         $openTaskOnDoubleClickCheck.IsChecked = [bool]$config.behavior.openTaskOnDoubleClick
@@ -3298,6 +3324,13 @@ function Apply-ControlsToConfig {
     $agentNotificationGlowPreset = Get-ComboTag $agentNotificationGlowPresetCombo
     $agentNotificationIntensity = Get-ComboTag $agentNotificationIntensityCombo
     $agentNotificationDuration = Get-ComboTag $agentNotificationDurationCombo
+    $quotaGuardRawValues = @($quotaGuardPrepareFiveHourText.Text,$quotaGuardPrepareWeeklyText.Text,$quotaGuardHandoffFiveHourText.Text,$quotaGuardHandoffWeeklyText.Text)
+    $quotaGuardValues = @($quotaGuardRawValues | ForEach-Object { if ([string]$_ -match '^\d{1,2}$') { [int]$_ } else { $null } })
+    $quotaGuardThresholdsValid = $quotaGuardValues.Count -eq 4 -and @($quotaGuardValues | Where-Object { $null -eq $_ -or $_ -lt 1 -or $_ -gt 99 }).Count -eq 0
+    $quotaGuardPrepareInstruction = ([string]$quotaGuardPrepareInstructionText.Text).Trim()
+    $quotaGuardHandoffInstruction = ([string]$quotaGuardHandoffInstructionText.Text).Trim()
+    if ($quotaGuardPrepareInstruction.Length -gt 1200) { $quotaGuardPrepareInstruction = $quotaGuardPrepareInstruction.Substring(0,1200) }
+    if ($quotaGuardHandoffInstruction.Length -gt 1200) { $quotaGuardHandoffInstruction = $quotaGuardHandoffInstruction.Substring(0,1200) }
     $transparencyMode = Get-ComboTag $transparencyModeCombo
     $idleIndicatorDelay = Get-ComboTag $idleIndicatorDelayCombo
     $idleIndicatorLayout = Get-ComboTag $idleIndicatorLayoutCombo
@@ -3338,6 +3371,18 @@ function Apply-ControlsToConfig {
     }
     if ($agentNotificationIntensity) { $config.agentNotifications.intensity = $agentNotificationIntensity }
     if ($agentNotificationDuration) { $config.agentNotifications.durationSeconds = [int]$agentNotificationDuration }
+    if ($quotaGuardThresholdsValid) {
+        $config.quotaGuard.prepareFiveHourPercent = [int]$quotaGuardValues[0]
+        $config.quotaGuard.prepareWeeklyPercent = [int]$quotaGuardValues[1]
+        $config.quotaGuard.handoffFiveHourPercent = [Math]::Min([int]$quotaGuardValues[2], [int]$quotaGuardValues[0])
+        $config.quotaGuard.handoffWeeklyPercent = [Math]::Min([int]$quotaGuardValues[3], [int]$quotaGuardValues[1])
+        $quotaGuardPrepareFiveHourText.Text = [string][int]$config.quotaGuard.prepareFiveHourPercent
+        $quotaGuardPrepareWeeklyText.Text = [string][int]$config.quotaGuard.prepareWeeklyPercent
+        $quotaGuardHandoffFiveHourText.Text = [string][int]$config.quotaGuard.handoffFiveHourPercent
+        $quotaGuardHandoffWeeklyText.Text = [string][int]$config.quotaGuard.handoffWeeklyPercent
+    }
+    $config.quotaGuard.prepareInstruction = $quotaGuardPrepareInstruction
+    $config.quotaGuard.handoffInstruction = $quotaGuardHandoffInstruction
     if ($transparencyMode) { $config.transparencyMode = $transparencyMode }
     if ($idleIndicatorDelay) { $config.behavior.idleIndicator.afterMinutes = [int]$idleIndicatorDelay }
     if ($idleIndicatorLayout) { $config.behavior.idleIndicator.layout = $idleIndicatorLayout }
@@ -3366,6 +3411,8 @@ function Apply-ControlsToConfig {
     $config.attention.onAbortedOrError = [bool]$attentionErrorCheck.IsChecked
     $config.attention.onSettled = [bool]$attentionSettledCheck.IsChecked
     $config.agentNotifications.enabled = [bool]$agentNotificationEnabledCheck.IsChecked
+    $config.quotaGuard.enabled = [bool]$quotaGuardEnabledCheck.IsChecked
+    $config.officialAllowance.enabled = [bool]$officialAllowanceEnabledCheck.IsChecked
     $config.attention.dotEnabled = [bool]$dotAttentionEnabledCheck.IsChecked
     $config.attention.dotBreathing = [bool]$dotBreathingCheck.IsChecked
     $config.behavior.openTaskOnDoubleClick = [bool]$openTaskOnDoubleClickCheck.IsChecked
@@ -4152,7 +4199,7 @@ $liveControls = @(
     $agentNotificationPermissionCombo,$agentNotificationModeCombo,$agentNotificationIntensityCombo,$agentNotificationDurationCombo,
     $idleIndicatorDelayCombo,$idleIndicatorLayoutCombo,$idleIndicatorTaskStyleCombo,
     $alwaysOnTopCheck,$mousePassthroughCheck,$statusDotCheck,$animateCheck,$autoSplitCheck,$sourceDesktopCheck,$sourceVsCodeCheck,$sourceDefaultCliCheck,$sourceDeepSeekCliCheck,
-    $attentionCompletedCheck,$attentionErrorCheck,$attentionSettledCheck,$dotAttentionEnabledCheck,$dotBreathingCheck,$agentNotificationEnabledCheck,
+    $attentionCompletedCheck,$attentionErrorCheck,$attentionSettledCheck,$dotAttentionEnabledCheck,$dotBreathingCheck,$agentNotificationEnabledCheck,$quotaGuardEnabledCheck,$officialAllowanceEnabledCheck,
     $openTaskOnDoubleClickCheck,$idleIndicatorEnabledCheck,$idleIndicatorBubblesCheck
 ) + @($fieldControls.GetEnumerator() | Where-Object { [string]$_.Key -ne 'context' } | ForEach-Object { $_.Value }) + @($bubbleFieldControls.Values)
 foreach ($control in $liveControls) {
@@ -4193,8 +4240,14 @@ $agentNotificationGlowPresetCombo.Add_SelectionChanged({
 $fontSizeSlider.Add_ValueChanged({ Apply-SliderPreview 'fontSize' })
 $radiusSlider.Add_ValueChanged({ Apply-SliderPreview 'cornerRadius' })
 $opacitySlider.Add_ValueChanged({ Apply-SliderPreview 'opacity' })
-foreach ($textBox in @($backgroundText,$foregroundText,$accentText,$agentNotificationColorText,$activeSecondsText,$idleSecondsText,$errorHoldSecondsText,$pricingPathText)) { $textBox.Add_LostFocus({ Apply-ControlsToConfig }) }
+foreach ($textBox in @($backgroundText,$foregroundText,$accentText,$agentNotificationColorText,$activeSecondsText,$idleSecondsText,$errorHoldSecondsText,$pricingPathText,$quotaGuardPrepareFiveHourText,$quotaGuardPrepareWeeklyText,$quotaGuardHandoffFiveHourText,$quotaGuardHandoffWeeklyText,$quotaGuardPrepareInstructionText,$quotaGuardHandoffInstructionText)) { $textBox.Add_LostFocus({ Apply-ControlsToConfig }) }
 foreach ($textBox in @($statusTextControls.Values)) { $textBox.Add_LostFocus({ Apply-ControlsToConfig -StatusColorsChanged }) }
+
+$quotaGuardResetTemplatesButton.Add_Click({
+    $quotaGuardPrepareInstructionText.Text = [string]$settingsLocale.quotaGuardPrepareDefault
+    $quotaGuardHandoffInstructionText.Text = [string]$settingsLocale.quotaGuardHandoffDefault
+    Apply-ControlsToConfig
+})
 
 foreach($pair in @(@($backgroundColorButton,$backgroundText),@($foregroundColorButton,$foregroundText),@($accentColorButton,$accentText),@($agentNotificationColorButton,$agentNotificationColorText))){
     $pair[0].Tag=$pair[1]

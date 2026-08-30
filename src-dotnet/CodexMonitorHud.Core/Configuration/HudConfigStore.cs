@@ -158,6 +158,19 @@ public static partial class HudConfigStore
             SetString(result, "#FF7C3AED", "agentNotifications", "color");
         }
 
+        SetBool(result, GetBool(result, false, "quotaGuard", "enabled"), "quotaGuard", "enabled");
+        var prepareFiveHour = Math.Clamp(GetInt(result, 15, "quotaGuard", "prepareFiveHourPercent"), 1, 99);
+        var prepareWeekly = Math.Clamp(GetInt(result, 10, "quotaGuard", "prepareWeeklyPercent"), 1, 99);
+        var handoffFiveHour = Math.Min(Math.Clamp(GetInt(result, 5, "quotaGuard", "handoffFiveHourPercent"), 1, 99), prepareFiveHour);
+        var handoffWeekly = Math.Min(Math.Clamp(GetInt(result, 3, "quotaGuard", "handoffWeeklyPercent"), 1, 99), prepareWeekly);
+        SetInt(result, prepareFiveHour, "quotaGuard", "prepareFiveHourPercent");
+        SetInt(result, prepareWeekly, "quotaGuard", "prepareWeeklyPercent");
+        SetInt(result, handoffFiveHour, "quotaGuard", "handoffFiveHourPercent");
+        SetInt(result, handoffWeekly, "quotaGuard", "handoffWeeklyPercent");
+        SetString(result, Trim(GetString(result, string.Empty, "quotaGuard", "prepareInstruction"), 1200), "quotaGuard", "prepareInstruction");
+        SetString(result, Trim(GetString(result, string.Empty, "quotaGuard", "handoffInstruction"), 1200), "quotaGuard", "handoffInstruction");
+        SetBool(result, GetBool(result, false, "officialAllowance", "enabled"), "officialAllowance", "enabled");
+
         SetAllowed(result, "uniform", new[] { "uniform", "layered", "focus" }, "transparencyMode");
         SetDouble(result, Math.Clamp(GetDouble(result, 0.97, "opacity"), 0, 1), "opacity");
         SetAllowed(result, "solid", new[] { "solid", "gradient", "image" }, "themeStyle", "surface");
@@ -289,6 +302,8 @@ public static partial class HudConfigStore
         var node = GetNode(root, path);
         return node is JsonValue value && value.TryGetValue<string>(out var text) ? text : fallback;
     }
+
+    private static string Trim(string value, int maximum) => value.Length <= maximum ? value : value[..maximum];
 
     private static int GetInt(JsonObject root, int fallback, params string[] path)
     {

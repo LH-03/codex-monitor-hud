@@ -642,11 +642,22 @@ internal sealed class MainHudView : IDisposable
                 locale,
                 now,
                 !_detached.Contains(state.Path));
+            var hasAgentNotice = HasVisibleAgentNotice(state, now) && !_detached.Contains(state.Path);
             var metricsText = new TextBlock
             {
                 Text = listMetrics,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = _brushes.Create(settings.Muted, "#FF667085", BrushRole.Secondary, settings, status, false),
+                // An agent-authored notice is an instruction for the human, not
+                // background telemetry.  Give the whole notice line the same
+                // high-contrast treatment as metric values while it is visible.
+                Foreground = _brushes.Create(
+                    hasAgentNotice ? settings.Foreground : settings.Muted,
+                    hasAgentNotice ? "#FFFFFFFF" : "#FF667085",
+                    hasAgentNotice ? BrushRole.Primary : BrushRole.Secondary,
+                    settings,
+                    status,
+                    hasAgentNotice),
+                FontWeight = hasAgentNotice ? FontWeights.SemiBold : FontWeights.Normal,
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
             metricsText.ToolTip = metricsText.Text;
@@ -899,6 +910,7 @@ internal sealed class MainHudView : IDisposable
         DateTimeOffset now)
     {
         var hasAttention = state.AttentionUntil > now;
+        var hasAgentNotice = HasVisibleAgentNotice(state, now) && !_detached.Contains(state.Path);
         var terminalExitActive = state.TerminalExitStarted && !state.TerminalExitCompleted && state.TerminalExitUntil > now;
         if (!hasAttention && !terminalExitActive && _animatedListSurfaces.Remove(state.Path))
         {
@@ -918,7 +930,14 @@ internal sealed class MainHudView : IDisposable
             now,
             !_detached.Contains(state.Path));
         live.Metrics.ToolTip = live.Metrics.Text;
-        live.Metrics.Foreground = _brushes.Create(settings.Muted, "#FF667085", BrushRole.Secondary, settings, status, hasAttention);
+        live.Metrics.Foreground = _brushes.Create(
+            hasAgentNotice ? settings.Foreground : settings.Muted,
+            hasAgentNotice ? "#FFFFFFFF" : "#FF667085",
+            hasAgentNotice ? BrushRole.Primary : BrushRole.Secondary,
+            settings,
+            status,
+            hasAgentNotice);
+        live.Metrics.FontWeight = hasAgentNotice ? FontWeights.SemiBold : FontWeights.Normal;
         if (live.ContextText is not null)
         {
             live.ContextText.Text = state.Snapshot is null
@@ -1369,36 +1388,50 @@ internal sealed class MainHudView : IDisposable
         {
             try
             {
+                // Keep the pointer's original in-window offset.  DragMove can
+                // stop a transparent WPF window just inside a work-area edge;
+                // restoring the exact pointer-derived coordinate afterwards
+                // preserves free dragging while still allowing the visible
+                // shell (inside the transparent chrome) to reach every edge.
+                var grabPoint = args.GetPosition(Window);
                 Window.DragMove();
-                var screen = GetCurrentScreenBounds();
-                var screenRight = screen.Left + screen.Width;
-                var screenBottom = screen.Top + screen.Height;
-                var pixelBounds = Forms.Screen.FromHandle(_handle).Bounds;
-                if (NativeMethods.GetCursorPos(out var cursor) &&
-                    Window.Left >= screen.Left && cursor.X <= pixelBounds.Left + PhysicalEdgeTolerance)
-                {
-                    Window.Left = screen.Left - MainChromeInset;
-                }
-                else if (cursor.X >= pixelBounds.Right - PhysicalEdgeTolerance &&
-                         Window.Left + Window.ActualWidth <= screenRight)
-                {
-                    Window.Left = screenRight - Window.ActualWidth + MainChromeInset;
-                }
-                if (cursor.Y <= pixelBounds.Top + PhysicalEdgeTolerance && Window.Top >= screen.Top)
-                {
-                    Window.Top = screen.Top - MainChromeInset;
-                }
-                else if (cursor.Y >= pixelBounds.Bottom - PhysicalEdgeTolerance &&
-                         Window.Top + Window.ActualHeight <= screenBottom)
-                {
-                    Window.Top = screenBottom - Window.ActualHeight + MainChromeInset;
-                }
+                RestoreFreeDragPosition(grabPoint);
                 PositionChanged?.Invoke(Window.Left + MainChromeInset, Window.Top + MainChromeInset);
             }
             catch (InvalidOperationException)
             {
             }
         }
+    }
+
+    private void RestoreFreeDragPosition(Point grabPoint)
+    {
+        if (!NativeMethods.GetCursorPos(out var cursor))
+        {
+            return;
+        }
+
+        var pixelBounds = Forms.Screen.FromPoint(new System.Drawing.Point(cursor.X, cursor.Y)).Bounds;
+        var dpi = VisualTreeHelper.GetDpi(Window);
+        var screen = new Rect(
+            pixelBounds.Left / dpi.DpiScaleX,
+            pixelBounds.Top / dpi.DpiScaleY,
+            pixelBounds.Width / dpi.DpiScaleX,
+            pixelBounds.Height / dpi.DpiScaleY);
+        var desiredLeft = screen.Left + (cursor.X - pixelBounds.Left) / dpi.DpiScaleX - grabPoint.X;
+        var desiredTop = screen.Top + (cursor.Y - pixelBounds.Top) / dpi.DpiScaleY - grabPoint.Y;
+        var point = HudPlacement.ClampCustom(
+            desiredLeft,
+            desiredTop,
+            screen.Left,
+            screen.Top,
+            screen.Width,
+            screen.Height,
+            Math.Max(1, Window.ActualWidth),
+            Math.Max(1, Window.ActualHeight),
+            MainChromeInset);
+        Window.Left = point.Left;
+        Window.Top = point.Top;
     }
 
     private Button NewIconButton(string geometry, string color, double size, Thickness margin, string tooltip)
@@ -1495,6 +1528,9 @@ internal sealed class MainHudView : IDisposable
         }
         return $"\u2726 {Get(locale, "agentNotificationBadge")} #{state.Number}  {state.AgentNoticeText}  \u00B7  {metrics}";
     }
+
+    private static bool HasVisibleAgentNotice(SessionState state, DateTimeOffset now) =>
+        state.AgentNoticeUntil > now && !string.IsNullOrWhiteSpace(state.AgentNoticeText);
 
     private static string GetDisplayName(SessionState state, HudSettings settings, IReadOnlyDictionary<string, string> locale, bool includeNumber = false)
     {
@@ -1685,7 +1721,6 @@ internal sealed class MainHudView : IDisposable
 
     private const double MainChromeInset = 18;
     private const double TaskBubbleChromeInset = 16;
-    private const double PhysicalEdgeTolerance = 1;
 
     private const string DetachGeometry = "M1.5,4.5 L1.5,10.5 L7.5,10.5 M5.2,1.5 L10.5,1.5 L10.5,6.8 M10.2,1.8 L4.5,7.5";
     private const string MergeGeometry = "M1.5,1.5 L10.5,1.5 L10.5,10.5 L1.5,10.5 Z M9.1,2.9 L4.1,7.9 M4.1,4.8 L4.1,7.9 L7.2,7.9";

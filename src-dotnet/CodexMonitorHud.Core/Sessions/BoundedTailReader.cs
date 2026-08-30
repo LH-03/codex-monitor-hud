@@ -23,7 +23,8 @@ public static class BoundedTailReader
     {
         var lines = ReadLines(path, tailLines);
         HudRecord? usage = null;
-        HudRecord? allowance = null;
+        HudRecord? latestWeeklyAllowance = null;
+        HudRecord? latestFiveHourAllowance = null;
         var model = string.Empty;
         var workspace = string.Empty;
         var lifecycleSeen = false;
@@ -51,10 +52,20 @@ public static class BoundedTailReader
                 }
             }
 
-            if (allowance is null && item.Kind is HudRecordKind.Usage or HudRecordKind.Allowance &&
-                (item.WeeklyRemainingPercent.HasValue || item.FiveHourRemainingPercent.HasValue))
+            if (item.Kind is HudRecordKind.Usage or HudRecordKind.Allowance)
             {
-                allowance = item;
+                // Codex can emit the two account windows in separate records.
+                // Keep the newest observed value for each window instead of
+                // letting a later weekly-only refresh erase the 5-hour value.
+                if (latestWeeklyAllowance is null && item.WeeklyRemainingPercent.HasValue)
+                {
+                    latestWeeklyAllowance = item;
+                }
+
+                if (latestFiveHourAllowance is null && item.FiveHourRemainingPercent.HasValue)
+                {
+                    latestFiveHourAllowance = item;
+                }
             }
 
             if (usage is null && item.Kind == HudRecordKind.Usage)
@@ -75,7 +86,7 @@ public static class BoundedTailReader
                 }
             }
 
-            if (lifecycleSeen && usage is not null && allowance is not null &&
+            if (lifecycleSeen && usage is not null && latestWeeklyAllowance is not null && latestFiveHourAllowance is not null &&
                 !string.IsNullOrWhiteSpace(model) && !string.IsNullOrWhiteSpace(workspace))
             {
                 break;
@@ -95,14 +106,22 @@ public static class BoundedTailReader
             TerminalTimestamp = terminalTimestamp,
             TerminalSilent = terminalSilent
         };
-        return allowance is null
-            ? snapshot
-            : snapshot with
-            {
-                AllowanceTimestamp = allowance.AllowanceTimestamp,
-                WeeklyRemainingPercent = allowance.WeeklyRemainingPercent,
-                FiveHourRemainingPercent = allowance.FiveHourRemainingPercent
-            };
+        if (latestWeeklyAllowance is null && latestFiveHourAllowance is null)
+        {
+            return snapshot;
+        }
+
+        var allowanceTimestamp = new[] { latestWeeklyAllowance?.AllowanceTimestamp, latestFiveHourAllowance?.AllowanceTimestamp }
+            .Where(static timestamp => timestamp.HasValue)
+            .Select(static timestamp => timestamp!.Value)
+            .DefaultIfEmpty()
+            .Max();
+        return snapshot with
+        {
+            AllowanceTimestamp = allowanceTimestamp == default ? null : allowanceTimestamp,
+            WeeklyRemainingPercent = latestWeeklyAllowance?.WeeklyRemainingPercent,
+            FiveHourRemainingPercent = latestFiveHourAllowance?.FiveHourRemainingPercent
+        };
     }
 
     public static IReadOnlyList<string> ReadLines(string path, int tailLines = DefaultTailLines)

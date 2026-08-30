@@ -298,6 +298,15 @@ function Get-HudConfig {
     $result.agentNotifications.enabled=[bool]$result.agentNotifications.enabled
     $result.agentNotifications.durationSeconds=[Math]::Max(4,[Math]::Min(60,[int]$result.agentNotifications.durationSeconds))
     try { [void][Windows.Media.ColorConverter]::ConvertFromString([string]$result.agentNotifications.color) } catch { $result.agentNotifications.color='#FF7C3AED' }
+    $result.quotaGuard.enabled = [bool]$result.quotaGuard.enabled
+    $result.quotaGuard.prepareFiveHourPercent = [Math]::Max(1,[Math]::Min(99,[int]$result.quotaGuard.prepareFiveHourPercent))
+    $result.quotaGuard.prepareWeeklyPercent = [Math]::Max(1,[Math]::Min(99,[int]$result.quotaGuard.prepareWeeklyPercent))
+    $result.quotaGuard.handoffFiveHourPercent = [Math]::Min([Math]::Max(1,[Math]::Min(99,[int]$result.quotaGuard.handoffFiveHourPercent)),[int]$result.quotaGuard.prepareFiveHourPercent)
+    $result.quotaGuard.handoffWeeklyPercent = [Math]::Min([Math]::Max(1,[Math]::Min(99,[int]$result.quotaGuard.handoffWeeklyPercent)),[int]$result.quotaGuard.prepareWeeklyPercent)
+    $result.quotaGuard.prepareInstruction = ([string]$result.quotaGuard.prepareInstruction).Trim()
+    $result.quotaGuard.handoffInstruction = ([string]$result.quotaGuard.handoffInstruction).Trim()
+    if ($result.quotaGuard.prepareInstruction.Length -gt 1200) { $result.quotaGuard.prepareInstruction = $result.quotaGuard.prepareInstruction.Substring(0,1200) }
+    if ($result.quotaGuard.handoffInstruction.Length -gt 1200) { $result.quotaGuard.handoffInstruction = $result.quotaGuard.handoffInstruction.Substring(0,1200) }
     if (@('uniform','layered','focus') -notcontains [string]$result.transparencyMode) { $result.transparencyMode = 'uniform' }
     $result.opacity = [Math]::Max(0.0, [Math]::Min(1.0, [double]$result.opacity))
     if (@('solid','gradient','image') -notcontains [string]$result.themeStyle.surface) { $result.themeStyle.surface = 'solid' }
