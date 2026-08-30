@@ -162,7 +162,7 @@ internal static class Program
             var result = JsonSerializer.Serialize(new
             {
                 product = "Codex Monitor HUD",
-                version = "3.2.0",
+                version = "3.2.1",
                 framework = Environment.Version.ToString(),
                 config = "ok",
                 xaml = "ok",

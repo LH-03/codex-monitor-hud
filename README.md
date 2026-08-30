@@ -91,6 +91,6 @@ macOS support has been intentionally dropped from this project. macOS users are 
 
 ## Project status
 
-`3.2.0` adds an opt-in, account-switch-safe official local allowance source plus editable one-shot handoff protection, while retaining Desktop, VS Code, normal CLI, and isolated DeepSeek CLI monitoring. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI, Microsoft, or DeepSeek.
+`3.2.1` keeps the allowance guard and multi-client monitoring from 3.2.0, and repairs the Windows Release path so it uses the bundled runtime instead of unexpectedly building source on a user's machine. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI, Microsoft, or DeepSeek.
 
 MIT License.

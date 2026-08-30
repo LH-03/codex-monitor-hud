@@ -343,7 +343,7 @@ try {
 
     $logText = Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimeLog
     if ($HostMode -eq 'compiled') {
-        if ($logText -notmatch 'Compiled HUD v3\.1\.0 starting\.') { throw 'Compiled HUD startup marker is missing.' }
+        if ($logText -notmatch 'Compiled HUD v3\.2\.1 starting\.') { throw 'Compiled HUD startup marker is missing.' }
         if ($logText -match 'Unhandled dispatcher exception:|Unhandled domain exception:|Fatal startup error:') { throw 'Compiled runtime log contains an unhandled HUD error.' }
     } else {
         if ($logText -notmatch 'HUD Loaded event completed\.') { throw 'HUD Loaded completion marker is missing.' }

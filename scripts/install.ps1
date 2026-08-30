@@ -2,7 +2,10 @@ param(
     [string]$SourceRoot = (Split-Path -Parent $PSScriptRoot),
     [ValidateSet('zh-CN','en')][string]$DefaultLanguage = 'en',
     [ValidatePattern('^\d+\.\d+\.\d+$')][string]$RollbackVersion,
-    [string]$PerformanceMetricsRoot
+    [string]$PerformanceMetricsRoot,
+    [switch]$UseBundledRuntime,
+    [switch]$SkipLaunch,
+    [switch]$SkipShortcuts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -201,7 +204,9 @@ if (-not [string]::IsNullOrWhiteSpace($RollbackVersion)) {
         $rollbackTransaction = Switch-InstalledTree $rollbackStage
         try {
             Update-PersonalMarketplace
-            & (Join-Path $targetRoot 'scripts\create-shortcuts.ps1') -TargetRoot $targetRoot
+            if (-not $SkipShortcuts) {
+                & (Join-Path $targetRoot 'scripts\create-shortcuts.ps1') -TargetRoot $targetRoot
+            }
             Clear-HudStopSignals
             & (Join-Path $targetRoot 'scripts\start.ps1') -Settings
             Complete-InstalledTreeSwitch $rollbackTransaction
@@ -225,13 +230,13 @@ $compiledApp = Join-Path $SourceRoot 'runtime\win-x64\app\CodexMonitorHud.dll'
 $buildScript = Join-Path $SourceRoot 'scripts\build-dotnet.ps1'
 $privateSdk = Join-Path $SourceRoot 'private\toolchain\dotnet\dotnet.exe'
 $systemSdk = Get-Command dotnet -ErrorAction SilentlyContinue
-if ((Test-Path -LiteralPath $buildScript) -and ((Test-Path -LiteralPath $privateSdk) -or $null -ne $systemSdk)) {
+if (-not $UseBundledRuntime -and (Test-Path -LiteralPath $buildScript) -and ((Test-Path -LiteralPath $privateSdk) -or $null -ne $systemSdk)) {
     # A staged runtime may belong to an earlier source edit. Developer installs
     # always rebuild when an SDK is available; installed copies can still be
     # repaired or rolled back without requiring a global SDK.
     & $buildScript -Configuration Release
 } elseif (-not (Test-Path -LiteralPath $compiledApp)) {
-    throw 'The compiled v3.2.0 runtime is missing and no .NET 10 SDK is available to build it.'
+    throw 'The compiled v3.2.1 runtime is missing and no .NET 10 SDK is available to build it.'
 }
 
 $stageRoot = Join-Path $pluginsRoot ('.codex-monitor-hud-stage-' + [Guid]::NewGuid().ToString('N'))
@@ -247,7 +252,7 @@ try {
     & $stageDotnet $stageApp --plugin-root $stageRoot --health-check $healthPath
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $healthPath)) { throw 'Staged install health check failed.' }
     $health = Get-Content -Raw -Encoding UTF8 -LiteralPath $healthPath | ConvertFrom-Json
-    if ([string]$health.version -ne '3.2.0' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
+    if ([string]$health.version -ne '3.2.1' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
         throw ('Staged install health check returned an invalid result: ' + ($health | ConvertTo-Json -Compress))
     }
     & (Join-Path $stageRoot 'scripts\test.ps1') -TestOutputRoot (Join-Path $validationRoot 'static')
@@ -278,9 +283,13 @@ try {
                 Remove-Item -LiteralPath $settingsTemporary -Force -ErrorAction SilentlyContinue
             }
         }
-        & (Join-Path $targetRoot 'scripts\create-shortcuts.ps1') -TargetRoot $targetRoot
+        if (-not $SkipShortcuts) {
+            & (Join-Path $targetRoot 'scripts\create-shortcuts.ps1') -TargetRoot $targetRoot
+        }
         Clear-HudStopSignals
-        & (Join-Path $targetRoot 'scripts\start.ps1') -Settings
+        if (-not $SkipLaunch) {
+            & (Join-Path $targetRoot 'scripts\start.ps1') -Settings
+        }
         Complete-InstalledTreeSwitch $installTransaction
     } catch {
         if ($settingsCreated) { Remove-Item -LiteralPath $settingsPath -Force -ErrorAction SilentlyContinue }

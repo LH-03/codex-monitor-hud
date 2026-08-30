@@ -45,5 +45,9 @@ $windowsInstaller = Get-Content -LiteralPath (Join-Path $root 'scripts/install-w
 foreach ($required in @('checksum-mismatch','releaseAvailable','RollbackVersion','Invoke-WebRequest','SHA256')) {
     Assert-Protocol ($windowsInstaller.Contains($required)) "Windows repository installer contract marker $required"
 }
+$releaseInstaller = Get-Content -LiteralPath (Join-Path $root 'scripts\install.ps1') -Encoding UTF8 -Raw
+Assert-Protocol ($windowsInstaller.Contains('-UseBundledRuntime')) 'verified Release route must use its bundled runtime'
+Assert-Protocol ($releaseInstaller.Contains('[switch]$UseBundledRuntime')) 'installer must support a bundled-runtime Release route'
+Assert-Protocol ($releaseInstaller.Contains('-not $UseBundledRuntime')) 'bundled-runtime Release route must skip source builds'
 
 Write-Output 'Deterministic Windows repository install protocol: OK (prompts, routes, checksum stop, settings, repair, rollback)'

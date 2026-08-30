@@ -11,5 +11,5 @@ $env:DOTNET_NOLOGO = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:AVALONIA_TELEMETRY_OPTOUT = '1'
 $env:NUGET_PACKAGES = Join-Path $toolHome 'nuget'
-& $dotnet run --project (Join-Path $root 'tests-dotnet\CodexMonitorHud.Core.Tests\CodexMonitorHud.Core.Tests.csproj') -c $Configuration
+& $dotnet run --project (Join-Path $root 'tests-dotnet\CodexMonitorHud.Core.Tests\CodexMonitorHud.Core.Tests.csproj') -c $Configuration -- $root
 if ($LASTEXITCODE -ne 0) { throw "Core tests failed with exit code $LASTEXITCODE" }

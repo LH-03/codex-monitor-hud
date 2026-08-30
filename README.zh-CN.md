@@ -91,6 +91,6 @@ Windows Release 会随包携带一套私有 .NET/WPF 运行时，因此无需用
 
 ## 当前状态
 
-`3.2.0` 新增可选、可安全处理账号切换的官方本地额度来源，以及可编辑、只触发一次的额度收尾保护；桌面端、VS Code、普通 CLI 和隔离 DeepSeek CLI 监控仍完整保留。可选成本显示仅使用离线的标准 API 标价快照，不是 Codex 积分或订阅账单计算。这是独立、非官方项目，与 OpenAI、Microsoft 或 DeepSeek 均没有隶属或背书关系。
+`3.2.1` 保留 3.2.0 的额度收尾保护和多端监控，并修复 Windows Release 安装路径：即使机器装有 .NET SDK，也会使用随包运行时，不会意外在用户机器上构建源码。可选成本显示仅使用离线的标准 API 标价快照，不是 Codex 积分或订阅账单计算。这是独立、非官方项目，与 OpenAI、Microsoft 或 DeepSeek 均没有隶属或背书关系。
 
 MIT License.

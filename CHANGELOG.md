@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.1 - Windows Release installer repair
+
+- Make the verified Windows Release install use its bundled private runtime even when a system .NET SDK is present, rather than unexpectedly rebuilding source during installation.
+- Pass the source root explicitly to core tests so a checked Release package can be installed from any download or extraction folder without a false “repository root” failure.
+
 ## 3.2.0 - reliable allowance guard
 
 - Add an opt-in official local Codex allowance source for the normal profile. It reads only the 5-hour and weekly values through the already signed-in local Codex client; it never reads conversation text, provider configuration, or credentials.

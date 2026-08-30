@@ -56,7 +56,10 @@ try {
             Where-Object { $_.FullName -match '[\\/]scripts[\\/]install\.ps1$' } |
             Select-Object -First 1
         if ($null -eq $candidateInstaller) { throw 'status=failed reason=release-layout' }
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $candidateInstaller.FullName -DefaultLanguage $DefaultLanguage
+        # A verified Release already contains its private runtime. Do not turn a
+        # user installation into a source build merely because an SDK happens
+        # to be installed on that machine.
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $candidateInstaller.FullName -DefaultLanguage $DefaultLanguage -UseBundledRuntime
     } else {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\install.ps1') -DefaultLanguage $DefaultLanguage
     }
