@@ -255,20 +255,8 @@ try {
     if ([string]$health.version -ne '3.2.2' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
         throw ('Staged install health check returned an invalid result: ' + ($health | ConvertTo-Json -Compress))
     }
-    & (Join-Path $stageRoot 'scripts\test.ps1') -TestOutputRoot (Join-Path $validationRoot 'static')
-    $performanceArguments = @{
-        TaskCount = 12
-        ChurnCycles = 1
-        TestOutputRoot = Join-Path $validationRoot 'runtime'
-    }
-    if (-not [string]::IsNullOrWhiteSpace($PerformanceMetricsRoot)) {
-        $performanceArguments.ExistingMetricsRoot = [IO.Path]::GetFullPath($PerformanceMetricsRoot)
-    }
-    # The performance fixture starts short-lived HUD processes. Run it from
-    # the verified source tree so none can hold the staged tree open when the
-    # transactional switch below moves that tree into place.
-    & (Join-Path $SourceRoot 'scripts\compare-runtime-performance.ps1') @performanceArguments
-
+    # Full static tests are a source-tree/release gate.  A user install only
+    # needs the staged runtime health check above before the atomic switch.
     Assert-MarketplaceReadable
     $installTransaction = Switch-InstalledTree $stageRoot
     try {

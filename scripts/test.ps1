@@ -307,7 +307,7 @@ if ($installText -notmatch '\[switch\]\$UseBundledRuntime' -or $installText -not
 if ($releaseText -notmatch 'SHA256') { throw 'Release package checksum generation is missing.' }
 if ([string]$installManifest.platforms.'windows-x64'.asset -ne 'CodexMonitorHUD-windows-x64.zip' -or $releaseText -notmatch [regex]::Escape("'CodexMonitorHUD-windows-x64.zip'")) { throw 'Release asset name and Windows install manifest are not aligned.' }
 if ($installText -notmatch 'DefaultLanguage' -or $installText -notmatch 'Test-Path -LiteralPath \$settingsPath') { throw 'First-install prompt-language selection or upgrade-preservation guard is missing.' }
-foreach ($required in @('RollbackVersion','Switch-InstalledTree','.codex-monitor-hud-stage-','.codex-monitor-hud-rollback-','compare-runtime-performance.ps1',"Join-Path `$SourceRoot 'scripts\compare-runtime-performance.ps1'")) {
+foreach ($required in @('RollbackVersion','Switch-InstalledTree','.codex-monitor-hud-stage-','.codex-monitor-hud-rollback-','Staged install health check failed.')) {
     if ($installText -notmatch [regex]::Escape($required)) { throw "Transactional install or rollback path '$required' is missing." }
 }
 foreach ($required in @('Clear-HudStopSignals','manual-exit.signal','exit.signal')) {
