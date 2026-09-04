@@ -4,7 +4,7 @@
 
 - Add `gpt-6-astra` to the bundled API-equivalent pricing snapshot and refresh the current GPT-5.6 Sol, Terra, and Luna standard text-token prices.
 - Make signed-in official local allowance reading the fixed source; a Pro account with no 5-hour window keeps its weekly value while the unavailable window shows `--`.
-- Keep installer performance checks out of the staged tree so their child processes cannot prevent the transactional switch.
+- Keep developer static and performance checks in the release workflow, while user installation validates the staged runtime before its transactional switch.
 
 ## 3.2.1 - Windows Release installer repair
 
