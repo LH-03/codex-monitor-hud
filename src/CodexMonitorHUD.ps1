@@ -482,7 +482,6 @@ $agentNotificationDurationCombo = Find-Control $settings 'AgentNotificationDurat
 $agentNotificationColorText = Find-Control $settings 'AgentNotificationColorText'
 $agentNotificationColorButton = Find-Control $settings 'AgentNotificationColorButton'
 $quotaGuardEnabledCheck = Find-Control $settings 'QuotaGuardEnabledCheck'
-$officialAllowanceEnabledCheck = Find-Control $settings 'OfficialAllowanceEnabledCheck'
 $quotaGuardPrepareFiveHourText = Find-Control $settings 'QuotaGuardPrepareFiveHourText'
 $quotaGuardPrepareWeeklyText = Find-Control $settings 'QuotaGuardPrepareWeeklyText'
 $quotaGuardHandoffFiveHourText = Find-Control $settings 'QuotaGuardHandoffFiveHourText'
@@ -590,7 +589,7 @@ foreach ($name in @(
     'MousePassthroughHint','StatusPalettesTitle','StatusPalettesHint','StatusPaletteCodexMicroSource','MultiTaskTitle','MultiTaskExplanation',
     'DisplayModeLabel','TaskNameModeLabel','MaxSplitLabel','NumberCooldownLabel','ListFieldsTitle','ListDetailHint','TaskBubbleFieldsTitle','TaskBubbleResizeHint',
     'ListDensityLabel',
-    'ListStyleLabel','AgentNotificationTitle','AgentNotificationHint','AgentNotificationPermissionLabel','AgentNotificationModeLabel','AgentNotificationGlowPresetLabel','AgentNotificationIntensityLabel','AgentNotificationDurationLabel','AgentNotificationColorLabel','QuotaGuardTitle','QuotaGuardHint','OfficialAllowanceEnabledCheck','QuotaGuardThresholdHint','QuotaGuardPrepareLabel','QuotaGuardPrepareSubLabel','QuotaGuardHandoffLabel','QuotaGuardHandoffSubLabel','QuotaGuardFiveHourLabel','QuotaGuardFiveHourLabel2','QuotaGuardWeeklyShortLabel','QuotaGuardWeeklyShortLabel2','QuotaGuardTemplatesTitle','QuotaGuardTemplatesHint','QuotaGuardPrepareInstructionLabel','QuotaGuardHandoffInstructionLabel',
+    'ListStyleLabel','AgentNotificationTitle','AgentNotificationHint','AgentNotificationPermissionLabel','AgentNotificationModeLabel','AgentNotificationGlowPresetLabel','AgentNotificationIntensityLabel','AgentNotificationDurationLabel','AgentNotificationColorLabel','QuotaGuardTitle','QuotaGuardHint','QuotaGuardThresholdHint','QuotaGuardPrepareLabel','QuotaGuardPrepareSubLabel','QuotaGuardHandoffLabel','QuotaGuardHandoffSubLabel','QuotaGuardFiveHourLabel','QuotaGuardFiveHourLabel2','QuotaGuardWeeklyShortLabel','QuotaGuardWeeklyShortLabel2','QuotaGuardTemplatesTitle','QuotaGuardTemplatesHint','QuotaGuardPrepareInstructionLabel','QuotaGuardHandoffInstructionLabel',
     'AttentionTitle','AttentionHint','AttentionTriggersTitle','AttentionSurfacesTitle','SummaryAttentionModeLabel','ListAttentionModeLabel','TaskBubbleAttentionModeLabel','AttentionDurationLabel',
     'DotAttentionTitle','DotAttentionHint','DotPatternLabel','DotBrightnessLabel','DotSpeedLabel',
     'TransparencyModeLabel','TransparencyHint','BehaviorTitle','BehaviorHint','TaskNavigationTitle','TaskNavigationHint',
@@ -793,7 +792,6 @@ function Apply-SettingsLanguage {
     $attentionSettledCheck.Content = [string]$settingsLocale.attentionSettled
     $agentNotificationEnabledCheck.Content = [string]$settingsLocale.agentNotificationEnabled
     $quotaGuardEnabledCheck.Content = [string]$settingsLocale.quotaGuardEnabled
-    $officialAllowanceEnabledCheck.Content = [string]$settingsLocale.officialAllowanceEnabled
     $quotaGuardResetTemplatesButton.Content = [string]$settingsLocale.quotaGuardResetTemplates
     $dotAttentionEnabledCheck.Content = [string]$settingsLocale.dotAttentionEnabled
     $dotBreathingCheck.Content = [string]$settingsLocale.dotBreathing
@@ -814,7 +812,6 @@ function Apply-SettingsLanguage {
     $attentionSettledCheck.ToolTip = [string]$settingsLocale.attentionSettledTooltip
     $agentNotificationEnabledCheck.ToolTip = [string]$settingsLocale.agentNotificationTooltip
     $quotaGuardEnabledCheck.ToolTip = [string]$settingsLocale.quotaGuardTooltip
-    $officialAllowanceEnabledCheck.ToolTip = [string]$settingsLocale.officialAllowanceTooltip
     foreach ($control in @($quotaGuardPrepareFiveHourText,$quotaGuardPrepareWeeklyText,$quotaGuardHandoffFiveHourText,$quotaGuardHandoffWeeklyText)) { $control.ToolTip = [string]$settingsLocale.quotaGuardTooltip }
     foreach ($control in @($agentNotificationPermissionCombo,$agentNotificationModeCombo,$agentNotificationGlowPresetCombo,$agentNotificationIntensityCombo)) { $control.ToolTip = [string]$settingsLocale.agentNotificationTooltip }
     foreach ($control in @($summaryAttentionModeCombo,$listAttentionModeCombo,$taskBubbleAttentionModeCombo)) { $control.ToolTip = [string]$settingsLocale.attentionRoutingTooltip }
@@ -3226,7 +3223,6 @@ function Sync-ControlsFromConfig {
         $attentionSettledCheck.IsChecked = [bool]$config.attention.onSettled
         $agentNotificationEnabledCheck.IsChecked = [bool]$config.agentNotifications.enabled
         $quotaGuardEnabledCheck.IsChecked = [bool]$config.quotaGuard.enabled
-        $officialAllowanceEnabledCheck.IsChecked = [bool]$config.officialAllowance.enabled
         $dotAttentionEnabledCheck.IsChecked = [bool]$config.attention.dotEnabled
         $dotBreathingCheck.IsChecked = [bool]$config.attention.dotBreathing
         $openTaskOnDoubleClickCheck.IsChecked = [bool]$config.behavior.openTaskOnDoubleClick
@@ -3412,7 +3408,6 @@ function Apply-ControlsToConfig {
     $config.attention.onSettled = [bool]$attentionSettledCheck.IsChecked
     $config.agentNotifications.enabled = [bool]$agentNotificationEnabledCheck.IsChecked
     $config.quotaGuard.enabled = [bool]$quotaGuardEnabledCheck.IsChecked
-    $config.officialAllowance.enabled = [bool]$officialAllowanceEnabledCheck.IsChecked
     $config.attention.dotEnabled = [bool]$dotAttentionEnabledCheck.IsChecked
     $config.attention.dotBreathing = [bool]$dotBreathingCheck.IsChecked
     $config.behavior.openTaskOnDoubleClick = [bool]$openTaskOnDoubleClickCheck.IsChecked
@@ -4199,7 +4194,7 @@ $liveControls = @(
     $agentNotificationPermissionCombo,$agentNotificationModeCombo,$agentNotificationIntensityCombo,$agentNotificationDurationCombo,
     $idleIndicatorDelayCombo,$idleIndicatorLayoutCombo,$idleIndicatorTaskStyleCombo,
     $alwaysOnTopCheck,$mousePassthroughCheck,$statusDotCheck,$animateCheck,$autoSplitCheck,$sourceDesktopCheck,$sourceVsCodeCheck,$sourceDefaultCliCheck,$sourceDeepSeekCliCheck,
-    $attentionCompletedCheck,$attentionErrorCheck,$attentionSettledCheck,$dotAttentionEnabledCheck,$dotBreathingCheck,$agentNotificationEnabledCheck,$quotaGuardEnabledCheck,$officialAllowanceEnabledCheck,
+    $attentionCompletedCheck,$attentionErrorCheck,$attentionSettledCheck,$dotAttentionEnabledCheck,$dotBreathingCheck,$agentNotificationEnabledCheck,$quotaGuardEnabledCheck,
     $openTaskOnDoubleClickCheck,$idleIndicatorEnabledCheck,$idleIndicatorBubblesCheck
 ) + @($fieldControls.GetEnumerator() | Where-Object { [string]$_.Key -ne 'context' } | ForEach-Object { $_.Value }) + @($bubbleFieldControls.Values)
 foreach ($control in $liveControls) {

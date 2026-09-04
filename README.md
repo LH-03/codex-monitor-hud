@@ -22,7 +22,7 @@ The Windows Release bundles a private .NET/WPF runtime so it can run without req
 
 - Active, listening, idle, paused, read-error, completed, and aborted task state.
 - Cached / uncached input, output, reasoning output, per-call and per-task totals, context usage, model, and task count.
-- Latest account-wide weekly and 5-hour allowance windows, from local `rate_limits` records or the optional official local Codex allowance reader.
+- Latest account-wide weekly and 5-hour allowance windows from the already signed-in official local Codex interface.
 - Stable task numbers, workspace labels, and the official local conversation title from `session_index.jsonl`.
 - A source badge before every task number, so Desktop, VS Code, OpenAI CLI, and DeepSeek CLI work cannot be mistaken for one another.
 - Cache hit rate and context usage are per-task signals, so they stay on list rows and detached bubbles instead of being meaninglessly added into the summary. Each row uses that task's provider-reported context window; GPT and DeepSeek values are never mixed.
@@ -30,7 +30,7 @@ The Windows Release bundles a private .NET/WPF runtime so it can run without req
 
 ![English task-list screenshot with weekly and 5-hour allowance](assets/hud-multitask-en.png)
 
-The weekly and 5-hour values are never guessed or summed across tasks. By default they use the newest local observation. In **Settings > Allowance handoff guard**, you can opt in to the already signed-in official local Codex interface, which reads only those two percentages from the normal profile; it does not read conversations, prompts, provider configuration, or credentials. If the selected source is unavailable, both values show `--` rather than mixing values from another account.
+The weekly and 5-hour values are never guessed or summed across tasks. The HUD reads the already signed-in official local Codex interface, which exposes only those allowance percentages; it does not read conversations, prompts, provider configuration, or credentials. If an account has no 5-hour window, that value shows `--`; if the interface is unavailable, both values show `--` rather than mixing values from another account.
 
 ## Desktop, VS Code, and CLI sources
 
@@ -74,7 +74,7 @@ The aggregate count button is only a list expand/collapse control. If task bubbl
 
 ## Privacy and limits
 
-All processing stays local. The HUD reads only the bounded data needed to project current state from the enabled local profile roots: usage counters, model/provider label, client surface, lifecycle events, workspace leaf, session ID, and official local title. It does not read provider configuration or authentication files; it does not store prompts, replies, tool output, raw transcripts, or credentials; and it does not modify Codex session files. The optional official allowance reader invokes the already signed-in local Codex client for those two percentages only; the HUD itself has no telemetry and does not handle credentials.
+All processing stays local. The HUD reads only the bounded data needed to project current state from the enabled local profile roots: usage counters, model/provider label, client surface, lifecycle events, workspace leaf, session ID, and official local title. It does not read provider configuration or authentication files; it does not store prompts, replies, tool output, raw transcripts, or credentials; and it does not modify Codex session files. The official allowance reader invokes the already signed-in local Codex client for those percentages only; the HUD itself has no telemetry and does not handle credentials.
 
 Task discovery is globally capped at 64 recent session files across the enabled profiles. Reopened conversations are selected by recent write time, and internal/subagent sessions plus expired terminal tasks are excluded from the user-visible projection.
 
@@ -91,6 +91,6 @@ macOS support has been intentionally dropped from this project. macOS users are 
 
 ## Project status
 
-`3.2.1` keeps the allowance guard and multi-client monitoring from 3.2.0, and repairs the Windows Release path so it uses the bundled runtime instead of unexpectedly building source on a user's machine. Its optional cost display uses an offline standard API list-price snapshot only; it is not a Codex credit or subscription-bill calculation. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI, Microsoft, or DeepSeek.
+`3.2.2` keeps the allowance guard and multi-client monitoring, reads allowance from the signed-in official local Codex interface, and refreshes the optional offline API price snapshot with GPT-6 Astra. Cost is not a Codex credit or subscription-bill calculation. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI, Microsoft, or DeepSeek.
 
 MIT License.

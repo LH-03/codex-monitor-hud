@@ -253,6 +253,12 @@ void TestOfficialAllowanceProtocol()
     IsTrue(parsed, "official app-server rate-limit response is accepted");
     Equal(98d, allowance?.FiveHourRemainingPercent, "official five-hour remaining");
     Equal(100d, allowance?.WeeklyRemainingPercent, "official weekly remaining");
+    var proParsed = OfficialCodexAllowanceReader.TryParse(
+        """{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":20,"windowDurationMins":10080}}}}""",
+        out var proAllowance);
+    IsTrue(proParsed, "weekly-only official allowance is accepted");
+    Equal<double?>(null, proAllowance?.FiveHourRemainingPercent, "weekly-only account has no five-hour window");
+    Equal(80d, proAllowance?.WeeklyRemainingPercent, "weekly-only official allowance remains visible");
     IsTrue(!OfficialCodexAllowanceReader.TryParse("""{"id":1,"result":{}}""", out _), "non-rate-limit response is rejected");
 }
 
@@ -783,11 +789,15 @@ void TestPricing()
     };
     var estimate = catalog.Estimate(snapshot);
     NotNull(estimate, "known model estimate");
-    Equal(1.15d, Math.Round(estimate!.CostUsd, 6), "current cached-input pricing");
+    Equal(0.23d, Math.Round(estimate!.CostUsd, 6), "current cached-input pricing");
     var datedEstimate = catalog.Estimate(snapshot with { Model = "gpt-5.6-luna-2026-08-10" });
     NotNull(datedEstimate, "dated model snapshot estimate");
     Equal("gpt-5.6-luna", datedEstimate!.PricedAs, "dated snapshot resolves to catalog model");
-    Equal(1.15d, Math.Round(datedEstimate.CostUsd, 6), "dated snapshot inherits matching catalog price");
+    Equal(0.23d, Math.Round(datedEstimate.CostUsd, 6), "dated snapshot inherits matching catalog price");
+    var astraEstimate = catalog.Estimate(snapshot with { Model = "gpt-6-astra" });
+    NotNull(astraEstimate, "Astra estimate");
+    Equal("gpt-6-astra", astraEstimate!.PricedAs, "Astra resolves directly");
+    Equal(10.5d, Math.Round(astraEstimate.CostUsd, 6), "Astra cached-input pricing");
     Equal<CostEstimate?>(null, catalog.Estimate(snapshot with { Model = "not-priced" }), "unknown model is not guessed");
 }
 

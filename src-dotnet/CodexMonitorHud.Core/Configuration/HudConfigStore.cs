@@ -169,8 +169,6 @@ public static partial class HudConfigStore
         SetInt(result, handoffWeekly, "quotaGuard", "handoffWeeklyPercent");
         SetString(result, Trim(GetString(result, string.Empty, "quotaGuard", "prepareInstruction"), 1200), "quotaGuard", "prepareInstruction");
         SetString(result, Trim(GetString(result, string.Empty, "quotaGuard", "handoffInstruction"), 1200), "quotaGuard", "handoffInstruction");
-        SetBool(result, GetBool(result, false, "officialAllowance", "enabled"), "officialAllowance", "enabled");
-
         SetAllowed(result, "uniform", new[] { "uniform", "layered", "focus" }, "transparencyMode");
         SetDouble(result, Math.Clamp(GetDouble(result, 0.97, "opacity"), 0, 1), "opacity");
         SetAllowed(result, "solid", new[] { "solid", "gradient", "image" }, "themeStyle", "surface");

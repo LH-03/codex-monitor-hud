@@ -1,6 +1,6 @@
 # Codex CLI profiles and optional provider isolation
 
-> [简体中文](CLI_PROFILE_ISOLATION.zh-CN.md) · Windows x64 · Codex Monitor HUD 3.2.1
+> [简体中文](CLI_PROFILE_ISOLATION.zh-CN.md) · Windows x64 · Codex Monitor HUD 3.2.2
 
 Codex Monitor HUD monitors the normal Codex CLI installation out of the box. You do **not** need a second profile to use CLI monitoring. The optional isolated profile described here is only for people who deliberately run Codex CLI against a separate, compatible model provider and want its configuration, authentication state, sessions, and HUD identity kept apart from their normal OpenAI profile.
 
@@ -31,7 +31,7 @@ The normal profile is usually:
 %USERPROFILE%\.codex
 ```
 
-The optional profile recognized by HUD 3.2.1 is:
+The optional profile recognized by HUD 3.2.2 is:
 
 ```text
 %USERPROFILE%\.codex-deepseek

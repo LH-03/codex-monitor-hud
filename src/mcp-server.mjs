@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-const SERVER_VERSION = "3.2.1";
+const SERVER_VERSION = "3.2.2";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INSTRUCTIONS = "Codex Monitor HUD is a local, closed-world HUD control server. Before a proactive notice, call monitor_hud_notification_capabilities and match task_number plus client/provider to the current task. When the user enables a capacity guard, call monitor_hud_quota_guard at natural checkpoints and before expensive work; a low result means write a recoverable handoff, not that the HUD can interrupt a running turn. Never include secrets, credentials, prompts, replies, or full logs. Notices require user opt-in and are limited to 160 plain-text characters. Control tools affect only the local HUD.";
 

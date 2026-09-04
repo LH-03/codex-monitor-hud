@@ -58,7 +58,6 @@ internal sealed partial class HudApplicationController : IDisposable
     private Task<OfficialCodexAllowance?>? _officialAllowanceRead;
     private OfficialCodexAllowance? _officialAllowance;
     private DateTimeOffset _lastOfficialAllowanceAttempt = DateTimeOffset.MinValue;
-    private bool _officialAllowanceWasEnabled;
     private bool _paused;
     private bool _initialScanComplete;
     private bool _disposed;
@@ -114,7 +113,7 @@ internal sealed partial class HudApplicationController : IDisposable
 
     public void Start()
     {
-        _log.Write($"Compiled HUD v3.2.1 starting. config={_paths.ConfigPath}; profiles={string.Join(',', _profiles.Select(static profile => profile.Id))}; agentNotices={_settings.AgentNotifications.Enabled}/{_settings.AgentNotifications.Permission}");
+        _log.Write($"Compiled HUD v3.2.2 starting. config={_paths.ConfigPath}; profiles={string.Join(',', _profiles.Select(static profile => profile.Id))}; agentNotices={_settings.AgentNotifications.Enabled}/{_settings.AgentNotifications.Permission}");
         var now = DateTimeOffset.Now;
         _engine.RefreshActiveSessions(now);
         _engine.Poll(now);
@@ -426,30 +425,19 @@ internal sealed partial class HudApplicationController : IDisposable
                 };
         }
         if (display is null) return null;
-        if (_settings.OfficialAllowance.Enabled)
+        // Never mix the signed-in official source with a session-log value
+        // that may belong to a previously signed-in account.
+        var officialAllowance = _officialAllowance;
+        return display with
         {
-            // Never mix a selected official source with a local session-log
-            // value that may belong to the previously signed-in account.
-            var officialAllowance = _officialAllowance;
-            return display with
-            {
-                AllowanceTimestamp = officialAllowance?.ObservedAt,
-                WeeklyRemainingPercent = officialAllowance?.WeeklyRemainingPercent,
-                FiveHourRemainingPercent = officialAllowance?.FiveHourRemainingPercent
-            };
-        }
-        return display;
+            AllowanceTimestamp = officialAllowance?.ObservedAt,
+            WeeklyRemainingPercent = officialAllowance?.WeeklyRemainingPercent,
+            FiveHourRemainingPercent = officialAllowance?.FiveHourRemainingPercent
+        };
     }
 
     private bool CompleteOrStartOfficialAllowanceRead(DateTimeOffset now)
     {
-        if (!_settings.OfficialAllowance.Enabled)
-        {
-            var changed = _officialAllowance is not null;
-            _officialAllowance = null;
-            _officialAllowanceRead = null;
-            return changed;
-        }
         if (_officialAllowanceRead is { IsCompleted: true })
         {
             var result = _officialAllowanceRead.Status == TaskStatus.RanToCompletion ? _officialAllowanceRead.Result : null;
@@ -474,7 +462,7 @@ internal sealed partial class HudApplicationController : IDisposable
     private void StartOfficialAllowanceRead(DateTimeOffset now)
     {
         var interval = _officialAllowance is null ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(20);
-        if (!_settings.OfficialAllowance.Enabled || _officialAllowanceRead is not null || now - _lastOfficialAllowanceAttempt < interval) return;
+        if (_officialAllowanceRead is not null || now - _lastOfficialAllowanceAttempt < interval) return;
         _lastOfficialAllowanceAttempt = now;
         _officialAllowanceRead = Task.Run(OfficialCodexAllowanceReader.TryReadAsync);
     }
@@ -596,7 +584,6 @@ internal sealed partial class HudApplicationController : IDisposable
         _engine.UpdateOptions(_settings.ToRuntimeOptions());
         _locale = _locales.Get(_settings.Language);
         _settingsLocale = _settings.Language == "symbols" ? _locales.Get("en") : _locale;
-        ResetOfficialAllowanceWhenSourceChanges();
     }
 
     private void ReloadSettings()
@@ -615,7 +602,6 @@ internal sealed partial class HudApplicationController : IDisposable
         _engine.UpdateOptions(_settings.ToRuntimeOptions());
         _locale = _locales.Get(_settings.Language);
         _settingsLocale = _settings.Language == "symbols" ? _locales.Get("en") : _locale;
-        ResetOfficialAllowanceWhenSourceChanges();
         if (_settings.MultiTask.DisplayMode == "split" && previousMode != "split")
         {
             _view.SplitAll(_engine.GetVisibleStates(), _settings.MultiTask.MaxSplitBubbles);
@@ -625,14 +611,6 @@ internal sealed partial class HudApplicationController : IDisposable
             _view.MergeAll();
         }
         Render(force: true);
-    }
-
-    private void ResetOfficialAllowanceWhenSourceChanges()
-    {
-        if (_settings.OfficialAllowance.Enabled == _officialAllowanceWasEnabled) return;
-        _officialAllowanceWasEnabled = _settings.OfficialAllowance.Enabled;
-        _officialAllowance = null;
-        _lastOfficialAllowanceAttempt = DateTimeOffset.MinValue;
     }
 
     private void OpenSettings()

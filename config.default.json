@@ -88,9 +88,6 @@
     "prepareInstruction": "",
     "handoffInstruction": ""
   },
-  "officialAllowance": {
-    "enabled": false
-  },
   "separator": "dot",
   "position": "top-right",
   "customLeft": null,

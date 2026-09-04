@@ -689,7 +689,6 @@
                   </Border>
                 </StackPanel>
                 <TextBlock x:Name="QuotaGuardHint" Text="让接入 HUD 的 Codex 在额度临界时自行留下一份可继续的交接；不会读取对话，也不会强行打断正在生成的任务。" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,4,0,8" />
-                <CheckBox x:Name="OfficialAllowanceEnabledCheck" Content="从官方 Codex 本地接口读取 5 小时 / 周额度（只读额度）" Margin="0,0,0,8" />
                 <CheckBox x:Name="QuotaGuardEnabledCheck" Content="开启：额度不足时让 Codex 自己留下交接" Margin="0,0,0,10" />
                 <Border Background="#080A84FF" BorderBrush="#180A84FF" BorderThickness="1" CornerRadius="14" Padding="12,10" Margin="0,0,0,8">
                   <StackPanel>

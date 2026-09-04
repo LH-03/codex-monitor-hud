@@ -144,10 +144,12 @@ if ((Format-HudCacheHitRate 100 60) -ne '60%' -or (Format-HudCacheHitRate 100000
 $pricingCatalog = Get-HudPricingCatalog $root (Join-Path $root 'pricing.default.json')
 $costSnapshot = [pscustomobject]@{ Model='gpt-5.6-luna'; Input=100; Cached=50; Output=20; TaskInput=1000000; TaskCached=500000; TaskOutput=100000 }
 $costEstimate = Get-HudCostEstimate $costSnapshot $pricingCatalog
-if (-not $pricingCatalog.Loaded -or [Math]::Abs([double]$costEstimate.CostUsd - 1.15) -gt 0.000001 -or (Format-HudCost $costEstimate.CostUsd) -ne '~$1.15') { throw 'Local API-equivalent cost estimate self-test failed.' }
+if (-not $pricingCatalog.Loaded -or [Math]::Abs([double]$costEstimate.CostUsd - 0.23) -gt 0.000001 -or (Format-HudCost $costEstimate.CostUsd) -ne '~$0.230') { throw 'Local API-equivalent cost estimate self-test failed.' }
 $datedCostSnapshot = $costSnapshot.PSObject.Copy(); $datedCostSnapshot.Model = 'gpt-5.6-luna-2026-08-10'
 $datedCostEstimate = Get-HudCostEstimate $datedCostSnapshot $pricingCatalog
-if ($null -eq $datedCostEstimate -or [string]$datedCostEstimate.PricedAs -ne 'gpt-5.6-luna' -or [Math]::Abs([double]$datedCostEstimate.CostUsd - 1.15) -gt 0.000001) { throw 'Dated model snapshot pricing compatibility self-test failed.' }
+if ($null -eq $datedCostEstimate -or [string]$datedCostEstimate.PricedAs -ne 'gpt-5.6-luna' -or [Math]::Abs([double]$datedCostEstimate.CostUsd - 0.23) -gt 0.000001) { throw 'Dated model snapshot pricing compatibility self-test failed.' }
+$astraCostEstimate = Get-HudCostEstimate ($costSnapshot.PSObject.Copy() | ForEach-Object { $_.Model = 'gpt-6-astra'; $_ }) $pricingCatalog
+if ($null -eq $astraCostEstimate -or [string]$astraCostEstimate.PricedAs -ne 'gpt-6-astra' -or [Math]::Abs([double]$astraCostEstimate.CostUsd - 10.5) -gt 0.000001) { throw 'Astra API-equivalent cost estimate self-test failed.' }
 $costSnapshot | Add-Member -NotePropertyName EstimatedCostUsd -NotePropertyValue ([double]$costEstimate.CostUsd)
 $costSnapshot | Add-Member -NotePropertyName Uncached -NotePropertyValue 50
 $costSnapshot | Add-Member -NotePropertyName Reasoning -NotePropertyValue 0
@@ -157,7 +159,7 @@ $costSnapshot | Add-Member -NotePropertyName ContextPercent -NotePropertyValue 1
 $costSnapshot | Add-Member -NotePropertyName Timestamp -NotePropertyValue ([DateTimeOffset]::Now)
 $costConfig = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'config.default.json') | ConvertFrom-Json
 foreach($field in $costConfig.fields.PSObject.Properties){$costConfig.fields.($field.Name)=$false};$costConfig.fields.estimatedCost=$true
-if ((@(Get-HudMetrics $costSnapshot $costConfig $locale) | Select-Object -First 1).Value -ne '~$1.15') { throw 'HUD cost metric rendering self-test failed.' }
+if ((@(Get-HudMetrics $costSnapshot $costConfig $locale) | Select-Object -First 1).Value -ne '~$0.230') { throw 'HUD cost metric rendering self-test failed.' }
 $unknownCost = Get-HudCostEstimate ([pscustomobject]@{Model='not-priced';Input=1;Cached=0;Output=1}) $pricingCatalog
 if ($null -ne $unknownCost) { throw 'Unpriced models must not produce a guessed cost.' }
 
@@ -212,9 +214,9 @@ $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 's
 $installText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install.ps1')
 $windowsInstaller = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install-windows-from-repository.ps1')
 $manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.codex-plugin\plugin.json') | ConvertFrom-Json
-if ([string]$manifest.version -ne '3.2.1' -or $mcpText -notmatch 'SERVER_VERSION = "3\.2\.1"' -or [string]$manifest.version -match 'preview') { throw 'Stable v3.2.1 manifest and MCP version are not aligned.' }
+if ([string]$manifest.version -ne '3.2.2' -or $mcpText -notmatch 'SERVER_VERSION = "3\.2\.2"' -or [string]$manifest.version -match 'preview') { throw 'Stable v3.2.2 manifest and MCP version are not aligned.' }
 $installManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'install-manifest.json') | ConvertFrom-Json
-if ([string]$installManifest.version -ne '3.2.1' -or [string]$installManifest.releaseTag -ne 'v3.2.1' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v3.2.1 repository-install manifest is invalid.' }
+if ([string]$installManifest.version -ne '3.2.2' -or [string]$installManifest.releaseTag -ne 'v3.2.2' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v3.2.2 repository-install manifest is invalid.' }
 $dotnetRequired = @(
     'CodexMonitorHud.slnx',
     'src-dotnet/CodexMonitorHud.Core/CodexMonitorHud.Core.csproj',
@@ -228,7 +230,7 @@ $dotnetRequired = @(
     'scripts/compare-runtime-performance.ps1'
 )
 foreach ($relativePath in $dotnetRequired) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v3.2.1 compiled architecture file is missing: $relativePath" }
+    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v3.2.2 compiled architecture file is missing: $relativePath" }
 }
 $coreProjectText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core\CodexMonitorHud.Core.csproj')
 $coreSourceText = (Get-ChildItem -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core') -Recurse -Filter *.cs | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_.FullName }) -join "`n"
@@ -298,14 +300,14 @@ foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','docs/MACOS_PREVIEW_
 }
 if ($installText -notmatch '\$excludedRootNames' -or $installText -notmatch '\$excludedRelativePaths' -or $installText -notmatch "-notlike '\.test-output\*'") { throw 'Installer exclusion boundary is missing.' }
 $releaseText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\prepare-release.ps1')
-foreach ($required in @("[string]`$Version = '3.2.1'",'$excludedDirectoryNames',"'.agents'","'.codex'","'Microsoft'","'bin'","'obj'",'$excludedRelativePaths',"-notlike '.test-output*'")) {
-    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 3.2.1 default '$required' is missing." }
+foreach ($required in @("[string]`$Version = '3.2.2'",'$excludedDirectoryNames',"'.agents'","'.codex'","'Microsoft'","'bin'","'obj'",'$excludedRelativePaths',"-notlike '.test-output*'")) {
+    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 3.2.2 default '$required' is missing." }
 }
 if ($installText -notmatch '\[switch\]\$UseBundledRuntime' -or $installText -notmatch '-not \$UseBundledRuntime' -or $windowsInstaller -notmatch '-UseBundledRuntime') { throw 'Release installs must use the bundled runtime rather than rebuild from source.' }
 if ($releaseText -notmatch 'SHA256') { throw 'Release package checksum generation is missing.' }
 if ([string]$installManifest.platforms.'windows-x64'.asset -ne 'CodexMonitorHUD-windows-x64.zip' -or $releaseText -notmatch [regex]::Escape("'CodexMonitorHUD-windows-x64.zip'")) { throw 'Release asset name and Windows install manifest are not aligned.' }
 if ($installText -notmatch 'DefaultLanguage' -or $installText -notmatch 'Test-Path -LiteralPath \$settingsPath') { throw 'First-install prompt-language selection or upgrade-preservation guard is missing.' }
-foreach ($required in @('RollbackVersion','Switch-InstalledTree','.codex-monitor-hud-stage-','.codex-monitor-hud-rollback-','compare-runtime-performance.ps1')) {
+foreach ($required in @('RollbackVersion','Switch-InstalledTree','.codex-monitor-hud-stage-','.codex-monitor-hud-rollback-','compare-runtime-performance.ps1',"Join-Path `$SourceRoot 'scripts\compare-runtime-performance.ps1'")) {
     if ($installText -notmatch [regex]::Escape($required)) { throw "Transactional install or rollback path '$required' is missing." }
 }
 foreach ($required in @('Clear-HudStopSignals','manual-exit.signal','exit.signal')) {
@@ -325,7 +327,8 @@ foreach ($required in @('FieldEstimatedCost','BubbleFieldEstimatedCost','Pricing
 foreach ($required in @('FieldCacheHitRate','BubbleFieldCacheHitRate','cacheHitRateTooltip','Format-HudCacheHitRate')) { if ($settingsXaml -notmatch [regex]::Escape($required) -and $mainText -notmatch [regex]::Escape($required) -and (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch [regex]::Escape($required)) { throw "Cache-hit-rate display path '$required' is missing." } }
 foreach ($required in @('AgentNotificationEnabledCheck','AgentNotificationPermissionCombo','AgentNotificationModeCombo','AgentNotificationGlowPresetCombo','AgentNotificationIntensityCombo','AgentNotificationDurationCombo','AgentNotificationColorText')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Codex notification setting '$required' is missing." } }
 foreach ($required in @('QuotaGuardEnabledCheck','QuotaGuardPrepareFiveHourText','QuotaGuardPrepareWeeklyText','QuotaGuardHandoffFiveHourText','QuotaGuardHandoffWeeklyText','QuotaGuardTemplatesExpander','QuotaGuardPrepareInstructionText','QuotaGuardHandoffInstructionText','QuotaGuardResetTemplatesButton')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Editable allowance handoff setting '$required' is missing." } }
-foreach ($required in @('OfficialAllowanceEnabledCheck','OfficialCodexAllowanceReader','account/rateLimits/read','officialAllowance')) { if ($settingsXaml -notmatch [regex]::Escape($required) -and $compiledSourceText -notmatch [regex]::Escape($required) -and $mainText -notmatch [regex]::Escape($required)) { throw "Official allowance source '$required' is missing." } }
+foreach ($required in @('OfficialCodexAllowanceReader','account/rateLimits/read')) { if ($compiledSourceText -notmatch [regex]::Escape($required)) { throw "Official allowance source '$required' is missing." } }
+if ($settingsXaml -match 'OfficialAllowanceEnabledCheck' -or $compiledSourceText -match 'OfficialAllowanceSettings|OfficialAllowance\.Enabled' -or $mainText -match 'OfficialAllowanceEnabledCheck' -or $defaultConfig.PSObject.Properties.Name -contains 'officialAllowance') { throw 'Official allowance reading must be always on, not configurable.' }
 foreach ($required in @('monitor_hud_quota_guard','disabled','entered_prepare','should_alert','quota_guard: registry.quota_guard')) { if ($mcpText -notmatch [regex]::Escape($required)) { throw "Allowance handoff MCP contract '$required' is missing." } }
 foreach ($required in @('BehaviorTab','OpenTaskOnDoubleClickCheck','IdleIndicatorEnabledCheck','IdleIndicatorDelayCombo','IdleIndicatorLayoutCombo','IdleIndicatorTaskStyleCombo','IdleIndicatorBubblesCheck','ContextMetricVisibleCheck','ContextAlertsEnabledCheck','ContextThreshold1Text','ContextThreshold2Text','ContextThreshold3Text')) { if ($settingsXaml -notmatch [regex]::Escape($required)) { throw "Behavior setting '$required' is missing." } }
 foreach ($required in @('Open-HudTaskInCodex','Get-HudTaskDeepLink','Get-HudContextAlertThresholds','Get-HudContextAlertVisualSpec','Start-HudContextAlertAnimation','Stop-HudContextAlertAnimation','Reset-HudContextAlertRuntime','Update-HudIdleIndicatorMode','Set-TaskBubbleIndicatorCollapsed','Update-HudContextAlertState','ContextAlertLevel')) { if ($mainText -notmatch [regex]::Escape($required) -and (Get-Content -Raw -Encoding UTF8 -LiteralPath $core) -notmatch [regex]::Escape($required)) { throw "Behavior runtime path '$required' is missing." } }

@@ -75,8 +75,6 @@ public sealed record QuotaGuardSettings(
     string PrepareInstruction,
     string HandoffInstruction);
 
-public sealed record OfficialAllowanceSettings(bool Enabled);
-
 public sealed record ThemeStyleSettings(
     string Surface,
     string GradientStart,
@@ -112,7 +110,6 @@ public sealed record HudSettings
     public required AttentionSettings Attention { get; init; }
     public required AgentNotificationSettings AgentNotifications { get; init; }
     public required QuotaGuardSettings QuotaGuard { get; init; }
-    public required OfficialAllowanceSettings OfficialAllowance { get; init; }
     public required string Separator { get; init; }
     public required string Position { get; init; }
     public double? CustomLeft { get; init; }
@@ -147,7 +144,6 @@ public sealed record HudSettings
         var attention = Object(document, "attention");
         var notices = Object(document, "agentNotifications");
         var quotaGuard = Object(document, "quotaGuard");
-        var officialAllowance = Object(document, "officialAllowance");
         var theme = Object(document, "themeStyle");
         var timing = Object(document, "statusTiming");
         return new HudSettings
@@ -215,7 +211,6 @@ public sealed record HudSettings
                 Integer(quotaGuard, "handoffWeeklyPercent", 3),
                 Text(quotaGuard, "prepareInstruction"),
                 Text(quotaGuard, "handoffInstruction")),
-            OfficialAllowance = new OfficialAllowanceSettings(Boolean(officialAllowance, "enabled")),
             Separator = Text(document, "separator", "dot"),
             Position = Text(document, "position", "top-right"),
             CustomLeft = NullableNumber(document, "customLeft"),

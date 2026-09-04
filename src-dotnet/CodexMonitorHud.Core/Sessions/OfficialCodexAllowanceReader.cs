@@ -32,7 +32,7 @@ public static class OfficialCodexAllowanceReader
         {
             if (!process.Start()) return null;
             _ = process.StandardError.ReadToEndAsync();
-            await process.StandardInput.WriteLineAsync("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex-monitor-hud\",\"version\":\"3.2.1\"},\"capabilities\":{\"optOutNotificationMethods\":[\"account/updated\",\"account/rateLimits/updated\"]}}}").ConfigureAwait(false);
+            await process.StandardInput.WriteLineAsync("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex-monitor-hud\",\"version\":\"3.2.2\"},\"capabilities\":{\"optOutNotificationMethods\":[\"account/updated\",\"account/rateLimits/updated\"]}}}").ConfigureAwait(false);
             await process.StandardInput.WriteLineAsync("{\"method\":\"initialized\",\"params\":{}}").ConfigureAwait(false);
             await process.StandardInput.WriteLineAsync("{\"method\":\"account/rateLimits/read\",\"id\":2,\"params\":{}}").ConfigureAwait(false);
             await process.StandardInput.FlushAsync().ConfigureAwait(false);

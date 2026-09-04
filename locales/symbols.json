@@ -135,8 +135,6 @@
   "agentNotificationBadge": "CODEX",
   "quotaGuardTitle": "ALLOWANCE HANDOFF",
   "quotaGuardHint": "OPT-IN CHECKPOINT HANDOFF. NO CONVERSATION READING OR TURN INTERRUPTION.",
-  "officialAllowanceEnabled": "OFFICIAL 5H / WK ALLOWANCE",
-  "officialAllowanceTooltip": "READS ONLY 5H AND WEEKLY ALLOWANCE FROM THE SIGNED-IN LOCAL CODEX APP-SERVER. NO CONVERSATIONS, PROMPTS, CONFIGURATION, OR CREDENTIALS.",
   "quotaGuardEnabled": "ENABLE HANDOFF GUARD",
   "quotaGuardThresholdHint": "REMIND AT REMAINING (%)",
   "quotaGuardPrepare": "WARN: PREP HANDOFF",

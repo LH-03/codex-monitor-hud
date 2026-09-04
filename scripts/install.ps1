@@ -236,7 +236,7 @@ if (-not $UseBundledRuntime -and (Test-Path -LiteralPath $buildScript) -and ((Te
     # repaired or rolled back without requiring a global SDK.
     & $buildScript -Configuration Release
 } elseif (-not (Test-Path -LiteralPath $compiledApp)) {
-    throw 'The compiled v3.2.1 runtime is missing and no .NET 10 SDK is available to build it.'
+    throw 'The compiled v3.2.2 runtime is missing and no .NET 10 SDK is available to build it.'
 }
 
 $stageRoot = Join-Path $pluginsRoot ('.codex-monitor-hud-stage-' + [Guid]::NewGuid().ToString('N'))
@@ -252,7 +252,7 @@ try {
     & $stageDotnet $stageApp --plugin-root $stageRoot --health-check $healthPath
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $healthPath)) { throw 'Staged install health check failed.' }
     $health = Get-Content -Raw -Encoding UTF8 -LiteralPath $healthPath | ConvertFrom-Json
-    if ([string]$health.version -ne '3.2.1' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
+    if ([string]$health.version -ne '3.2.2' -or [string]$health.config -ne 'ok' -or [string]$health.xaml -ne 'ok' -or [string]$health.parser -ne 'ok') {
         throw ('Staged install health check returned an invalid result: ' + ($health | ConvertTo-Json -Compress))
     }
     & (Join-Path $stageRoot 'scripts\test.ps1') -TestOutputRoot (Join-Path $validationRoot 'static')
@@ -264,7 +264,10 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($PerformanceMetricsRoot)) {
         $performanceArguments.ExistingMetricsRoot = [IO.Path]::GetFullPath($PerformanceMetricsRoot)
     }
-    & (Join-Path $stageRoot 'scripts\compare-runtime-performance.ps1') @performanceArguments
+    # The performance fixture starts short-lived HUD processes. Run it from
+    # the verified source tree so none can hold the staged tree open when the
+    # transactional switch below moves that tree into place.
+    & (Join-Path $SourceRoot 'scripts\compare-runtime-performance.ps1') @performanceArguments
 
     Assert-MarketplaceReadable
     $installTransaction = Switch-InstalledTree $stageRoot

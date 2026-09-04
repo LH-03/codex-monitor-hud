@@ -135,8 +135,6 @@
   "agentNotificationBadge": "CODEX NOTICE",
   "quotaGuardTitle": "Allowance handoff guard",
   "quotaGuardHint": "When enabled, a HUD-connected Codex checks allowance at checkpoints and leaves a recoverable handoff using your template. It never reads conversation text or forcibly interrupts an active turn.",
-  "officialAllowanceEnabled": "Read 5-hour / weekly allowance from the official local Codex interface (allowance only)",
-  "officialAllowanceTooltip": "Uses your already signed-in official Codex app-server every 45 seconds to read only the 5-hour and weekly allowance. It does not read conversations, prompts, configuration, or credentials. When off, HUD only uses allowance fields that occasionally appear in session records.",
   "quotaGuardEnabled": "Enable: let Codex leave a handoff when allowance is low",
   "quotaGuardThresholdHint": "When to remind (enter remaining allowance percentages)",
   "quotaGuardPrepare": "Early warning: prepare a handoff",
