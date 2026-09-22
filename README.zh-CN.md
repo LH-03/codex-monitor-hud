@@ -91,6 +91,6 @@ Windows Release 会随包携带一套私有 .NET/WPF 运行时，因此无需用
 
 ## 当前状态
 
-`3.2.2` 保留额度收尾保护和多端监控，固定从已登录的官方本地 Codex 接口读取额度，并将可选的离线 API 标价快照更新至 GPT-6 Astra。成本显示不是 Codex 积分或订阅账单计算。这是独立、非官方项目，与 OpenAI、Microsoft 或 DeepSeek 均没有隶属或背书关系。
+`3.3.0` 保留额度收尾保护和多端监控，降低后台读取与刷新路径的额外开销，并在可选的离线 API 标价快照中加入 GPT-6 Astra、Sol 和 Luna。成本是 API 等价估算，不是 Codex 积分或订阅账单。这是独立、非官方项目，与 OpenAI、Microsoft 或 DeepSeek 均没有隶属或背书关系。
 
 MIT License.

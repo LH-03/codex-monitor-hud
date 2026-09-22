@@ -113,7 +113,7 @@ internal sealed partial class HudApplicationController : IDisposable
 
     public void Start()
     {
-        _log.Write($"Compiled HUD v3.2.2 starting. config={_paths.ConfigPath}; profiles={string.Join(',', _profiles.Select(static profile => profile.Id))}; agentNotices={_settings.AgentNotifications.Enabled}/{_settings.AgentNotifications.Permission}");
+        _log.Write($"Compiled HUD v3.3.0 starting. config={_paths.ConfigPath}; profiles={string.Join(',', _profiles.Select(static profile => profile.Id))}; agentNotices={_settings.AgentNotifications.Enabled}/{_settings.AgentNotifications.Permission}");
         var now = DateTimeOffset.Now;
         _engine.RefreshActiveSessions(now);
         _engine.Poll(now);
@@ -267,7 +267,7 @@ internal sealed partial class HudApplicationController : IDisposable
         foreach (var tracker in _titleTrackers)
         {
             titleDirty |= tracker.ConsumeDirty();
-            _ = tracker.DrainChangedPaths();
+            titleDirty |= tracker.DrainChangedPaths().Count > 0;
         }
         if (titleDirty || _engine.HasTitleBacklog)
         {
@@ -301,6 +301,9 @@ internal sealed partial class HudApplicationController : IDisposable
                 structural |= tracker.ConsumeStructural();
                 changedPaths.AddRange(tracker.DrainChangedPaths());
             }
+            // An event can arrive between consuming the dirty bit and
+            // draining paths. Never discard that drained work as an idle tick.
+            dirty |= changedPaths.Count > 0;
             if (dirty || reconcileDue || overflowed)
             {
                 filePollPerformed = true;
@@ -343,17 +346,17 @@ internal sealed partial class HudApplicationController : IDisposable
         }
 
         changed |= CompleteOrStartOfficialAllowanceRead(now);
-        var overallStatus = GetOverallStatus(now);
+        var visibleStates = _engine.GetVisibleStates(now);
+        var overallStatus = GetOverallStatus(now, visibleStates);
         if (now - _lastQuietPoll >= TimeSpan.FromMilliseconds(500))
         {
             _lastQuietPoll = now;
-            var quietStates = _engine.GetVisibleStates(now);
             _view.RefreshQuietMode(
                 _settings,
                 _settingsLocale,
-                quietStates,
+                visibleStates,
                 state => _engine.GetStatus(state, _paused, now),
-                GetOverallStatus(now, quietStates),
+                overallStatus,
                 now);
             _engine.HoldTerminalExits = _view.HoldTerminalExits;
         }
@@ -361,7 +364,7 @@ internal sealed partial class HudApplicationController : IDisposable
         {
             _responsiveUntil = now.AddSeconds(2);
             ApplyPricing();
-            Render(force: true);
+            Render(force: true, visibleStates, now);
         }
         _timer.Interval = now < _responsiveUntil
             ? TimeSpan.FromMilliseconds(250)
@@ -370,10 +373,10 @@ internal sealed partial class HudApplicationController : IDisposable
                 : TimeSpan.FromMilliseconds(1500);
     }
 
-    private void Render(bool force)
+    private void Render(bool force, IReadOnlyList<SessionState>? states = null, DateTimeOffset? renderTime = null)
     {
-        var now = DateTimeOffset.Now;
-        var states = _engine.GetVisibleStates(now);
+        var now = renderTime ?? DateTimeOffset.Now;
+        states ??= _engine.GetVisibleStates(now);
         var snapshot = BuildDisplaySnapshot(states);
         var status = GetOverallStatus(now, states, snapshot);
         if (!force && _lastRenderedRevision == _engine.MaterialRevision && _lastOverallStatus == status)
@@ -474,15 +477,20 @@ internal sealed partial class HudApplicationController : IDisposable
             return "paused";
         }
         states ??= _engine.GetVisibleStates(now);
-        var statuses = states.Select(state => _engine.GetStatus(state, false, now)).ToArray();
-        if (statuses.Contains("aborted", StringComparer.Ordinal)) return "aborted";
-        if (statuses.Contains("completed", StringComparer.Ordinal)) return "completed";
+        var completed = false;
+        HudSnapshot? latest = null;
+        foreach (var state in states)
+        {
+            var status = _engine.GetStatus(state, false, now);
+            if (status == "aborted") return "aborted";
+            completed |= status == "completed";
+            if (state.Snapshot is { } candidate && (latest is null || candidate.Timestamp > latest.Timestamp))
+                latest = candidate;
+        }
+        if (completed) return "completed";
         if (_engine.LastReadErrorAt != DateTimeOffset.MinValue &&
             (now - _engine.LastReadErrorAt).TotalSeconds <= _settings.StatusTiming.ErrorHoldSeconds) return "error";
-        snapshot ??= states.Select(static state => state.Snapshot)
-            .OfType<HudSnapshot>()
-            .OrderByDescending(static item => item.Timestamp)
-            .FirstOrDefault();
+        snapshot ??= latest;
         if (snapshot is null) return "idle";
         var reference = _engine.LastUsageAt != DateTimeOffset.MinValue ? _engine.LastUsageAt : snapshot.Timestamp;
         var age = (now - reference).TotalSeconds;

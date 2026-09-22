@@ -48,6 +48,8 @@ internal sealed class MainHudView : IDisposable
     private string _metricsSignature = string.Empty;
     private string _listSignature = string.Empty;
     private string _appearanceSignature = string.Empty;
+    private HudSettings? _appearanceSettings;
+    private (string Status, bool Attention) _appearanceState;
     private string _quietSignature = string.Empty;
     private string _lastUpdateAnimationSignature = string.Empty;
     private int _lastSummaryAttentionRevision;
@@ -244,6 +246,10 @@ internal sealed class MainHudView : IDisposable
 
     private void ApplyAppearance(HudSettings settings, string status, bool hasAttention)
     {
+        var appearanceState = (status, hasAttention);
+        if (ReferenceEquals(_appearanceSettings, settings) && _appearanceState == appearanceState) return;
+        _appearanceSettings = settings;
+        _appearanceState = appearanceState;
         var signature = string.Join('|',
             settings.Preset,
             settings.Layout,

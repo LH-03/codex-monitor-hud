@@ -91,6 +91,6 @@ macOS support has been intentionally dropped from this project. macOS users are 
 
 ## Project status
 
-`3.2.2` keeps the allowance guard and multi-client monitoring, reads allowance from the signed-in official local Codex interface, and refreshes the optional offline API price snapshot with GPT-6 Astra. Cost is not a Codex credit or subscription-bill calculation. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI, Microsoft, or DeepSeek.
+`3.3.0` keeps the allowance guard and multi-client monitoring, reduces background and refresh-path overhead, and includes GPT-6 Astra, Sol, and Luna in the optional offline API price snapshot. Cost is an API-equivalent estimate, not a Codex credit or subscription-bill calculation. This is an unofficial, independent project and is not affiliated with or endorsed by OpenAI, Microsoft, or DeepSeek.
 
 MIT License.

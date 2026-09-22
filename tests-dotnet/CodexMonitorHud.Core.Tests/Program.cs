@@ -9,6 +9,11 @@ using CodexMonitorHud.Core.Sessions;
 using CodexMonitorHud.Core.State;
 
 var repositoryRoot = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
+if (args.Length > 1 && args[1] == "--benchmark")
+{
+    PerformanceBenchmarks.Run(repositoryRoot);
+    return;
+}
 var tests = new (string Name, Action Run)[]
 {
     ("record parsing", TestRecordParsing),
@@ -28,7 +33,8 @@ var tests = new (string Name, Action Run)[]
     ("surface effect adaptation", TestSurfaceEffects),
     ("structural config recovery", TestConfiguration),
     ("macOS path and watcher portability", TestMacPortability),
-    ("pricing", TestPricing)
+    ("pricing", TestPricing),
+    ("optimization boundary regressions", OptimizationRegressionTests.Run)
 };
 
 foreach (var test in tests)

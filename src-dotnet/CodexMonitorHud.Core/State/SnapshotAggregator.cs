@@ -17,64 +17,89 @@ public static class SnapshotAggregator
             return valid[0] with { ActiveTasks = 1 };
         }
 
-        var modelCount = valid
-            .Select(static snapshot => snapshot.Model)
-            .Where(static model => !string.IsNullOrWhiteSpace(model))
-            .Distinct(StringComparer.Ordinal)
-            .Count();
+        var models = new HashSet<string>(StringComparer.Ordinal);
+        var timestamp = valid[0].Timestamp;
+        long input = 0, cached = 0, uncached = 0, output = 0, reasoning = 0;
+        long taskInput = 0, taskCached = 0, taskUncached = 0, taskOutput = 0;
+        long callTotal = 0, taskTotal = 0, contextWindow = 0;
+        var contextPercent = valid[0].ContextPercent;
+        double? cost = 0;
+        foreach (var snapshot in valid)
+        {
+            if (!string.IsNullOrWhiteSpace(snapshot.Model)) models.Add(snapshot.Model);
+            if (snapshot.Timestamp > timestamp) timestamp = snapshot.Timestamp;
+            if (snapshot.ContextPercent > contextPercent || double.IsNaN(contextPercent))
+                contextPercent = snapshot.ContextPercent;
+            // Preserve Enumerable.Sum's overflow behavior for token counters.
+            checked
+            {
+                input += snapshot.Input;
+                cached += snapshot.Cached;
+                uncached += snapshot.Uncached;
+                output += snapshot.Output;
+                reasoning += snapshot.Reasoning;
+                taskInput += snapshot.TaskInput;
+                taskCached += snapshot.TaskCached;
+                taskUncached += snapshot.TaskUncached;
+                taskOutput += snapshot.TaskOutput;
+                callTotal += snapshot.CallTotal;
+                taskTotal += snapshot.TaskTotal;
+                contextWindow += snapshot.ContextWindow;
+            }
+            cost += snapshot.EstimatedCostUsd;
+        }
         var summary = summaryTemplate
             .Replace("{tasks}", valid.Length.ToString(), StringComparison.Ordinal)
-            .Replace("{models}", modelCount.ToString(), StringComparison.Ordinal);
+            .Replace("{models}", models.Count.ToString(), StringComparison.Ordinal);
         var allowance = GetLatestAllowance(valid);
-        var allCostsAvailable = valid.All(static snapshot => snapshot.EstimatedCostUsd.HasValue);
 
         return new HudSnapshot
         {
-            Timestamp = valid.Max(static snapshot => snapshot.Timestamp),
-            Input = valid.Sum(static snapshot => snapshot.Input),
-            Cached = valid.Sum(static snapshot => snapshot.Cached),
-            Uncached = valid.Sum(static snapshot => snapshot.Uncached),
-            Output = valid.Sum(static snapshot => snapshot.Output),
-            Reasoning = valid.Sum(static snapshot => snapshot.Reasoning),
-            TaskInput = valid.Sum(static snapshot => snapshot.TaskInput),
-            TaskCached = valid.Sum(static snapshot => snapshot.TaskCached),
-            TaskUncached = valid.Sum(static snapshot => snapshot.TaskUncached),
-            TaskOutput = valid.Sum(static snapshot => snapshot.TaskOutput),
-            CallTotal = valid.Sum(static snapshot => snapshot.CallTotal),
-            TaskTotal = valid.Sum(static snapshot => snapshot.TaskTotal),
-            ContextPercent = valid.Max(static snapshot => snapshot.ContextPercent),
-            ContextWindow = valid.Sum(static snapshot => snapshot.ContextWindow),
+            Timestamp = timestamp,
+            Input = input,
+            Cached = cached,
+            Uncached = uncached,
+            Output = output,
+            Reasoning = reasoning,
+            TaskInput = taskInput,
+            TaskCached = taskCached,
+            TaskUncached = taskUncached,
+            TaskOutput = taskOutput,
+            CallTotal = callTotal,
+            TaskTotal = taskTotal,
+            ContextPercent = contextPercent,
+            ContextWindow = contextWindow,
             Model = summary,
             ActiveTasks = valid.Length,
             AllowanceTimestamp = allowance?.AllowanceTimestamp,
             WeeklyRemainingPercent = allowance?.WeeklyRemainingPercent,
             FiveHourRemainingPercent = allowance?.FiveHourRemainingPercent,
-            EstimatedCostUsd = allCostsAvailable
-                ? valid.Sum(static snapshot => snapshot.EstimatedCostUsd!.Value)
-                : null
+            EstimatedCostUsd = cost
         };
     }
 
     public static HudSnapshot? GetLatestAllowance(IEnumerable<HudSnapshot?> snapshots)
     {
-        var observed = snapshots
-            .OfType<HudSnapshot>()
-            .Where(static snapshot =>
-                snapshot.WeeklyRemainingPercent.HasValue || snapshot.FiveHourRemainingPercent.HasValue)
-            .OrderByDescending(static snapshot => snapshot.AllowanceTimestamp ?? snapshot.Timestamp)
-            .ToArray();
-        if (observed.Length == 0)
+        HudSnapshot? latest = null, weekly = null, fiveHour = null;
+        foreach (var snapshot in snapshots)
         {
-            return null;
+            if (snapshot is null) continue;
+            var hasWeekly = snapshot.WeeklyRemainingPercent.HasValue;
+            var hasFiveHour = snapshot.FiveHourRemainingPercent.HasValue;
+            if (!hasWeekly && !hasFiveHour) continue;
+            if (IsNewer(snapshot, latest)) latest = snapshot;
+            if (hasWeekly && IsNewer(snapshot, weekly)) weekly = snapshot;
+            if (hasFiveHour && IsNewer(snapshot, fiveHour)) fiveHour = snapshot;
         }
-
-        var latest = observed[0];
-        var weekly = observed.FirstOrDefault(static snapshot => snapshot.WeeklyRemainingPercent.HasValue);
-        var fiveHour = observed.FirstOrDefault(static snapshot => snapshot.FiveHourRemainingPercent.HasValue);
+        if (latest is null) return null;
         return latest with
         {
             WeeklyRemainingPercent = weekly?.WeeklyRemainingPercent,
             FiveHourRemainingPercent = fiveHour?.FiveHourRemainingPercent
         };
     }
+
+    private static bool IsNewer(HudSnapshot candidate, HudSnapshot? previous) =>
+        previous is null || (candidate.AllowanceTimestamp ?? candidate.Timestamp) >
+                            (previous.AllowanceTimestamp ?? previous.Timestamp);
 }

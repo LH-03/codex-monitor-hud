@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Runtime.InteropServices;
 using System.Text;
 using CodexMonitorHud.Core.Models;
 using CodexMonitorHud.Core.Parsing;
@@ -132,13 +131,14 @@ public static class BoundedTailReader
             FileMode.Open,
             FileAccess.Read,
             FileShare.ReadWrite | FileShare.Delete,
-            64 * 1024,
+            1,
             FileOptions.RandomAccess);
         var window = Math.Min(MaximumTailScanBytes, stream.Length);
         var earliest = stream.Length - window;
         var position = stream.Length;
         var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
-        var reversedLine = new List<byte>(1024);
+        byte[]? pending = null;
+        var pendingCount = 0;
         var reversedLines = new List<string>(Math.Min(limit, 2_048));
         var discardingOversizedLine = false;
         try
@@ -156,28 +156,35 @@ public static class BoundedTailReader
                     read += next;
                 }
 
-                for (var index = read - 1; index >= 0 && reversedLines.Count < limit; index--)
+                var end = read;
+                while (end > 0 && reversedLines.Count < limit)
                 {
-                    if (buffer[index] == (byte)'\n')
+                    var newline = buffer.AsSpan(0, end).LastIndexOf((byte)'\n');
+                    var segment = buffer.AsSpan(newline + 1, end - newline - 1);
+                    if (!discardingOversizedLine)
                     {
-                        if (discardingOversizedLine)
+                        if (pendingCount + (long)segment.Length > MaximumTailBytes)
                         {
-                            discardingOversizedLine = false;
+                            pendingCount = 0;
+                            discardingOversizedLine = true;
+                        }
+                        else if (pendingCount == 0 && newline >= 0)
+                        {
+                            AddLine(segment, reversedLines);
                         }
                         else
                         {
-                            AddReversedLine(reversedLine, reversedLines);
+                            Prepend(segment, ref pending, ref pendingCount);
+                            if (newline >= 0 && pendingCount > 0)
+                            {
+                                AddLine(pending.AsSpan(pending!.Length - pendingCount), reversedLines);
+                                pendingCount = 0;
+                            }
                         }
                     }
-                    else if (!discardingOversizedLine)
-                    {
-                        reversedLine.Add(buffer[index]);
-                        if (reversedLine.Count > MaximumTailBytes)
-                        {
-                            reversedLine.Clear();
-                            discardingOversizedLine = true;
-                        }
-                    }
+                    if (newline < 0) break;
+                    discardingOversizedLine = false;
+                    end = newline;
                 }
                 position = readStart;
             }
@@ -187,26 +194,40 @@ public static class BoundedTailReader
             // line and must be retained even without a trailing newline.
             if (position == 0 && !discardingOversizedLine && reversedLines.Count < limit)
             {
-                AddReversedLine(reversedLine, reversedLines);
+                if (pendingCount > 0) AddLine(pending.AsSpan(pending!.Length - pendingCount), reversedLines);
             }
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+            if (pending is not null) ArrayPool<byte>.Shared.Return(pending);
         }
 
         reversedLines.Reverse();
         return reversedLines;
     }
 
-    private static void AddReversedLine(List<byte> reversedLine, List<string> lines)
+    private static void Prepend(ReadOnlySpan<byte> segment, ref byte[]? pending, ref int count)
     {
-        if (reversedLine.Count == 0)
+        var required = count + segment.Length;
+        if (required == 0) return;
+        if (pending is null || required > pending.Length)
         {
-            return;
+            var next = ArrayPool<byte>.Shared.Rent(required);
+            if (pending is not null)
+            {
+                pending.AsSpan(pending.Length - count).CopyTo(next.AsSpan(next.Length - count));
+                ArrayPool<byte>.Shared.Return(pending);
+            }
+            pending = next;
         }
-        var span = CollectionsMarshal.AsSpan(reversedLine);
-        span.Reverse();
+        segment.CopyTo(pending.AsSpan(pending.Length - required));
+        count = required;
+    }
+
+    private static void AddLine(ReadOnlySpan<byte> span, List<string> lines)
+    {
+        if (span.IsEmpty) return;
         if (span.Length > 0 && span[^1] == (byte)'\r')
         {
             span = span[..^1];
@@ -216,6 +237,5 @@ public static class BoundedTailReader
         {
             lines.Add(line);
         }
-        reversedLine.Clear();
     }
 }

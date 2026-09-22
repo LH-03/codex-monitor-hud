@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '3.2.2',
+    [string]$Version = '3.3.0',
     [string]$OutputRoot = ''
 )
 
@@ -18,7 +18,7 @@ if (-not $outputRoot.StartsWith($artifactRoot, [StringComparison]::OrdinalIgnore
 $stageRoot = Join-Path $outputRoot 'stage'
 $archiveName = 'CodexMonitorHUD-windows-x64.zip'
 $archivePath = Join-Path $outputRoot $archiveName
-$excludedRootNames = @('.git','.agents','.codex','artifacts','.test-output','private','node_modules','sessions','logs','archive','Microsoft')
+$excludedRootNames = @('.git','.agents','.codex','artifacts','.test-output','test-output','private','node_modules','sessions','logs','archive','Microsoft')
 $excludedDirectoryNames = @('bin','obj')
 $excludedFileNames = @('.DS_Store','Thumbs.db','settings.json','AGENTS.md','WORKSPACE_STATE.md')
 $excludedExtensions = @('.log','.zip','.db','.sqlite','.sqlite3','.jsonl')

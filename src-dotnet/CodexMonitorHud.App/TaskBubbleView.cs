@@ -35,6 +35,9 @@ internal sealed class TaskBubbleView : IDisposable
     private bool _mousePassthrough;
     private bool _closing;
     private string _appearanceSignature = string.Empty;
+    private HudSettings? _appearanceSettings;
+    private IReadOnlyDictionary<string, string>? _appearanceLocale;
+    private (string Status, bool Attention, bool Notice, bool Context, string SourceLabel, string SourceColor) _appearanceState;
     private string _contentSignature = string.Empty;
     private bool _surfaceVisualActive;
     private bool _contextVisualActive;
@@ -116,87 +119,95 @@ internal sealed class TaskBubbleView : IDisposable
             ? Get(locale, "waiting")
             : $"{Get(locale, "context")} {(state.Snapshot.ContextWindow > 0 ? HudFormatting.FormatPercent(state.Snapshot.ContextPercent) : "--")}";
         var hasAgentNotice = state.AgentNoticeUntil > DateTimeOffset.Now && !string.IsNullOrWhiteSpace(state.AgentNoticeText);
-        var appearanceSignature = string.Join('|',
-            settings.Preset,
-            settings.Background,
-            settings.Foreground,
-            settings.Muted,
-            settings.Border,
-            settings.Accent,
-            settings.CornerRadius,
-            settings.Opacity,
-            settings.TransparencyMode,
-            settings.AlwaysOnTop,
-            settings.MousePassthrough,
-            settings.ThemeStyle,
-            StatusColor(settings, status),
-            status,
-            hasAttention,
-            hasAgentNotice,
-            contextVisible,
-            settings.Behavior.OpenTaskOnDoubleClick,
-            sourceLabel,
-            sourceColor,
-            Get(locale, "mergeTask"),
-            Get(locale, "closeTaskBubble"),
-            Get(locale, "resizeTaskBubble"),
-            Get(locale, "openTaskTooltip"));
-        if (_appearanceSignature != appearanceSignature)
+        var appearanceState = (status, hasAttention, hasAgentNotice, contextVisible, sourceLabel, sourceColor);
+        if (!ReferenceEquals(_appearanceSettings, settings) || !ReferenceEquals(_appearanceLocale, locale) ||
+            _appearanceState != appearanceState)
         {
-            _appearanceSignature = appearanceSignature;
-            Window.Topmost = settings.AlwaysOnTop;
-            Window.Opacity = settings.TransparencyMode == "uniform" ? settings.Opacity : 1;
-            _shell.CornerRadius = new CornerRadius(Math.Max(12, settings.CornerRadius - 4));
-            _shell.Background = _brushes.CreateSurface(settings, status, hasAttention);
-            _shell.BorderBrush = _brushes.Create(settings.Border, "#22FFFFFF", BrushRole.Decoration, settings, status, hasAttention);
-            _shell.BorderThickness = new Thickness(settings.ThemeStyle.BorderWidth);
-            _baseBorderBrush = _shell.BorderBrush;
-            _baseBorderThickness = _shell.BorderThickness;
-            _dot.Width = settings.ThemeStyle.StatusDotSize;
-            _dot.Height = settings.ThemeStyle.StatusDotSize;
-            _dot.Fill = _brushes.Create(StatusColor(settings, status), "#FF8E8E93", BrushRole.Status, settings, status, hasAttention);
-            _number.Foreground = _brushes.Create(settings.Accent, "#FF0A84FF", BrushRole.Primary, settings, status, hasAttention);
-            _sourceIcon.Data = Geometry.Parse(GetSourceGeometry(state));
-            _sourceIcon.Stroke = _brushes.Create(sourceColor, "#FF64748B", BrushRole.Primary, settings, status, hasAttention);
-            _sourceIcon.Fill = string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase)
-                ? _sourceIcon.Stroke
-                : null;
-            _sourceIcon.StrokeThickness = string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase) ? 0.45 : 1.45;
-            _sourceBadge.Background = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 24);
-            _sourceBadge.BorderBrush = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 72);
-            _sourceBadge.ToolTip = sourceLabel;
-            _name.Foreground = _brushes.Create(settings.Foreground, "#FF111827", BrushRole.Primary, settings, status, hasAttention);
-            _contextMetric.Visibility = contextVisible ? Visibility.Visible : Visibility.Collapsed;
-            _contextText.Foreground = _brushes.Create(settings.Foreground, "#FF111827", BrushRole.Primary, settings, status, hasAttention);
-            _contextMetric.BorderBrush = _brushes.Create("#330A84FF", "#330A84FF", BrushRole.Decoration, settings, status, hasAttention);
-            _contextMetric.Background = _brushes.Create("#0D0A84FF", "#0D0A84FF", BrushRole.Decoration, settings, status, hasAttention);
-            _contextMetric.ToolTip = BuildContextTooltip(state, locale);
-            _metrics.Foreground = _brushes.Create(
-                hasAgentNotice ? settings.Foreground : settings.Muted,
-                hasAgentNotice ? "#FFFFFFFF" : "#FF667085",
-                hasAgentNotice ? BrushRole.Primary : BrushRole.Secondary,
-                settings,
+            _appearanceSettings = settings;
+            _appearanceLocale = locale;
+            _appearanceState = appearanceState;
+            var appearanceSignature = string.Join('|',
+                settings.Preset,
+                settings.Background,
+                settings.Foreground,
+                settings.Muted,
+                settings.Border,
+                settings.Accent,
+                settings.CornerRadius,
+                settings.Opacity,
+                settings.TransparencyMode,
+                settings.AlwaysOnTop,
+                settings.MousePassthrough,
+                settings.ThemeStyle,
+                StatusColor(settings, status),
                 status,
-                hasAgentNotice);
-            _metrics.FontWeight = hasAgentNotice ? FontWeights.SemiBold : FontWeights.Normal;
-            try
+                hasAttention,
+                hasAgentNotice,
+                contextVisible,
+                settings.Behavior.OpenTaskOnDoubleClick,
+                sourceLabel,
+                sourceColor,
+                Get(locale, "mergeTask"),
+                Get(locale, "closeTaskBubble"),
+                Get(locale, "resizeTaskBubble"),
+                Get(locale, "openTaskTooltip"));
+            if (_appearanceSignature != appearanceSignature)
             {
-                var font = new FontFamily(settings.ThemeStyle.FontFamily);
-                _number.FontFamily = font;
-                _name.FontFamily = font;
-                _metrics.FontFamily = font;
+                _appearanceSignature = appearanceSignature;
+                Window.Topmost = settings.AlwaysOnTop;
+                Window.Opacity = settings.TransparencyMode == "uniform" ? settings.Opacity : 1;
+                _shell.CornerRadius = new CornerRadius(Math.Max(12, settings.CornerRadius - 4));
+                _shell.Background = _brushes.CreateSurface(settings, status, hasAttention);
+                _shell.BorderBrush = _brushes.Create(settings.Border, "#22FFFFFF", BrushRole.Decoration, settings, status, hasAttention);
+                _shell.BorderThickness = new Thickness(settings.ThemeStyle.BorderWidth);
+                _baseBorderBrush = _shell.BorderBrush;
+                _baseBorderThickness = _shell.BorderThickness;
+                _dot.Width = settings.ThemeStyle.StatusDotSize;
+                _dot.Height = settings.ThemeStyle.StatusDotSize;
+                _dot.Fill = _brushes.Create(StatusColor(settings, status), "#FF8E8E93", BrushRole.Status, settings, status, hasAttention);
+                _number.Foreground = _brushes.Create(settings.Accent, "#FF0A84FF", BrushRole.Primary, settings, status, hasAttention);
+                _sourceIcon.Data = Geometry.Parse(GetSourceGeometry(state));
+                _sourceIcon.Stroke = _brushes.Create(sourceColor, "#FF64748B", BrushRole.Primary, settings, status, hasAttention);
+                _sourceIcon.Fill = string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase)
+                    ? _sourceIcon.Stroke
+                    : null;
+                _sourceIcon.StrokeThickness = string.Equals(state.ClientSurface, "vscode", StringComparison.OrdinalIgnoreCase) ? 0.45 : 1.45;
+                _sourceBadge.Background = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 24);
+                _sourceBadge.BorderBrush = ColorBrush(ParseColor(sourceColor, "#FF64748B"), 72);
+                _sourceBadge.ToolTip = sourceLabel;
+                _name.Foreground = _brushes.Create(settings.Foreground, "#FF111827", BrushRole.Primary, settings, status, hasAttention);
+                _contextMetric.Visibility = contextVisible ? Visibility.Visible : Visibility.Collapsed;
+                _contextText.Foreground = _brushes.Create(settings.Foreground, "#FF111827", BrushRole.Primary, settings, status, hasAttention);
+                _contextMetric.BorderBrush = _brushes.Create("#330A84FF", "#330A84FF", BrushRole.Decoration, settings, status, hasAttention);
+                _contextMetric.Background = _brushes.Create("#0D0A84FF", "#0D0A84FF", BrushRole.Decoration, settings, status, hasAttention);
+                _contextMetric.ToolTip = BuildContextTooltip(state, locale);
+                _metrics.Foreground = _brushes.Create(
+                    hasAgentNotice ? settings.Foreground : settings.Muted,
+                    hasAgentNotice ? "#FFFFFFFF" : "#FF667085",
+                    hasAgentNotice ? BrushRole.Primary : BrushRole.Secondary,
+                    settings,
+                    status,
+                    hasAgentNotice);
+                _metrics.FontWeight = hasAgentNotice ? FontWeights.SemiBold : FontWeights.Normal;
+                try
+                {
+                    var font = new FontFamily(settings.ThemeStyle.FontFamily);
+                    _number.FontFamily = font;
+                    _name.FontFamily = font;
+                    _metrics.FontFamily = font;
+                }
+                catch (ArgumentException)
+                {
+                }
+                _merge.ToolTip = Get(locale, "mergeTask");
+                _dismiss.ToolTip = Get(locale, "closeTaskBubble");
+                _resize.ToolTip = Get(locale, "resizeTaskBubble");
+                _shell.ToolTip = settings.Behavior.OpenTaskOnDoubleClick &&
+                                 string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase)
+                    ? Get(locale, "openTaskTooltip")
+                    : null;
+                SetMousePassthrough(settings.MousePassthrough);
             }
-            catch (ArgumentException)
-            {
-            }
-            _merge.ToolTip = Get(locale, "mergeTask");
-            _dismiss.ToolTip = Get(locale, "closeTaskBubble");
-            _resize.ToolTip = Get(locale, "resizeTaskBubble");
-            _shell.ToolTip = settings.Behavior.OpenTaskOnDoubleClick &&
-                             string.Equals(state.ClientSurface, "desktop", StringComparison.OrdinalIgnoreCase)
-                ? Get(locale, "openTaskTooltip")
-                : null;
-            SetMousePassthrough(settings.MousePassthrough);
         }
 
         var contentSignature = string.Join('|', state.Number, displayName, sourceLabel, contextText, metricsText);

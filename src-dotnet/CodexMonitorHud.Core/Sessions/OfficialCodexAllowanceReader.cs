@@ -31,23 +31,21 @@ public static class OfficialCodexAllowanceReader
         try
         {
             if (!process.Start()) return null;
-            _ = process.StandardError.ReadToEndAsync();
-            await process.StandardInput.WriteLineAsync("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex-monitor-hud\",\"version\":\"3.2.2\"},\"capabilities\":{\"optOutNotificationMethods\":[\"account/updated\",\"account/rateLimits/updated\"]}}}").ConfigureAwait(false);
+            // Drain diagnostics without retaining an unused output string.
+            _ = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
+            await process.StandardInput.WriteLineAsync("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex-monitor-hud\",\"version\":\"3.3.0\"},\"capabilities\":{\"optOutNotificationMethods\":[\"account/updated\",\"account/rateLimits/updated\"]}}}").ConfigureAwait(false);
             await process.StandardInput.WriteLineAsync("{\"method\":\"initialized\",\"params\":{}}").ConfigureAwait(false);
             await process.StandardInput.WriteLineAsync("{\"method\":\"account/rateLimits/read\",\"id\":2,\"params\":{}}").ConfigureAwait(false);
             await process.StandardInput.FlushAsync().ConfigureAwait(false);
-            var deadline = DateTime.UtcNow + ReadTimeout;
-            while (DateTime.UtcNow < deadline)
+            using var timeout = new CancellationTokenSource(ReadTimeout);
+            while (!timeout.IsCancellationRequested)
             {
-                var read = process.StandardOutput.ReadLineAsync();
-                var remaining = deadline - DateTime.UtcNow;
-                if (remaining <= TimeSpan.Zero || await Task.WhenAny(read, Task.Delay(remaining)).ConfigureAwait(false) != read) break;
-                var line = await read.ConfigureAwait(false);
+                var line = await process.StandardOutput.ReadLineAsync(timeout.Token).ConfigureAwait(false);
                 if (line is null) break;
                 if (TryParse(line, out var allowance)) return allowance;
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or JsonException) { }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or JsonException or OperationCanceledException) { }
         finally
         {
             try { if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync().ConfigureAwait(false); } }

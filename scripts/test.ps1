@@ -214,9 +214,9 @@ $settingsXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 's
 $installText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install.ps1')
 $windowsInstaller = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\install-windows-from-repository.ps1')
 $manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root '.codex-plugin\plugin.json') | ConvertFrom-Json
-if ([string]$manifest.version -ne '3.2.2' -or $mcpText -notmatch 'SERVER_VERSION = "3\.2\.2"' -or [string]$manifest.version -match 'preview') { throw 'Stable v3.2.2 manifest and MCP version are not aligned.' }
+if ([string]$manifest.version -ne '3.3.0' -or $mcpText -notmatch 'SERVER_VERSION = "3\.3\.0"' -or [string]$manifest.version -match 'preview') { throw 'Stable v3.3.0 manifest and MCP version are not aligned.' }
 $installManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'install-manifest.json') | ConvertFrom-Json
-if ([string]$installManifest.version -ne '3.2.2' -or [string]$installManifest.releaseTag -ne 'v3.2.2' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v3.2.2 repository-install manifest is invalid.' }
+if ([string]$installManifest.version -ne '3.3.0' -or [string]$installManifest.releaseTag -ne 'v3.3.0' -or -not [bool]$installManifest.rules.preferVerifiedRelease -or -not [bool]$installManifest.rules.preserveSettings -or -not [bool]$installManifest.rules.retainRollback -or $null -ne $installManifest.platforms.'macos-arm64') { throw 'Deterministic Windows v3.3.0 repository-install manifest is invalid.' }
 $dotnetRequired = @(
     'CodexMonitorHud.slnx',
     'src-dotnet/CodexMonitorHud.Core/CodexMonitorHud.Core.csproj',
@@ -230,7 +230,7 @@ $dotnetRequired = @(
     'scripts/compare-runtime-performance.ps1'
 )
 foreach ($relativePath in $dotnetRequired) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v3.2.2 compiled architecture file is missing: $relativePath" }
+    if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath))) { throw "v3.3.0 compiled architecture file is missing: $relativePath" }
 }
 $coreProjectText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core\CodexMonitorHud.Core.csproj')
 $coreSourceText = (Get-ChildItem -LiteralPath (Join-Path $root 'src-dotnet\CodexMonitorHud.Core') -Recurse -Filter *.cs | ForEach-Object { Get-Content -Raw -Encoding UTF8 -LiteralPath $_.FullName }) -join "`n"
@@ -300,8 +300,8 @@ foreach ($localOnlyPath in @('docs/MAINTENANCE_WORKFLOW.md','docs/MACOS_PREVIEW_
 }
 if ($installText -notmatch '\$excludedRootNames' -or $installText -notmatch '\$excludedRelativePaths' -or $installText -notmatch "-notlike '\.test-output\*'") { throw 'Installer exclusion boundary is missing.' }
 $releaseText = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'scripts\prepare-release.ps1')
-foreach ($required in @("[string]`$Version = '3.2.2'",'$excludedDirectoryNames',"'.agents'","'.codex'","'Microsoft'","'bin'","'obj'",'$excludedRelativePaths',"-notlike '.test-output*'")) {
-    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 3.2.2 default '$required' is missing." }
+foreach ($required in @("[string]`$Version = '3.3.0'",'$excludedDirectoryNames',"'.agents'","'.codex'","'Microsoft'","'bin'","'obj'",'$excludedRelativePaths',"'test-output'","-notlike '.test-output*'")) {
+    if ($releaseText -notmatch [regex]::Escape($required)) { throw "Release-package exclusion or 3.3.0 default '$required' is missing." }
 }
 if ($installText -notmatch '\[switch\]\$UseBundledRuntime' -or $installText -notmatch '-not \$UseBundledRuntime' -or $windowsInstaller -notmatch '-UseBundledRuntime') { throw 'Release installs must use the bundled runtime rather than rebuild from source.' }
 if ($releaseText -notmatch 'SHA256') { throw 'Release package checksum generation is missing.' }

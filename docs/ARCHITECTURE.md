@@ -20,7 +20,7 @@ The resident hot path is compiled C#. `CodexMonitorHud.Core` has no WPF, Windows
 
 ## Scope
 
-Codex Monitor HUD 3.2.2 is a local Windows projection over recent Codex Desktop, VS Code, and CLI session records. It combines the normal `CODEX_HOME` (`~/.codex` by default) with an optional isolated `~/.codex-deepseek` profile without reading either profile's provider configuration or authentication files. It does not maintain a historical database and does not modify Codex sessions.
+Codex Monitor HUD 3.3.0 is a local Windows projection over recent Codex Desktop, VS Code, and CLI session records. It combines the normal `CODEX_HOME` (`~/.codex` by default) with an optional isolated `~/.codex-deepseek` profile without reading either profile's provider configuration or authentication files. It does not maintain a historical database and does not modify Codex sessions.
 
 ```text
 Codex local session JSONL + session_index.jsonl
@@ -54,7 +54,7 @@ Codex local session JSONL + session_index.jsonl
 
 Discovery scans every enabled profile's Codex session date folders for files written inside the configured activity window, then applies one global 64-candidate cap. This prevents each added profile from multiplying the resident bound. Reopening an older conversation continues writing to its original date folder, so filtering only today's folder is incorrect. After discovery, ordinary watcher changes enqueue at most 256 affected paths. A full bounded scan occurs only for creation/deletion/rename, watcher overflow, startup, or the 30-second reconciliation boundary.
 
-On discovery, the core reverse-reads 64 KiB chunks until it has the bounded 2,000-line tail instead of decoding the whole scan window. During monitoring, each state stores its file identity and byte offset and reads only appended data. The compiled reader rents a 64 KiB buffer; the monitor gives one session at most 256 KiB and all sessions together at most 4 MiB in one dispatcher pass. It carries only the incomplete record between reads and rejects a single pending record beyond 8 MiB. Unread session and official-title work remains in explicit backlogs for later responsive ticks. Records whose top-level type cannot affect identity, lifecycle, accounting, allowance, or model/workspace context are rejected before a full object graph is created.
+On discovery, the core reverse-reads 64 KiB chunks until it has the bounded 8,192-line tail, scanning at most 32 MiB and rejecting individual records beyond 8 MiB. Newline searches operate on spans; only records crossing chunk boundaries require a pooled assembly buffer. During monitoring, each state stores its file identity and byte offset and reads only appended data. The compiled reader rents a 64 KiB buffer; the monitor gives one session at most 256 KiB and all sessions together at most 4 MiB in one dispatcher pass. Complete lines decode directly from the read buffer. It carries only the incomplete record between reads, rejects a single pending record beyond 8 MiB, and releases oversized pending storage after the record ends. Unread session and official-title work remains in explicit backlogs for later responsive ticks. Records whose top-level type cannot affect identity, lifecycle, accounting, allowance, or model/workspace context are rejected before a full object graph is created.
 
 Session identity, client surface, originator, and bounded model-provider label come from `session_meta`; user-facing conversation titles come from the matching profile's separate local `session_index.jsonl`. `codex_vscode` is classified as VS Code before the historical `source=vscode` Desktop fallback. Prompt, assistant, and tool-output text are not used for naming, source classification, or lifecycle inference. Internal/subagent source objects remain excluded. Model IDs are not allowlisted, so unknown future models keep all non-price monitoring behavior.
 
@@ -80,6 +80,8 @@ The runtime caches:
 - quiet-indicator projections.
 
 Metric values update in place. List rows rebuild only when their structural projection changes; token, context, status, and notice text update retained controls. The header uses explicit grid columns so a fully populated metric row cannot overlap the right-side list toggle.
+
+Unchanged appearance settings and surface state bypass signature construction. Brush cache lookups use value keys without string formatting. Summary formatting evaluates only enabled summary fields, and one dispatcher pass shares its visible-state projection between status, quiet mode, and rendering. See [the optimization review](PERFORMANCE_REVIEW.zh-CN.md) for synthetic comparisons and validation limits.
 
 Attention is surface-local: summary mode affects the summary, list mode the matching row, and split mode the matching independent bubble. Context alerts animate only the context metric.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.3.0 - Runtime performance and GPT-6 pricing
+
+- Reduce allocations and repeated work in session parsing, file discovery, task aggregation, formatting, and WPF refreshes without changing the visible HUD behavior.
+- Add GPT-6 Sol and Luna to the bundled API-equivalent pricing snapshot using OpenAI's standard short-context text-token rates, checked on 2026-09-23.
+- Keep API cost as an estimate; long-context, cache-write, service-tier, regional-processing, and tool charges are outside this snapshot.
+
 ## 3.2.2 - Astra pricing and official allowance
 
 - Add `gpt-6-astra` to the bundled API-equivalent pricing snapshot and refresh the current GPT-5.6 Sol, Terra, and Luna standard text-token prices.

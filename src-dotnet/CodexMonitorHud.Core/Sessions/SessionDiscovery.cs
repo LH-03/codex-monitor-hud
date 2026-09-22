@@ -30,11 +30,10 @@ public static class SessionDiscovery
         var probes = new PriorityQueue<SessionFile, DateTime>();
         SessionFile? latest = null;
 
-        foreach (var path in EnumerateJsonlFilesSafe(sessionsRoot))
+        foreach (var file in EnumerateJsonlFilesSafe(sessionsRoot))
         {
             try
             {
-                var file = new FileInfo(path);
                 var candidate = new SessionFile(file.FullName, file.LastWriteTimeUtc, file.Length);
                 if (latest is null || candidate.LastWriteTimeUtc > latest.LastWriteTimeUtc)
                 {
@@ -134,11 +133,10 @@ public static class SessionDiscovery
         }
 
         SessionFile? latest = null;
-        foreach (var path in EnumerateJsonlFilesSafe(sessionsRoot))
+        foreach (var file in EnumerateJsonlFilesSafe(sessionsRoot))
         {
             try
             {
-                var file = new FileInfo(path);
                 if (latest is null || file.LastWriteTimeUtc > latest.LastWriteTimeUtc)
                 {
                     latest = new SessionFile(file.FullName, file.LastWriteTimeUtc, file.Length);
@@ -157,25 +155,27 @@ public static class SessionDiscovery
             : latest with { ReadBlocked = IsReadBlocked(latest.FullName) };
     }
 
-    private static IEnumerable<string> EnumerateJsonlFilesSafe(string root)
+    private static IEnumerable<FileInfo> EnumerateJsonlFilesSafe(string root)
     {
         var pending = new Stack<string>();
         pending.Push(root);
         while (pending.Count > 0)
         {
             var current = pending.Pop();
-            IEnumerable<string> files;
+            IEnumerable<FileInfo> files;
             try
             {
-                files = Directory.EnumerateFiles(current, "*.jsonl", SearchOption.TopDirectoryOnly).ToArray();
+                // DirectoryInfo carries the metadata returned by enumeration;
+                // constructing FileInfo from each path would stat every file again.
+                files = new DirectoryInfo(current).GetFiles("*.jsonl", SearchOption.TopDirectoryOnly);
             }
             catch (IOException)
             {
-                files = Array.Empty<string>();
+                files = Array.Empty<FileInfo>();
             }
             catch (UnauthorizedAccessException)
             {
-                files = Array.Empty<string>();
+                files = Array.Empty<FileInfo>();
             }
 
             foreach (var file in files)

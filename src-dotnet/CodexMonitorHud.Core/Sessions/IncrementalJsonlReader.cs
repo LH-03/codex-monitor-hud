@@ -28,12 +28,12 @@ public sealed class IncrementalJsonlReader
             FileMode.Open,
             FileAccess.Read,
             FileShare.ReadWrite | FileShare.Delete,
-            64 * 1024,
+            1,
             FileOptions.SequentialScan);
         if (stream.Length < Offset)
         {
             Offset = 0;
-            _pending.Clear();
+            ClearPending();
             _discardingOversizedLine = false;
         }
 
@@ -56,23 +56,26 @@ public sealed class IncrementalJsonlReader
             {
                 remainingBudget -= read;
                 var start = 0;
-                for (var index = 0; index < read; index++)
+                while (start < read)
                 {
-                    if (buffer[index] != (byte)'\n')
+                    var newline = buffer.AsSpan(start, read - start).IndexOf((byte)'\n');
+                    if (newline < 0) break;
+                    var index = start + newline;
+                    var segment = buffer.AsSpan(start, newline);
+                    if (!_discardingOversizedLine)
                     {
-                        continue;
-                    }
-
-                    if (!_discardingOversizedLine && AppendPending(buffer.AsSpan(start, index - start)))
-                    {
-                        var count = _pending.Count;
-                        if (count > 0 && _pending[count - 1] == (byte)'\r')
+                        // Most records fit in this read. Decode in place; retain
+                        // bytes only when a record actually crosses a boundary.
+                        if (_pending.Count == 0)
                         {
-                            count--;
+                            lines.Add(DecodeLine(segment));
                         }
-                        lines.Add(Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(_pending)[..count]));
+                        else if (AppendPending(segment))
+                        {
+                            lines.Add(DecodeLine(CollectionsMarshal.AsSpan(_pending)));
+                        }
                     }
-                    _pending.Clear();
+                    ClearPending();
                     _discardingOversizedLine = false;
                     start = index + 1;
                 }
@@ -97,12 +100,10 @@ public sealed class IncrementalJsonlReader
         // A final non-newline JSON record is emitted only at actual EOF.
         if (!HasUnreadData && !_discardingOversizedLine && _pending.Count > 0)
         {
-            var candidate = Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(_pending));
-            var trimmed = candidate.TrimEnd();
-            if (IsCompleteJsonObject(trimmed))
+            if (IsCompleteJsonObject(CollectionsMarshal.AsSpan(_pending)))
             {
-                lines.Add(candidate.TrimEnd('\r'));
-                _pending.Clear();
+                lines.Add(Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(_pending)).TrimEnd('\r'));
+                ClearPending();
             }
         }
 
@@ -112,7 +113,7 @@ public sealed class IncrementalJsonlReader
     public void Reset()
     {
         Offset = 0;
-        _pending.Clear();
+        ClearPending();
         _discardingOversizedLine = false;
         HasUnreadData = false;
         LastReadBytes = 0;
@@ -122,7 +123,7 @@ public sealed class IncrementalJsonlReader
     {
         if (_pending.Count + (long)bytes.Length > BoundedTailReader.MaximumTailBytes)
         {
-            _pending.Clear();
+            ClearPending();
             return false;
         }
         var previousCount = _pending.Count;
@@ -131,16 +132,32 @@ public sealed class IncrementalJsonlReader
         return true;
     }
 
-    private static bool IsCompleteJsonObject(string candidate)
+    private void ClearPending()
     {
-        if (!candidate.StartsWith('{') || !candidate.EndsWith('}'))
+        _pending.Clear();
+        // One large tool result must not leave an 8 MiB array in every session.
+        if (_pending.Capacity > 128 * 1024) _pending.Capacity = 0;
+    }
+
+    private static string DecodeLine(ReadOnlySpan<byte> line) =>
+        Encoding.UTF8.GetString(line.Length > 0 && line[^1] == (byte)'\r' ? line[..^1] : line);
+
+    private static bool IsCompleteJsonObject(ReadOnlySpan<byte> candidate)
+    {
+        // Match the old string.TrimEnd behavior even for non-JSON Unicode
+        // whitespace at EOF, without decoding the entire pending record.
+        while (!candidate.IsEmpty &&
+               Rune.DecodeLastFromUtf8(candidate, out var rune, out var consumed) == OperationStatus.Done &&
+               Rune.IsWhiteSpace(rune)) candidate = candidate[..^consumed];
+        if (candidate.IsEmpty || candidate[0] != (byte)'{')
         {
             return false;
         }
         try
         {
-            using var document = JsonDocument.Parse(candidate);
-            return document.RootElement.ValueKind == JsonValueKind.Object;
+            var reader = new Utf8JsonReader(candidate);
+            return reader.Read() && reader.TokenType == JsonTokenType.StartObject &&
+                   reader.TrySkip() && !reader.Read();
         }
         catch (JsonException)
         {

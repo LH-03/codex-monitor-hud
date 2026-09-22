@@ -140,8 +140,9 @@ public sealed class PricingCatalog
     private bool TryResolveDirect(string model, out string pricedAs, out PricingRate rates)
     {
         var current = model;
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var depth = 0; depth < 5 && visited.Add(current); depth++)
+        // The fixed depth already bounds cyclic aliases; a per-estimate set
+        // adds allocations even for the normal direct model lookup.
+        for (var depth = 0; depth < 5; depth++)
         {
             if (_models.TryGetValue(current, out var resolvedRates))
             {

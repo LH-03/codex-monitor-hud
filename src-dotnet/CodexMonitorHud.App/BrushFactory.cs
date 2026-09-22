@@ -18,7 +18,10 @@ internal sealed class BrushFactory
 {
     private readonly Dictionary<string, ImageSource> _imageCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Brush> _surfaceCache = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Brush> _brushCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<BrushKey, Brush> _brushCache = new();
+    private readonly record struct BrushKey(
+        string Value, string Fallback, BrushRole Role, string TransparencyMode,
+        double Opacity, string Status, bool HasAttention);
 
     public Brush Create(
         string value,
@@ -28,7 +31,7 @@ internal sealed class BrushFactory
         string status,
         bool hasAttention)
     {
-        var key = string.Join('|', value, fallback, role, settings.TransparencyMode, settings.Opacity, status, hasAttention);
+        var key = new BrushKey(value, fallback, role, settings.TransparencyMode, settings.Opacity, status, hasAttention);
         if (_brushCache.TryGetValue(key, out var cached))
         {
             return cached;
@@ -212,7 +215,7 @@ internal sealed class BrushFactory
         };
     }
 
-    private void CacheBrush(string key, Brush brush)
+    private void CacheBrush(BrushKey key, Brush brush)
     {
         if (_brushCache.Count >= 256)
         {

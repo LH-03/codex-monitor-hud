@@ -6,6 +6,12 @@ namespace CodexMonitorHud.Core.Presentation;
 public static class HudFormatting
 {
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-US");
+    private static readonly string[] MetricOrder =
+    [
+        "input", "cached", "cacheHitRate", "uncached", "output", "reasoning", "callTotal",
+        "taskTotal", "context", "model", "updated", "activeTasks", "weeklyRemaining",
+        "fiveHourRemaining", "estimatedCost"
+    ];
     private static readonly HashSet<string> SummaryMetricKeys = new(StringComparer.Ordinal)
     {
         "input",
@@ -92,7 +98,7 @@ public static class HudFormatting
 
     public static int GetContextAlertLevel(double contextPercent, IEnumerable<double> thresholds)
     {
-        var level = thresholds.Order().Count(threshold => contextPercent >= threshold);
+        var level = thresholds.Count(threshold => contextPercent >= threshold);
         return Math.Min(3, level);
     }
 
@@ -135,36 +141,38 @@ public static class HudFormatting
         HudSnapshot snapshot,
         IReadOnlyDictionary<string, bool> fields,
         IReadOnlyDictionary<string, string> locale,
-        string numberFormat)
-    {
-        var values = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["input"] = FormatNumber(snapshot.Input, numberFormat),
-            ["cached"] = FormatNumber(snapshot.Cached, numberFormat),
-            ["cacheHitRate"] = FormatCacheHitRate(snapshot.Input, snapshot.Cached),
-            ["uncached"] = FormatNumber(snapshot.Uncached, numberFormat),
-            ["output"] = FormatNumber(snapshot.Output, numberFormat),
-            ["reasoning"] = FormatNumber(snapshot.Reasoning, numberFormat),
-            ["callTotal"] = FormatNumber(snapshot.CallTotal, numberFormat),
-            ["taskTotal"] = FormatNumber(snapshot.TaskTotal, numberFormat),
-            ["context"] = snapshot.ContextWindow > 0 ? FormatPercent(snapshot.ContextPercent) : "--",
-            ["model"] = string.IsNullOrWhiteSpace(snapshot.Model) ? "-" : snapshot.Model,
-            ["updated"] = snapshot.Timestamp.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
-            ["activeTasks"] = FormatNumber(snapshot.ActiveTasks, numberFormat),
-            ["weeklyRemaining"] = snapshot.WeeklyRemainingPercent.HasValue
-                ? FormatPercent(snapshot.WeeklyRemainingPercent.Value)
-                : "--",
-            ["fiveHourRemaining"] = snapshot.FiveHourRemainingPercent.HasValue
-                ? FormatPercent(snapshot.FiveHourRemainingPercent.Value)
-                : "--",
-            ["estimatedCost"] = FormatCost(snapshot.EstimatedCostUsd)
-        };
+        string numberFormat) => GetMetricsCore(snapshot, fields, locale, numberFormat, summaryOnly: false);
 
+    private static IReadOnlyList<HudMetric> GetMetricsCore(
+        HudSnapshot snapshot,
+        IReadOnlyDictionary<string, bool> fields,
+        IReadOnlyDictionary<string, string> locale,
+        string numberFormat,
+        bool summaryOnly)
+    {
         var metrics = new List<HudMetric>();
-        foreach (var (key, value) in values)
+        foreach (var key in MetricOrder)
         {
-            if (fields.TryGetValue(key, out var visible) && visible)
+            if ((!summaryOnly || SummaryMetricKeys.Contains(key)) && fields.TryGetValue(key, out var visible) && visible)
             {
+                var value = key switch
+                {
+                    "input" => FormatNumber(snapshot.Input, numberFormat),
+                    "cached" => FormatNumber(snapshot.Cached, numberFormat),
+                    "cacheHitRate" => FormatCacheHitRate(snapshot.Input, snapshot.Cached),
+                    "uncached" => FormatNumber(snapshot.Uncached, numberFormat),
+                    "output" => FormatNumber(snapshot.Output, numberFormat),
+                    "reasoning" => FormatNumber(snapshot.Reasoning, numberFormat),
+                    "callTotal" => FormatNumber(snapshot.CallTotal, numberFormat),
+                    "taskTotal" => FormatNumber(snapshot.TaskTotal, numberFormat),
+                    "context" => snapshot.ContextWindow > 0 ? FormatPercent(snapshot.ContextPercent) : "--",
+                    "model" => string.IsNullOrWhiteSpace(snapshot.Model) ? "-" : snapshot.Model,
+                    "updated" => snapshot.Timestamp.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+                    "activeTasks" => FormatNumber(snapshot.ActiveTasks, numberFormat),
+                    "weeklyRemaining" => snapshot.WeeklyRemainingPercent.HasValue ? FormatPercent(snapshot.WeeklyRemainingPercent.Value) : "--",
+                    "fiveHourRemaining" => snapshot.FiveHourRemainingPercent.HasValue ? FormatPercent(snapshot.FiveHourRemainingPercent.Value) : "--",
+                    _ => FormatCost(snapshot.EstimatedCostUsd)
+                };
                 metrics.Add(new HudMetric(
                     key,
                     locale.TryGetValue(key, out var label) ? label : key,
@@ -180,9 +188,7 @@ public static class HudFormatting
         IReadOnlyDictionary<string, bool> fields,
         IReadOnlyDictionary<string, string> locale,
         string numberFormat) =>
-        GetMetrics(snapshot, fields, locale, numberFormat)
-            .Where(metric => SummaryMetricKeys.Contains(metric.Key))
-            .ToArray();
+        GetMetricsCore(snapshot, fields, locale, numberFormat, summaryOnly: true);
 
     public static TaskListMetricSet GetTaskListMetrics(
         HudSnapshot snapshot,

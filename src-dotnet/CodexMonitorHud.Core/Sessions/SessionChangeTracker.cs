@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace CodexMonitorHud.Core.Sessions;
 
 public sealed class SessionChangeTracker : IDisposable
@@ -8,7 +6,8 @@ public sealed class SessionChangeTracker : IDisposable
     private int _dirty = 1;
     private int _overflowed;
     private int _structural = 1;
-    private readonly ConcurrentDictionary<string, byte> _changedPaths;
+    private readonly object _pathsGate = new();
+    private readonly HashSet<string> _changedPaths;
 
     public event Action? ChangeAvailable;
 
@@ -18,7 +17,7 @@ public sealed class SessionChangeTracker : IDisposable
         bool includeSubdirectories = true,
         StringComparer? pathComparer = null)
     {
-        _changedPaths = new ConcurrentDictionary<string, byte>(pathComparer ?? GetPlatformPathComparer());
+        _changedPaths = new HashSet<string>(pathComparer ?? GetPlatformPathComparer());
         var watchRoot = sessionsRoot;
         var effectiveIncludeSubdirectories = includeSubdirectories;
         if (!Directory.Exists(watchRoot))
@@ -36,8 +35,7 @@ public sealed class SessionChangeTracker : IDisposable
         {
             IncludeSubdirectories = effectiveIncludeSubdirectories,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
-            InternalBufferSize = 16 * 1024,
-            EnableRaisingEvents = true
+            InternalBufferSize = 16 * 1024
         };
         _watcher.Changed += MarkDirty;
         _watcher.Created += MarkStructural;
@@ -50,6 +48,7 @@ public sealed class SessionChangeTracker : IDisposable
             Interlocked.Exchange(ref _structural, 1);
             NotifyChangeAvailable();
         };
+        _watcher.EnableRaisingEvents = true;
     }
 
     public static StringComparer GetPlatformPathComparer() =>
@@ -60,12 +59,13 @@ public sealed class SessionChangeTracker : IDisposable
     public bool ConsumeStructural() => Interlocked.Exchange(ref _structural, 0) == 1;
     public IReadOnlyList<string> DrainChangedPaths()
     {
-        var paths = _changedPaths.Keys.ToArray();
-        foreach (var path in paths)
+        lock (_pathsGate)
         {
-            _changedPaths.TryRemove(path, out _);
+            if (_changedPaths.Count == 0) return Array.Empty<string>();
+            var paths = _changedPaths.ToArray();
+            _changedPaths.Clear();
+            return paths;
         }
-        return paths;
     }
     public void ForceReconciliation()
     {
@@ -95,12 +95,15 @@ public sealed class SessionChangeTracker : IDisposable
 
     private void TrackPath(string path)
     {
-        if (_changedPaths.Count >= 256)
+        lock (_pathsGate)
         {
-            Interlocked.Exchange(ref _overflowed, 1);
-            return;
+            if (_changedPaths.Count >= 256)
+            {
+                Interlocked.Exchange(ref _overflowed, 1);
+                return;
+            }
+            _changedPaths.Add(path);
         }
-        _changedPaths.TryAdd(path, 0);
     }
 
     private void NotifyChangeAvailable()

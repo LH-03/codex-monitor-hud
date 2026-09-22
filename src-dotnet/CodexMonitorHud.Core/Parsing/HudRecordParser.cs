@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using CodexMonitorHud.Core.Models;
 
@@ -61,7 +63,7 @@ public static class HudRecordParser
                 {
                     "task_started" => HudRecordKind.Started,
                     "turn_aborted" => HudRecordKind.Aborted,
-                    _ => string.IsNullOrWhiteSpace(GetString(payload, "last_agent_message"))
+                    _ => !HasVisibleCompletionMessage(payload)
                         ? HudRecordKind.CompletedSilent
                         : HudRecordKind.Completed
                 };
@@ -168,6 +170,41 @@ public static class HudRecordParser
         WeeklyRemainingPercent = weeklyRemaining,
         FiveHourRemainingPercent = fiveHourRemaining
     };
+
+    private static bool HasVisibleCompletionMessage(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("last_agent_message", out var message) ||
+            message.ValueKind != JsonValueKind.String) return false;
+
+        // JSON is already validated. Reduce the existing UTF-8 string to one
+        // visibility bit, including escaped and Unicode whitespace, without
+        // materializing the final reply as a managed string.
+        var raw = JsonMarshal.GetRawUtf8Value(message)[1..^1];
+        for (var index = 0; index < raw.Length; index++)
+        {
+            var value = raw[index];
+            if (value == (byte)' ' || value is >= 9 and <= 13) continue;
+            if (value >= 128)
+            {
+                _ = Rune.DecodeFromUtf8(raw[index..], out var rune, out var consumed);
+                if (!Rune.IsWhiteSpace(rune)) return true;
+                index += consumed - 1;
+                continue;
+            }
+            if (value == (byte)'\\')
+            {
+                var escape = raw[++index];
+                if (escape is (byte)'t' or (byte)'n' or (byte)'r' or (byte)'f') continue;
+                if (escape != (byte)'u') return true;
+                var character = (char)ushort.Parse(raw.Slice(index + 1, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                if (!char.IsWhiteSpace(character)) return true;
+                index += 4;
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
 
     private static (double? Weekly, double? FiveHour) ParseAllowances(JsonElement payload)
     {
